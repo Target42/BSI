@@ -1,0 +1,22 @@
+# Qt-spezifische Dateien
+*.o
+*.moc
+*.qmlc
+*.pro.user
+*.qm
+*.qrc
+
+# Build-Verzeichnisse
+build-*/
+build/
+debug/
+release/
+
+# Temporäre Dateien
+*~
+*.swp
+.DS_Store
+
+# IDE-spezifische Dateien (falls vorhanden)
+.vscode/
+.idea/
