@@ -136,13 +136,13 @@ void MainWindow::updateText(QTreeWidgetItem *item)
                 item->setForeground(0, Qt::black);
                 break;
             case BaseNode::tsIgnore:
-                item->setForeground(0, Qt::gray);
+                item->setForeground(0, Qt::darkGray);
                 break;
             case BaseNode::tsNeeded:
                 item->setForeground(0, Qt::red);
                 break;
             case BaseNode::tsPosible:
-                item->setForeground(0, Qt::green);
+                item->setForeground(0, Qt::darkGreen);
                 break;
         }
     }
@@ -201,6 +201,33 @@ bool MainWindow::load()
     bool result = store.load();
     updateText(ui->treeWidget->invisibleRootItem());
     return result;
+}
+
+void MainWindow::expandNodes(QTreeWidgetItem *parent)
+{
+    if ( parent == nullptr)
+    {
+        return;
+    }
+    for( int i = 0 ; i < parent->childCount() ; i++)
+    {
+        expandNodes(parent->child(i));
+    }
+    ui->treeWidget->expandItem(parent);
+}
+
+void MainWindow::collapseNodes(QTreeWidgetItem *parent)
+{
+    if ( parent == nullptr)
+    {
+        return;
+    }
+    for( int i = 0 ; i < parent->childCount() ; i++)
+    {
+        collapseNodes(parent->child(i));
+    }
+    ui->treeWidget->collapseItem(parent);
+
 }
 
 
@@ -323,36 +350,36 @@ void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int colu
 
 void MainWindow::showContextMenu(const QPoint &pos)
 {
-    if (m_templateMode == false )
-    {
-        return;
-    }
     QTreeWidgetItem *item = ui->treeWidget->itemAt(pos);
 
     if ( item == nullptr )
     {
         return;
     }
-    QVariant variant = item->data(0, Qt::UserRole);
-    quintptr ptr = variant.value<quintptr>();
 
-    // Schritt 2: Zurück zum Original-Zeigertyp casten
-
-    IndexNode* index = reinterpret_cast<IndexNode*>(ptr);
-
-    if ( ( index == nullptr ) || ( index->node() == nullptr) )
-    {
-        return;
-    }
     QMenu contextMenu(tr("Aktionsmenü"), this);
 
-    QAction action1(tr("Nich relevant"), this);
+    QAction action1(tr("Nicht relevant"), this);
     QAction action2(tr("Möglicherweise"), this);
     QAction action3(tr("Benötigt"), this);
 
-    contextMenu.addAction(&action1);
-    contextMenu.addAction(&action2);
-    contextMenu.addAction(&action3);
+    QAction action4(tr("Ausklappen"), this);
+    QAction action5(tr("Einklappen"), this);
+
+    contextMenu.addAction(&action4);
+    contextMenu.addAction(&action5);
+
+    QVariant variant = item->data(0, Qt::UserRole);
+    quintptr ptr = variant.value<quintptr>();
+    IndexNode* index = reinterpret_cast<IndexNode*>(ptr);
+    if ( ( m_templateMode == true ) && ( index != nullptr ) && ( index->node() != nullptr) )
+    {
+        contextMenu.addSeparator();
+        contextMenu.addAction(&action1);
+        contextMenu.addAction(&action2);
+        contextMenu.addAction(&action3);
+    }
+
 
     // Zeige das Menü an der globalen Position an
     // mapToGlobal wandelt die lokale Widget-Position in eine globale um
@@ -364,7 +391,15 @@ void MainWindow::showContextMenu(const QPoint &pos)
 
     BaseNode::tTemplateState state = BaseNode::tsUndefined;
 
-    if ( selectedAction == &action1)
+    if ( selectedAction == &action4)
+    {
+        expandNodes(item);
+    }
+    else if ( selectedAction == &action5)
+    {
+        collapseNodes(item);
+    }
+    else if ( selectedAction == &action1)
     {
         state = BaseNode::tsIgnore;
     }

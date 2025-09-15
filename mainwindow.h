@@ -78,5 +78,8 @@ private:
 
     bool load( void );
 
+    void expandNodes( QTreeWidgetItem* parent);
+    void collapseNodes( QTreeWidgetItem* parent);
+
 };
 #endif // MAINWINDOW_H
