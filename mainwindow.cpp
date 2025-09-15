@@ -14,6 +14,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     this->setCentralWidget(ui->gridLayoutWidget);
+    ui->groupBox->setLayout(ui->gridLayout_2);
 
     ui->treeWidget->setHeaderLabel("Titel");
 
