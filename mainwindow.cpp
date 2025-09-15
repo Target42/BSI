@@ -6,6 +6,7 @@
 
 #include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -17,25 +18,56 @@ MainWindow::MainWindow(QWidget *parent)
     ui->treeWidget->setHeaderLabel("Titel");
 
     ui->treeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(ui->treeWidget, &QTreeWidget::customContextMenuRequested, this, &MainWindow::showContextMenu);    
+    connect(ui->treeWidget, &QTreeWidget::customContextMenuRequested, this, &MainWindow::showContextMenu);
 
+    m_manager = new QNetworkAccessManager(this);
     m_index = nullptr;
-
-    m_book = new Book();
-    m_book->load(QDir::homePath() + "/Dokumente/XML_Kompendium_2023.xml");
-
-    buildIndex();
-
-    m_words.run(m_book);
-
-    UpdateTree();
-
+    m_book = nullptr;
     setTemplateMode(false);
+
+    m_xml = QDir::cleanPath(QDir::homePath() + QDir::separator() +"Dokumente" + QDir::separator() + "XML_Kompendium_2023.xml");
+
+    if ( loadXML(m_xml) == false )
+    {
+        getXML();
+    }
+
 }
 
 MainWindow::~MainWindow()
 {
+    delete m_manager;
     delete ui;
+}
+
+bool MainWindow::loadXML(QString fileName)
+{
+    QFile file(fileName);
+
+    bool result = file.exists();
+
+    if ( result == true )
+    {
+        m_book = new Book();
+        m_book->load(fileName);
+
+        buildIndex();
+
+        m_words.run(m_book);
+
+        UpdateTree();
+    }
+
+    return result;
+}
+
+void MainWindow::getXML()
+{    
+    connect(m_manager, &QNetworkAccessManager::finished, this, &MainWindow::onDownloadFinished);
+
+    QNetworkRequest request(QUrl("https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium/XML_Kompendium_2023.xml?__blob=publicationFile&v=4"));
+
+    m_manager->get(request);
 }
 
 void MainWindow::UpdateTree()
@@ -133,15 +165,18 @@ void MainWindow::setTemplateMode(bool flag)
     }
     else
     {
-        ui->widget->setHome("");
-        foreach (IndexNode* child, m_index->childs())
+        if ( m_index != nullptr )
         {
-            if ( child->node() != nullptr)
+            ui->widget->setHome("");
+            foreach (IndexNode* child, m_index->childs())
             {
-                child->node()->setTemplateState(BaseNode::tsUndefined);
+                if ( child->node() != nullptr)
+                {
+                    child->node()->setTemplateState(BaseNode::tsUndefined);
+                }
             }
+            updateText(ui->treeWidget->invisibleRootItem());
         }
-        updateText(ui->treeWidget->invisibleRootItem());
     }
 }
 
@@ -416,7 +451,6 @@ void MainWindow::on_actionSchlie_en_triggered()
     save();
 
     setTemplateMode(false);
-
 }
 
 
@@ -439,5 +473,35 @@ void MainWindow::on_treeWidget_currentItemChanged(QTreeWidgetItem *current, QTre
         return;
     }
     ui->widget->setId(index->id());
+}
+
+void MainWindow::onDownloadFinished(QNetworkReply *reply)
+{
+    auto error = reply->error();
+
+    if ( error == QNetworkReply::NoError)
+    {
+        QFile file(m_xml);
+        QFileInfo info( file );
+
+        QDir dir(info.absolutePath());
+
+        if ( dir.exists() == false)
+        {
+            dir.mkpath(info.absolutePath());
+        }
+
+
+        if (file.open(QIODevice::WriteOnly))
+        {
+            QByteArray data = reply->readAll();
+            file.write(data);
+            file.close();
+
+            loadXML(m_xml);
+        }
+    }
+
+    reply->deleteLater();
 }
 

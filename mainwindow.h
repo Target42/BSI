@@ -7,6 +7,8 @@
 #include <QMainWindow>
 #include <QTreeWidgetItem>
 #include <QListWidgetItem>
+#include <QNetworkReply>
+#include <QNetworkAccessManager>
 
 class IndexNode;
 
@@ -23,6 +25,10 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+
+    bool loadXML( QString fileName );
+
+    void getXML( void );
 
 private slots:
     void on_pushButton_2_clicked();
@@ -45,8 +51,12 @@ private slots:
 
     void on_treeWidget_currentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
 
+    void onDownloadFinished(QNetworkReply *reply);
+
 private:
     Ui::MainWindow *ui;
+    QNetworkAccessManager* m_manager;
+    QString     m_xml;
     Book*       m_book;
     IndexNode*  m_index;
     WordIndex   m_words;

@@ -1,7 +1,7 @@
 #ifndef BOOK_H
 #define BOOK_H
 
-#include <QDomComment>
+#include <QDomDocument>
 #include <QString>
 #include <QList>
 #include "basenode.h"

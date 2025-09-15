@@ -17,7 +17,7 @@ bool Book::load(QString fileName)
     }
 
     QDomDocument doc;
-    if ( doc.setContent(&file) == false)
+    if ( !doc.setContent(&file))
     {
         file.close();
         return result;
