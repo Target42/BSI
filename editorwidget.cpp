@@ -90,12 +90,6 @@ void EditorWidget::save()
     m_changed = false;
 }
 
-void EditorWidget::on_checkBox_checkStateChanged(const Qt::CheckState &arg1)
-{
-    setMarkdownMode(arg1 == Qt::CheckState::Checked);
-}
-
-
 void EditorWidget::on_checkBox_clicked(bool checked)
 {
     setMarkdownMode(checked);

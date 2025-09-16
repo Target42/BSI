@@ -27,9 +27,7 @@ public:
     bool enabled() const;
     void setEnabled(bool newEnabled);
 
-private slots:
-    void on_checkBox_checkStateChanged(const Qt::CheckState &arg1);
-
+private slots:    
     void on_checkBox_clicked(bool checked);
 
     void on_pushButton_clicked();
