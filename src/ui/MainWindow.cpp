@@ -12,6 +12,7 @@
 #include "services/BausteinRecommendationService.h"
 #include "ui/dialogs/MeasureDialog.h"
 #include "ui/dialogs/ProjectOpenDialog.h"
+#include "ui/dialogs/ProjectDialog.h"
 #include "ui/dialogs/ReportDialog.h"
 #include "ui/dialogs/TargetObjectDialog.h"
 
@@ -25,7 +26,7 @@
 #include <QHash>
 #include <QHBoxLayout>
 #include <QHeaderView>
-#include <QInputDialog>
+#include <QKeySequence>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
@@ -42,6 +43,7 @@
 #include <QTreeView>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QLineEdit>
 
 MainWindow::MainWindow(AppContext &context, QWidget *parent)
     : QMainWindow(parent)
@@ -204,30 +206,38 @@ void MainWindow::buildUi()
     connect(newProjectAction, &QAction::triggered, this, &MainWindow::createProject);
     auto *openProjectAction = fileMenu->addAction(tr("Projekt öffnen..."));
     connect(openProjectAction, &QAction::triggered, this, &MainWindow::openProject);
+    m_closeProjectAction = fileMenu->addAction(tr("Projekt schließen"));
+    m_closeProjectAction->setShortcut(QKeySequence::Close);
+    connect(m_closeProjectAction, &QAction::triggered, this, &MainWindow::closeProject);
     fileMenu->addSeparator();
     fileMenu->addAction(tr("Beenden"), this, &QWidget::close);
 
     auto *projectMenu = menuBar()->addMenu(tr("Projekt"));
-    auto *addTargetAction = projectMenu->addAction(tr("Zielobjekt hinzufügen..."));
-    connect(addTargetAction, &QAction::triggered, this, &MainWindow::addTargetObject);
-    auto *editTargetAction = projectMenu->addAction(tr("Zielobjekt bearbeiten..."));
-    connect(editTargetAction, &QAction::triggered, this, &MainWindow::editTargetObject);
-    auto *deleteTargetAction = projectMenu->addAction(tr("Zielobjekt löschen"));
-    connect(deleteTargetAction, &QAction::triggered, this, &MainWindow::deleteTargetObject);
+    m_editProjectAction = projectMenu->addAction(tr("Projekteigenschaften..."));
+    connect(m_editProjectAction, &QAction::triggered, this, &MainWindow::editProject);
+    m_deleteProjectAction = projectMenu->addAction(tr("Projekt löschen..."));
+    connect(m_deleteProjectAction, &QAction::triggered, this, &MainWindow::deleteProject);
     projectMenu->addSeparator();
-    auto *applyRecommendationsAction =
+    m_addTargetAction = projectMenu->addAction(tr("Zielobjekt hinzufügen..."));
+    connect(m_addTargetAction, &QAction::triggered, this, &MainWindow::addTargetObject);
+    m_editTargetAction = projectMenu->addAction(tr("Zielobjekt bearbeiten..."));
+    connect(m_editTargetAction, &QAction::triggered, this, &MainWindow::editTargetObject);
+    m_deleteTargetAction = projectMenu->addAction(tr("Zielobjekt löschen"));
+    connect(m_deleteTargetAction, &QAction::triggered, this, &MainWindow::deleteTargetObject);
+    projectMenu->addSeparator();
+    m_applyRecommendationsAction =
         projectMenu->addAction(tr("Baustein-Empfehlungen übernehmen..."));
-    connect(applyRecommendationsAction, &QAction::triggered, this,
+    connect(m_applyRecommendationsAction, &QAction::triggered, this,
             &MainWindow::applyBausteinRecommendations);
 
     auto *reportMenu = menuBar()->addMenu(tr("Berichte"));
-    auto *sollIstAction = reportMenu->addAction(tr("Soll-Ist-Übersicht..."));
-    connect(sollIstAction, &QAction::triggered, this, &MainWindow::showSollIstReport);
+    m_sollIstAction = reportMenu->addAction(tr("Soll-Ist-Übersicht..."));
+    connect(m_sollIstAction, &QAction::triggered, this, &MainWindow::showSollIstReport);
 
     auto *toolBar = addToolBar(tr("Projekt"));
     toolBar->addAction(newProjectAction);
     toolBar->addAction(openProjectAction);
-    toolBar->addAction(addTargetAction);
+    toolBar->addAction(m_addTargetAction);
     toolBar->addAction(importCatalogAction);
 
     m_contextLabel = new QLabel(this);
@@ -249,18 +259,29 @@ void MainWindow::showTemporaryStatusMessage(const QString &message, int timeoutM
 void MainWindow::updateProjectUiEnabled()
 {
     const bool hasProject = m_activeProject.id != 0;
+    const bool hasTargetObject = hasProject && m_activeTargetObject.id != 0;
+
+    m_closeProjectAction->setEnabled(hasProject);
+    m_editProjectAction->setEnabled(hasProject);
+    m_deleteProjectAction->setEnabled(hasProject);
+    m_addTargetAction->setEnabled(hasProject);
+    m_editTargetAction->setEnabled(hasProject);
+    m_deleteTargetAction->setEnabled(hasProject);
+    m_applyRecommendationsAction->setEnabled(hasTargetObject);
+    m_sollIstAction->setEnabled(hasProject);
+
     m_targetObjectTree->setEnabled(hasProject);
-    m_filterApplicableBox->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_highlightRecommendationsBox->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_statusBox->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_assessmentNote->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_responsibleEdit->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_hasDueDateBox->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_dueDateEdit->setEnabled(hasProject && m_activeTargetObject.id != 0 && m_hasDueDateBox->isChecked());
-    m_measureTable->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_addMeasureButton->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_editMeasureButton->setEnabled(hasProject && m_activeTargetObject.id != 0);
-    m_deleteMeasureButton->setEnabled(hasProject && m_activeTargetObject.id != 0);
+    m_filterApplicableBox->setEnabled(hasTargetObject);
+    m_highlightRecommendationsBox->setEnabled(hasTargetObject);
+    m_statusBox->setEnabled(hasTargetObject);
+    m_assessmentNote->setEnabled(hasTargetObject);
+    m_responsibleEdit->setEnabled(hasTargetObject);
+    m_hasDueDateBox->setEnabled(hasTargetObject);
+    m_dueDateEdit->setEnabled(hasTargetObject && m_hasDueDateBox->isChecked());
+    m_measureTable->setEnabled(hasTargetObject);
+    m_addMeasureButton->setEnabled(hasTargetObject);
+    m_editMeasureButton->setEnabled(hasTargetObject);
+    m_deleteMeasureButton->setEnabled(hasTargetObject);
 
     if (!hasProject) {
         m_contextLabel->setText(tr("Kein Projekt geöffnet"));
@@ -352,6 +373,39 @@ void MainWindow::reloadTargetObjects()
     reloadApplicabilityMarkers();
     reloadRecommendationMarkers();
     updateProjectUiEnabled();
+    selectActiveTargetObjectInTree();
+}
+
+void MainWindow::selectActiveTargetObjectInTree()
+{
+    if (m_activeTargetObject.id == 0)
+        return;
+
+    const QModelIndex index =
+        m_targetObjectModel->indexForTargetObjectId(m_activeTargetObject.id);
+    if (!index.isValid())
+        return;
+
+    m_targetObjectTree->setCurrentIndex(index);
+    onTargetObjectSelected(index);
+}
+
+void MainWindow::clearProjectSession()
+{
+    m_activeProject = {};
+    m_activeTargetObject = {};
+    m_requirementModel->clearAssessments();
+    m_requirementModel->setRequirements({});
+    m_measureModel->setMeasures({});
+    m_requirementText->clear();
+    m_assessmentNote->clear();
+    m_responsibleEdit->clear();
+    m_hasDueDateBox->setChecked(false);
+    m_dueDateEdit->clear();
+    m_bausteinModel->setApplicabilityMap({});
+    m_bausteinModel->setRecommendedBausteinIds({});
+    reloadTargetObjects();
+    updateWindowTitle();
 }
 
 void MainWindow::reloadApplicabilityMarkers()
@@ -415,19 +469,89 @@ void MainWindow::openProject()
     m_measureModel->setMeasures({});
     reloadTargetObjects();
     updateWindowTitle();
+    updateProjectUiEnabled();
     showTemporaryStatusMessage(tr("Projekt \"%1\" geöffnet").arg(m_activeProject.name));
+}
+
+void MainWindow::closeProject()
+{
+    if (m_activeProject.id == 0)
+        return;
+
+    const QString projectName = m_activeProject.name;
+    clearProjectSession();
+    showTemporaryStatusMessage(tr("Projekt \"%1\" geschlossen").arg(projectName));
+}
+
+void MainWindow::editProject()
+{
+    if (m_activeProject.id == 0)
+        return;
+
+    ProjectDialog dialog(this);
+    dialog.setProject(m_activeProject);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    Project project = dialog.project();
+    if (project.name.isEmpty()) {
+        QMessageBox::warning(this, tr("Projekt"), tr("Bitte einen Projektnamen angeben."));
+        return;
+    }
+
+    if (!m_context.projectRepository().updateProject(project)) {
+        QMessageBox::critical(this, tr("Projekt"), m_context.projectRepository().lastError());
+        return;
+    }
+
+    m_activeProject = project;
+    updateWindowTitle();
+    updateProjectUiEnabled();
+    showTemporaryStatusMessage(tr("Projekteigenschaften gespeichert"));
+}
+
+void MainWindow::deleteProject()
+{
+    if (m_activeProject.id == 0)
+        return;
+
+    const QMessageBox::StandardButton answer = QMessageBox::question(
+        this,
+        tr("Projekt löschen"),
+        tr("Das Projekt \"%1\" und alle Zielobjekte, Bewertungen und Maßnahmen wirklich löschen?")
+            .arg(m_activeProject.name));
+    if (answer != QMessageBox::Yes)
+        return;
+
+    const QString projectName = m_activeProject.name;
+    const int projectId = m_activeProject.id;
+    if (!m_context.projectRepository().deleteProject(projectId)) {
+        QMessageBox::critical(this, tr("Projekt"), m_context.projectRepository().lastError());
+        return;
+    }
+
+    clearProjectSession();
+    showTemporaryStatusMessage(tr("Projekt \"%1\" gelöscht").arg(projectName));
 }
 
 void MainWindow::createProject()
 {
-    bool ok = false;
-    const QString name = QInputDialog::getText(
-        this, tr("Neues Projekt"), tr("Projektname:"), QLineEdit::Normal, tr("Neues ISMS-Projekt"), &ok);
-    if (!ok || name.trimmed().isEmpty())
+    Project draft;
+    draft.name = tr("Neues ISMS-Projekt");
+
+    ProjectDialog dialog(this);
+    dialog.setProject(draft);
+    if (dialog.exec() != QDialog::Accepted)
         return;
 
+    const Project projectDraft = dialog.project();
+    if (projectDraft.name.isEmpty()) {
+        QMessageBox::warning(this, tr("Projekt"), tr("Bitte einen Projektnamen angeben."));
+        return;
+    }
+
     m_activeProject = m_context.projectRepository().createProject(
-        name.trimmed(), {}, m_context.catalogVersion());
+        projectDraft.name, projectDraft.description, m_context.catalogVersion());
     if (m_activeProject.id == 0) {
         QMessageBox::critical(this, tr("Projekt"), m_context.projectRepository().lastError());
         return;
@@ -448,6 +572,7 @@ void MainWindow::createProject()
     m_assessmentNote->clear();
     reloadTargetObjects();
     updateWindowTitle();
+    updateProjectUiEnabled();
     showTemporaryStatusMessage(tr("Projekt \"%1\" erstellt").arg(m_activeProject.name));
 }
 

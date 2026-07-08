@@ -25,6 +25,7 @@ SOURCES += \
     src/ui/dialogs/BausteinRecommendationDialog.cpp \
     src/ui/dialogs/MeasureDialog.cpp \
     src/ui/dialogs/ProjectOpenDialog.cpp \
+    src/ui/dialogs/ProjectDialog.cpp \
     src/ui/dialogs/ReportDialog.cpp \
     src/ui/dialogs/TargetObjectDialog.cpp \
     src/ui/models/BausteinTreeModel.cpp \
@@ -65,6 +66,7 @@ HEADERS += \
     src/ui/dialogs/BausteinRecommendationDialog.h \
     src/ui/dialogs/MeasureDialog.h \
     src/ui/dialogs/ProjectOpenDialog.h \
+    src/ui/dialogs/ProjectDialog.h \
     src/ui/dialogs/ReportDialog.h \
     src/ui/dialogs/TargetObjectDialog.h \
     src/ui/models/BausteinTreeModel.h \

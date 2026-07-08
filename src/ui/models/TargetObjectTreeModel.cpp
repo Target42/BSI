@@ -166,3 +166,30 @@ TargetObject TargetObjectTreeModel::targetObjectForIndex(const QModelIndex &inde
         return {};
     return m_nodes.at(nodeIndex).object;
 }
+
+QModelIndex TargetObjectTreeModel::indexForTargetObjectId(int targetObjectId) const
+{
+    return indexForNode(m_idToIndex.value(targetObjectId, -1));
+}
+
+QModelIndex TargetObjectTreeModel::indexForNode(int nodeIndex) const
+{
+    if (nodeIndex < 0 || nodeIndex >= m_nodes.size())
+        return {};
+
+    int row = 0;
+    const int parentNodeIndex = m_nodes.at(nodeIndex).parentNodeIndex;
+    if (parentNodeIndex < 0) {
+        for (int i = 0; i < m_nodes.size(); ++i) {
+            if (m_nodes.at(i).parentNodeIndex != -1)
+                continue;
+            if (i == nodeIndex)
+                break;
+            ++row;
+        }
+    } else {
+        row = m_nodes.at(parentNodeIndex).childNodeIndices.indexOf(nodeIndex);
+    }
+
+    return createIndex(row, 0, quintptr(nodeIndex + 1));
+}

@@ -30,8 +30,10 @@ public:
     Qt::ItemFlags flags(const QModelIndex &index) const override;
 
     TargetObject targetObjectForIndex(const QModelIndex &index) const;
+    QModelIndex indexForTargetObjectId(int targetObjectId) const;
 
 private:
+    QModelIndex indexForNode(int nodeIndex) const;
     struct Node {
         TargetObject object;
         int parentNodeIndex = -1;

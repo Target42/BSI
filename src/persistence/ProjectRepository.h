@@ -16,6 +16,7 @@ public:
     QList<Project> loadProjects() const;
     Project createProject(const QString &name, const QString &description, const QString &catalogVersion);
     bool updateProject(const Project &project);
+    bool deleteProject(int projectId);
 
     RequirementAssessment loadAssessment(int projectId, int targetObjectId, int requirementDbId) const;
     bool saveAssessment(const RequirementAssessment &assessment);

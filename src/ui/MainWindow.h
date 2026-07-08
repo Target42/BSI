@@ -20,6 +20,7 @@ class QComboBox;
 class QDateEdit;
 class QLabel;
 class QLineEdit;
+class QAction;
 class QPushButton;
 class QTableView;
 class QTextEdit;
@@ -36,6 +37,9 @@ private slots:
     void importCatalog();
     void createProject();
     void openProject();
+    void closeProject();
+    void editProject();
+    void deleteProject();
     void onTargetObjectSelected(const QModelIndex &index);
     void onBausteinSelected(const QModelIndex &index);
     void onRequirementSelected(const QModelIndex &index);
@@ -69,6 +73,8 @@ private:
     Requirement currentRequirement() const;
     void updateWindowTitle();
     void updateProjectUiEnabled();
+    void clearProjectSession();
+    void selectActiveTargetObjectInTree();
     void showTemporaryStatusMessage(const QString &message, int timeoutMs = 5000);
     int activeTargetObjectId() const;
     bool hasActiveProjectContext() const;
@@ -99,6 +105,15 @@ private:
     QPushButton *m_deleteMeasureButton = nullptr;
     QLabel *m_statusLabel = nullptr;
     QLabel *m_contextLabel = nullptr;
+
+    QAction *m_closeProjectAction = nullptr;
+    QAction *m_editProjectAction = nullptr;
+    QAction *m_deleteProjectAction = nullptr;
+    QAction *m_addTargetAction = nullptr;
+    QAction *m_editTargetAction = nullptr;
+    QAction *m_deleteTargetAction = nullptr;
+    QAction *m_applyRecommendationsAction = nullptr;
+    QAction *m_sollIstAction = nullptr;
 };
 
 #endif

@@ -80,6 +80,19 @@ bool ProjectRepository::updateProject(const Project &project)
     return true;
 }
 
+bool ProjectRepository::deleteProject(int projectId)
+{
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral("DELETE FROM projects WHERE id = ?"));
+    query.addBindValue(projectId);
+
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    return query.numRowsAffected() > 0;
+}
+
 RequirementAssessment ProjectRepository::loadAssessment(int projectId,
                                                         int targetObjectId,
                                                         int requirementDbId) const
