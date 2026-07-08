@@ -1,0 +1,42 @@
+#ifndef UI_BAUSTEINRECOMMENDATIONDIALOG_H
+#define UI_BAUSTEINRECOMMENDATIONDIALOG_H
+
+#include "domain/ApplicabilityStatus.h"
+#include "domain/Baustein.h"
+#include "domain/TargetObject.h"
+
+#include <QDialog>
+#include <QHash>
+#include <QList>
+
+struct BausteinRecommendationSelection {
+    int bausteinDbId = 0;
+    ApplicabilityStatus status = ApplicabilityStatus::Possible;
+};
+
+class QComboBox;
+class QTableWidget;
+
+class BausteinRecommendationDialog : public QDialog
+{
+    Q_OBJECT
+
+public:
+    BausteinRecommendationDialog(const QList<Baustein> &recommendedBausteine,
+                                 const QHash<int, ApplicabilityStatus> &currentApplicability,
+                                 const TargetObject &targetObject,
+                                 QWidget *parent = nullptr);
+
+    QList<BausteinRecommendationSelection> selections() const;
+
+private:
+    void populateTable();
+
+    QList<Baustein> m_bausteine;
+    QHash<int, ApplicabilityStatus> m_currentApplicability;
+    TargetObject m_targetObject;
+    QTableWidget *m_table = nullptr;
+    QComboBox *m_statusBox = nullptr;
+};
+
+#endif

@@ -16,6 +16,7 @@ release/
 *~
 *.swp
 .DS_Store
+*.db
 
 # IDE-spezifische Dateien (falls vorhanden)
 .vscode/
