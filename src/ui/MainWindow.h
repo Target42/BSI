@@ -22,6 +22,7 @@ class QLabel;
 class QLineEdit;
 class QAction;
 class QPushButton;
+class QProgressBar;
 class QTableView;
 class QTextEdit;
 class QTreeView;
@@ -65,6 +66,7 @@ private:
     void reloadTargetObjects();
     void reloadApplicabilityMarkers();
     void reloadRecommendationMarkers();
+    void reloadProgress();
     void loadRequirementsForBaustein(int bausteinDbId);
     void refreshAssessmentColumn();
     void syncAssessmentUi(const RequirementAssessment &assessment);
@@ -105,6 +107,10 @@ private:
     QPushButton *m_deleteMeasureButton = nullptr;
     QLabel *m_statusLabel = nullptr;
     QLabel *m_contextLabel = nullptr;
+    QLabel *m_projectProgressLabel = nullptr;
+    QLabel *m_targetProgressLabel = nullptr;
+    QProgressBar *m_projectProgressBar = nullptr;
+    QProgressBar *m_targetProgressBar = nullptr;
 
     QAction *m_closeProjectAction = nullptr;
     QAction *m_editProjectAction = nullptr;

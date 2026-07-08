@@ -1,6 +1,7 @@
 #ifndef UI_TARGETOBJECTTREEMODEL_H
 #define UI_TARGETOBJECTTREEMODEL_H
 
+#include "domain/ReportRow.h"
 #include "domain/TargetObject.h"
 
 #include <QAbstractItemModel>
@@ -21,6 +22,7 @@ public:
     explicit TargetObjectTreeModel(QObject *parent = nullptr);
 
     void setTargetObjects(const QList<TargetObject> &objects);
+    void setProgressSummaries(const QHash<int, ReportSummary> &summaries);
 
     QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
     QModelIndex parent(const QModelIndex &child) const override;
@@ -42,6 +44,7 @@ private:
 
     QList<Node> m_nodes;
     QHash<int, int> m_idToIndex;
+    QHash<int, ReportSummary> m_progressSummaries;
 };
 
 #endif

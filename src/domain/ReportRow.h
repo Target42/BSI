@@ -6,8 +6,10 @@
 
 #include <QDate>
 #include <QString>
+#include <QtGlobal>
 
 struct ReportRow {
+    int targetObjectId = 0;
     QString targetObjectName;
     QString bausteinExternalId;
     QString bausteinTitle;
@@ -31,5 +33,13 @@ struct ReportSummary {
     int overdueCount = 0;
     int measureCount = 0;
 };
+
+inline int reportProgressPercent(const ReportSummary &summary)
+{
+    if (summary.totalRequirements <= 0)
+        return 0;
+    const int completed = summary.fulfilledCount + summary.notApplicableCount;
+    return qRound(completed * 100.0 / summary.totalRequirements);
+}
 
 #endif

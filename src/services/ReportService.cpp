@@ -9,8 +9,18 @@
 #include "domain/TargetObject.h"
 
 #include <QDate>
+#include <QCoreApplication>
 #include <QHash>
 #include <algorithm>
+
+namespace {
+
+QString reportServiceTr(const char *text)
+{
+    return QCoreApplication::translate("ReportService", text);
+}
+
+} // namespace
 
 ReportService::ReportService(CatalogRepository &catalog,
                              ProjectRepository &project,
@@ -61,6 +71,7 @@ QList<ReportRow> ReportService::buildSollIstReport(int projectId,
                     continue;
 
                 ReportRow row;
+                row.targetObjectId = targetObject.id;
                 row.targetObjectName = targetObject.name;
                 row.bausteinExternalId = requirement.bausteinExternalId;
                 row.requirementExternalId = requirement.externalId;
@@ -122,4 +133,65 @@ ReportSummary ReportService::summarize(const QList<ReportRow> &rows) const
     }
 
     return summary;
+}
+
+QHash<int, ReportSummary> ReportService::summarizeByTargetObject(int projectId,
+                                                                 const QString &catalogVersion) const
+{
+    return summarizeByTargetObject(buildSollIstReport(projectId, 0, catalogVersion));
+}
+
+QHash<int, ReportSummary> ReportService::summarizeByTargetObject(const QList<ReportRow> &rows) const
+{
+    QHash<int, QList<ReportRow>> grouped;
+    for (const ReportRow &row : rows)
+        grouped[row.targetObjectId].append(row);
+
+    QHash<int, ReportSummary> summaries;
+    for (auto it = grouped.constBegin(); it != grouped.constEnd(); ++it)
+        summaries.insert(it.key(), summarize(it.value()));
+    return summaries;
+}
+
+int ReportService::progressPercent(const ReportSummary &summary)
+{
+    return reportProgressPercent(summary);
+}
+
+QString ReportService::formatSummaryText(const ReportSummary &summary)
+{
+    if (summary.totalRequirements == 0)
+        return reportServiceTr("Keine anwendbaren Anforderungen");
+
+    const int percent = progressPercent(summary);
+    QString text = reportServiceTr("%1% abgeschlossen (%2/%3 Anforderungen)")
+                       .arg(percent)
+                       .arg(summary.fulfilledCount + summary.notApplicableCount)
+                       .arg(summary.totalRequirements);
+
+    QStringList details;
+    if (summary.openCount > 0)
+        details << reportServiceTr("%1 offen").arg(summary.openCount);
+    if (summary.partialCount > 0)
+        details << reportServiceTr("%1 teilweise").arg(summary.partialCount);
+    if (summary.overdueCount > 0)
+        details << reportServiceTr("%1 überfällig").arg(summary.overdueCount);
+    if (summary.measureCount > 0)
+        details << reportServiceTr("%1 Maßnahmen").arg(summary.measureCount);
+
+    if (!details.isEmpty())
+        text += QStringLiteral(" — ") + details.join(QStringLiteral(", "));
+
+    return text;
+}
+
+QString ReportService::formatTreeProgressSuffix(const ReportSummary &summary)
+{
+    if (summary.totalRequirements == 0)
+        return {};
+
+    QString suffix = QStringLiteral(" · %1%").arg(progressPercent(summary));
+    if (summary.overdueCount > 0)
+        suffix += reportServiceTr(", %1 überfällig").arg(summary.overdueCount);
+    return suffix;
 }

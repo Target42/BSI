@@ -7,7 +7,9 @@
 #include "persistence/ProjectRepository.h"
 #include "persistence/TargetObjectRepository.h"
 
+#include <QHash>
 #include <QList>
+#include <QString>
 
 class ReportService
 {
@@ -21,6 +23,13 @@ public:
                                         int targetObjectId,
                                         const QString &catalogVersion) const;
     ReportSummary summarize(const QList<ReportRow> &rows) const;
+    QHash<int, ReportSummary> summarizeByTargetObject(int projectId,
+                                                      const QString &catalogVersion) const;
+    QHash<int, ReportSummary> summarizeByTargetObject(const QList<ReportRow> &rows) const;
+
+    static int progressPercent(const ReportSummary &summary);
+    static QString formatSummaryText(const ReportSummary &summary);
+    static QString formatTreeProgressSuffix(const ReportSummary &summary);
 
 private:
     CatalogRepository &m_catalog;

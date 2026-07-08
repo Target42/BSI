@@ -95,16 +95,7 @@ void ReportDialog::refreshReport()
 
 void ReportDialog::updateSummary(const ReportSummary &summary)
 {
-    m_summaryLabel->setText(
-        tr("Anforderungen: %1 | Offen: %2 | Teilweise: %3 | Erfüllt: %4 | Entfällt: %5 | "
-           "Überfällig: %6 | Maßnahmen: %7")
-            .arg(summary.totalRequirements)
-            .arg(summary.openCount)
-            .arg(summary.partialCount)
-            .arg(summary.fulfilledCount)
-            .arg(summary.notApplicableCount)
-            .arg(summary.overdueCount)
-            .arg(summary.measureCount));
+    m_summaryLabel->setText(ReportService::formatSummaryText(summary));
 }
 
 void ReportDialog::exportCsv()

@@ -1,7 +1,11 @@
 #include "TargetObjectTreeModel.h"
 
 #include "domain/ProtectionNeed.h"
+#include "domain/ReportRow.h"
 #include "domain/TargetObjectType.h"
+#include "services/ReportService.h"
+
+#include <QHash>
 
 TargetObjectTreeModel::TargetObjectTreeModel(QObject *parent)
     : QAbstractItemModel(parent)
@@ -13,6 +17,7 @@ void TargetObjectTreeModel::setTargetObjects(const QList<TargetObject> &objects)
     beginResetModel();
     m_nodes.clear();
     m_idToIndex.clear();
+    m_progressSummaries.clear();
 
     for (const TargetObject &object : objects) {
         Node node;
@@ -36,6 +41,19 @@ void TargetObjectTreeModel::setTargetObjects(const QList<TargetObject> &objects)
     }
 
     endResetModel();
+}
+
+void TargetObjectTreeModel::setProgressSummaries(const QHash<int, ReportSummary> &summaries)
+{
+    m_progressSummaries = summaries;
+    if (m_nodes.isEmpty())
+        return;
+
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        const QModelIndex modelIndex = indexForNode(i);
+        if (modelIndex.isValid())
+            emit dataChanged(modelIndex, modelIndex, {Qt::DisplayRole});
+    }
 }
 
 QModelIndex TargetObjectTreeModel::index(int row, int column, const QModelIndex &parent) const
@@ -133,11 +151,15 @@ QVariant TargetObjectTreeModel::data(const QModelIndex &index, int role) const
 
     const TargetObject &object = m_nodes.at(nodeIndex).object;
     switch (role) {
-    case Qt::DisplayRole:
-        return QStringLiteral("%1 – %2  [%3]")
-            .arg(targetObjectTypeToString(object.type),
-                 object.name,
-                 protectionNeedToString(object.protectionNeed));
+    case Qt::DisplayRole: {
+        QString text = QStringLiteral("%1 – %2  [%3]")
+                           .arg(targetObjectTypeToString(object.type),
+                                object.name,
+                                protectionNeedToString(object.protectionNeed));
+        const ReportSummary summary = m_progressSummaries.value(object.id);
+        text += ReportService::formatTreeProgressSuffix(summary);
+        return text;
+    }
     case TargetObjectIdRole:
         return object.id;
     case TargetObjectTypeRole:

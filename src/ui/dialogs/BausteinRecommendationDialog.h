@@ -2,7 +2,7 @@
 #define UI_BAUSTEINRECOMMENDATIONDIALOG_H
 
 #include "domain/ApplicabilityStatus.h"
-#include "domain/Baustein.h"
+#include "domain/BausteinRecommendation.h"
 #include "domain/TargetObject.h"
 
 #include <QDialog>
@@ -22,7 +22,7 @@ class BausteinRecommendationDialog : public QDialog
     Q_OBJECT
 
 public:
-    BausteinRecommendationDialog(const QList<Baustein> &recommendedBausteine,
+    BausteinRecommendationDialog(const QList<BausteinRecommendation> &recommendations,
                                  const QHash<int, ApplicabilityStatus> &currentApplicability,
                                  const TargetObject &targetObject,
                                  QWidget *parent = nullptr);
@@ -32,7 +32,7 @@ public:
 private:
     void populateTable();
 
-    QList<Baustein> m_bausteine;
+    QList<BausteinRecommendation> m_recommendations;
     QHash<int, ApplicabilityStatus> m_currentApplicability;
     TargetObject m_targetObject;
     QTableWidget *m_table = nullptr;

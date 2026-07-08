@@ -10,6 +10,7 @@
 #include "domain/TargetObjectType.h"
 #include "ui/dialogs/BausteinRecommendationDialog.h"
 #include "services/BausteinRecommendationService.h"
+#include "services/ReportService.h"
 #include "ui/dialogs/MeasureDialog.h"
 #include "ui/dialogs/ProjectOpenDialog.h"
 #include "ui/dialogs/ProjectDialog.h"
@@ -31,6 +32,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSet>
 #include <QSignalBlocker>
@@ -71,14 +73,30 @@ void MainWindow::buildUi()
     connect(m_targetObjectTree, &QTreeView::customContextMenuRequested, this,
             &MainWindow::showTargetObjectContextMenu);
 
+    m_projectProgressLabel = new QLabel(tr("Kein Projekt geöffnet"), this);
+    m_projectProgressLabel->setWordWrap(true);
+    m_projectProgressBar = new QProgressBar(this);
+    m_projectProgressBar->setRange(0, 100);
+    m_projectProgressBar->setTextVisible(true);
+    m_projectProgressBar->setFormat(tr("%p% abgeschlossen"));
+    m_projectProgressBar->setVisible(false);
+
+    auto *targetPanel = new QWidget(this);
+    auto *targetLayout = new QVBoxLayout(targetPanel);
+    targetLayout->setContentsMargins(4, 4, 4, 4);
+    targetLayout->addWidget(m_projectProgressLabel);
+    targetLayout->addWidget(m_projectProgressBar);
+    targetLayout->addWidget(m_targetObjectTree, 1);
+
     auto *targetDock = new QDockWidget(tr("Zielobjekte"), this);
-    targetDock->setWidget(m_targetObjectTree);
+    targetDock->setWidget(targetPanel);
     addDockWidget(Qt::LeftDockWidgetArea, targetDock);
 
     m_filterApplicableBox = new QCheckBox(tr("Nur anwendbare Bausteine"), this);
     connect(m_filterApplicableBox, &QCheckBox::toggled, this, &MainWindow::toggleApplicableFilter);
 
     m_highlightRecommendationsBox = new QCheckBox(tr("Empfehlungen hervorheben"), this);
+    m_highlightRecommendationsBox->setToolTip(tr("★ Kern-Empfehlung, ○ ergänzende Empfehlung"));
     m_highlightRecommendationsBox->setChecked(true);
     connect(m_highlightRecommendationsBox, &QCheckBox::toggled, this,
             &MainWindow::toggleRecommendationHighlight);
@@ -191,8 +209,23 @@ void MainWindow::buildUi()
     measureButtons->addStretch();
     detailLayout->addLayout(measureButtons);
 
+    m_targetProgressLabel = new QLabel(this);
+    m_targetProgressLabel->setWordWrap(true);
+    m_targetProgressBar = new QProgressBar(this);
+    m_targetProgressBar->setRange(0, 100);
+    m_targetProgressBar->setTextVisible(true);
+    m_targetProgressBar->setFormat(tr("%p% abgeschlossen"));
+    m_targetProgressBar->setVisible(false);
+
+    auto *requirementPanel = new QWidget(this);
+    auto *requirementLayout = new QVBoxLayout(requirementPanel);
+    requirementLayout->setContentsMargins(0, 0, 0, 0);
+    requirementLayout->addWidget(m_targetProgressLabel);
+    requirementLayout->addWidget(m_targetProgressBar);
+    requirementLayout->addWidget(m_requirementTable, 1);
+
     auto *centerSplitter = new QSplitter(Qt::Vertical, this);
-    centerSplitter->addWidget(m_requirementTable);
+    centerSplitter->addWidget(requirementPanel);
     centerSplitter->addWidget(detailPanel);
     centerSplitter->setStretchFactor(0, 3);
     centerSplitter->setStretchFactor(1, 2);
@@ -321,17 +354,23 @@ void MainWindow::reloadRecommendationMarkers()
 {
     if (!hasActiveProjectContext()) {
         m_bausteinModel->setRecommendedBausteinIds({});
+        m_bausteinModel->setRecommendationTiers({});
         return;
     }
 
     const QList<Baustein> bausteine = m_context.catalogRepository().loadBausteine(
         StandardType::ITGrundschutz, m_context.catalogVersion());
+    const QList<BausteinRecommendation> recommendations =
+        BausteinRecommendationService::buildRecommendations(bausteine, m_activeTargetObject);
+
     QSet<int> recommendedIds;
-    for (const Baustein &baustein : bausteine) {
-        if (BausteinRecommendationService::isRecommended(baustein, m_activeTargetObject.type))
-            recommendedIds.insert(baustein.id);
+    QHash<int, BausteinRecommendationTier> recommendationTiers;
+    for (const BausteinRecommendation &recommendation : recommendations) {
+        recommendedIds.insert(recommendation.bausteinDbId);
+        recommendationTiers.insert(recommendation.bausteinDbId, recommendation.tier);
     }
     m_bausteinModel->setRecommendedBausteinIds(recommendedIds);
+    m_bausteinModel->setRecommendationTiers(recommendationTiers);
 }
 
 void MainWindow::reloadTargetObjects()
@@ -340,6 +379,7 @@ void MainWindow::reloadTargetObjects()
         m_targetObjectModel->setTargetObjects({});
         m_activeTargetObject = {};
         updateProjectUiEnabled();
+        reloadProgress();
         return;
     }
 
@@ -374,6 +414,57 @@ void MainWindow::reloadTargetObjects()
     reloadRecommendationMarkers();
     updateProjectUiEnabled();
     selectActiveTargetObjectInTree();
+    if (m_activeTargetObject.id == 0)
+        reloadProgress();
+}
+
+void MainWindow::reloadProgress()
+{
+    auto resetProgressUi = [this]() {
+        m_projectProgressLabel->setText(tr("Kein Projekt geöffnet"));
+        m_projectProgressBar->setValue(0);
+        m_projectProgressBar->setVisible(false);
+        m_targetProgressLabel->clear();
+        m_targetProgressBar->setValue(0);
+        m_targetProgressBar->setVisible(false);
+        m_targetObjectModel->setProgressSummaries({});
+    };
+
+    if (m_activeProject.id == 0) {
+        resetProgressUi();
+        return;
+    }
+
+    ReportService service(m_context.catalogRepository(),
+                          m_context.projectRepository(),
+                          m_context.targetObjectRepository(),
+                          m_context.measureRepository());
+
+    const QList<ReportRow> projectRows =
+        service.buildSollIstReport(m_activeProject.id, 0, m_context.catalogVersion());
+    const ReportSummary projectSummary = service.summarize(projectRows);
+    const QHash<int, ReportSummary> targetSummaries = service.summarizeByTargetObject(projectRows);
+
+    m_targetObjectModel->setProgressSummaries(targetSummaries);
+
+    m_projectProgressLabel->setText(
+        tr("Projekt: %1").arg(ReportService::formatSummaryText(projectSummary)));
+    m_projectProgressBar->setValue(ReportService::progressPercent(projectSummary));
+    m_projectProgressBar->setVisible(projectSummary.totalRequirements > 0);
+
+    if (m_activeTargetObject.id == 0) {
+        m_targetProgressLabel->setText(tr("Bitte Zielobjekt wählen"));
+        m_targetProgressBar->setValue(0);
+        m_targetProgressBar->setVisible(false);
+        return;
+    }
+
+    const ReportSummary targetSummary = targetSummaries.value(m_activeTargetObject.id);
+    m_targetProgressLabel->setText(
+        tr("Zielobjekt \"%1\": %2")
+            .arg(m_activeTargetObject.name, ReportService::formatSummaryText(targetSummary)));
+    m_targetProgressBar->setValue(ReportService::progressPercent(targetSummary));
+    m_targetProgressBar->setVisible(targetSummary.totalRequirements > 0);
 }
 
 void MainWindow::selectActiveTargetObjectInTree()
@@ -585,6 +676,7 @@ void MainWindow::onTargetObjectSelected(const QModelIndex &index)
     reloadApplicabilityMarkers();
     reloadRecommendationMarkers();
     updateProjectUiEnabled();
+    reloadProgress();
 
     const QModelIndex bausteinIndex = m_bausteinTree->currentIndex();
     if (bausteinIndex.isValid())
@@ -731,6 +823,7 @@ bool MainWindow::saveCurrentAssessment()
         return false;
 
     m_requirementModel->setAssessment(requirement.id, assessment);
+    reloadProgress();
     return true;
 }
 
@@ -804,6 +897,7 @@ void MainWindow::addMeasure()
 
     loadMeasuresForCurrentRequirement();
     refreshAssessmentColumn();
+    reloadProgress();
 }
 
 void MainWindow::editMeasure()
@@ -825,6 +919,7 @@ void MainWindow::editMeasure()
     }
 
     loadMeasuresForCurrentRequirement();
+    reloadProgress();
 }
 
 void MainWindow::deleteMeasure()
@@ -846,6 +941,7 @@ void MainWindow::deleteMeasure()
 
     loadMeasuresForCurrentRequirement();
     refreshAssessmentColumn();
+    reloadProgress();
 }
 
 void MainWindow::addTargetObject()
@@ -995,6 +1091,7 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
     }
 
     reloadApplicabilityMarkers();
+    reloadProgress();
 
     if (status == ApplicabilityStatus::NotApplicable && m_bausteinTree->currentIndex() == index)
         onBausteinSelected(index);
@@ -1022,13 +1119,15 @@ void MainWindow::applyBausteinRecommendations()
 
     const QList<Baustein> allBausteine = m_context.catalogRepository().loadBausteine(
         StandardType::ITGrundschutz, m_context.catalogVersion());
-    const QList<Baustein> recommended = BausteinRecommendationService::filterRecommended(
-        allBausteine, m_activeTargetObject.type);
-    if (recommended.isEmpty()) {
+    const QList<BausteinRecommendation> recommendations =
+        BausteinRecommendationService::buildRecommendations(allBausteine, m_activeTargetObject);
+    if (recommendations.isEmpty()) {
         QMessageBox::information(this,
                                tr("Baustein-Empfehlungen"),
-                               tr("Für den Zielobjekt-Typ \"%1\" sind keine Baustein-Empfehlungen hinterlegt.")
-                                   .arg(targetObjectTypeToString(m_activeTargetObject.type)));
+                               tr("Für Zielobjekt \"%1\" (%2, %3) sind keine Baustein-Empfehlungen hinterlegt.")
+                                   .arg(m_activeTargetObject.name,
+                                        targetObjectTypeToString(m_activeTargetObject.type),
+                                        protectionNeedToString(m_activeTargetObject.protectionNeed)));
         return;
     }
 
@@ -1036,7 +1135,7 @@ void MainWindow::applyBausteinRecommendations()
         m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
                                                                 m_activeTargetObject.id);
 
-    BausteinRecommendationDialog dialog(recommended, applicabilityMap, m_activeTargetObject, this);
+    BausteinRecommendationDialog dialog(recommendations, applicabilityMap, m_activeTargetObject, this);
     if (dialog.exec() != QDialog::Accepted)
         return;
 
@@ -1060,6 +1159,7 @@ void MainWindow::applyBausteinRecommendations()
     }
 
     reloadApplicabilityMarkers();
+    reloadProgress();
 
     const QModelIndex bausteinIndex = m_bausteinTree->currentIndex();
     if (bausteinIndex.isValid())

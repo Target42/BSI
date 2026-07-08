@@ -42,6 +42,7 @@ HEADERS += \
     src/domain/ApplicabilityStatus.h \
     src/domain/AssessmentStatus.h \
     src/domain/BausteinApplicability.h \
+    src/domain/BausteinRecommendation.h \
     src/domain/Baustein.h \
     src/domain/Measure.h \
     src/domain/MeasureStatus.h \

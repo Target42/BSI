@@ -42,6 +42,15 @@ void BausteinTreeModel::setApplicabilityMap(const QHash<int, ApplicabilityStatus
 void BausteinTreeModel::setRecommendedBausteinIds(const QSet<int> &ids)
 {
     m_recommendedIds = ids;
+    if (ids.isEmpty())
+        m_recommendationTiers.clear();
+    beginResetModel();
+    endResetModel();
+}
+
+void BausteinTreeModel::setRecommendationTiers(const QHash<int, BausteinRecommendationTier> &tiers)
+{
+    m_recommendationTiers = tiers;
     beginResetModel();
     endResetModel();
 }
@@ -212,12 +221,17 @@ QVariant BausteinTreeModel::data(const QModelIndex &index, int role) const
 
     switch (role) {
     case Qt::DisplayRole: {
-        const QString label = QStringLiteral("%1 %2").arg(baustein.externalId, baustein.title);
+        QString label = QStringLiteral("%1 %2").arg(baustein.externalId, baustein.title);
         if (m_highlightRecommendations
             && m_recommendedIds.contains(baustein.id)
             && m_applicability.value(baustein.id, ApplicabilityStatus::Undefined)
                    == ApplicabilityStatus::Undefined) {
-            return QStringLiteral("★ %1").arg(label);
+            const BausteinRecommendationTier tier =
+                m_recommendationTiers.value(baustein.id, BausteinRecommendationTier::Core);
+            const QString marker =
+                tier == BausteinRecommendationTier::Core ? QStringLiteral("★ ")
+                                                         : QStringLiteral("○ ");
+            label = marker + label;
         }
         return label;
     }
@@ -236,8 +250,13 @@ QVariant BausteinTreeModel::data(const QModelIndex &index, int role) const
             m_applicability.value(baustein.id, ApplicabilityStatus::Undefined);
         if (m_highlightRecommendations
             && m_recommendedIds.contains(baustein.id)
-            && applicability == ApplicabilityStatus::Undefined)
-            return QBrush(QColor(0, 102, 153));
+            && applicability == ApplicabilityStatus::Undefined) {
+            const BausteinRecommendationTier tier =
+                m_recommendationTiers.value(baustein.id, BausteinRecommendationTier::Core);
+            if (tier == BausteinRecommendationTier::Core)
+                return QBrush(QColor(0, 102, 153));
+            return QBrush(QColor(0, 128, 96));
+        }
         switch (applicability) {
         case ApplicabilityStatus::Required:
             return QBrush(Qt::darkRed);
