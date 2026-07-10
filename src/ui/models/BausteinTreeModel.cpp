@@ -74,6 +74,18 @@ void BausteinTreeModel::setHideNonApplicable(bool hide)
     endResetModel();
 }
 
+void BausteinTreeModel::updateTargetContext(const QHash<int, ApplicabilityStatus> &applicability,
+                                            const QSet<int> &recommendedIds,
+                                            const QHash<int, BausteinRecommendationTier> &tiers)
+{
+    m_applicability = applicability;
+    m_recommendedIds = recommendedIds;
+    m_recommendationTiers = tiers;
+    rebuildVisibleIndices();
+    beginResetModel();
+    endResetModel();
+}
+
 bool BausteinTreeModel::isBausteinVisible(const Baustein &baustein) const
 {
     if (!m_hideNonApplicable)
@@ -294,4 +306,20 @@ Baustein BausteinTreeModel::bausteinForIndex(const QModelIndex &index) const
 
     return m_groups.at(groupIndex)
         .bausteine.at(m_groups.at(groupIndex).visibleIndices.at(index.row()));
+}
+
+QModelIndex BausteinTreeModel::indexForBausteinId(int bausteinDbId) const
+{
+    if (bausteinDbId == 0)
+        return {};
+
+    for (int groupIndex = 0; groupIndex < m_groups.size(); ++groupIndex) {
+        const GroupNode &group = m_groups.at(groupIndex);
+        for (int visibleRow = 0; visibleRow < group.visibleIndices.size(); ++visibleRow) {
+            const Baustein &baustein = group.bausteine.at(group.visibleIndices.at(visibleRow));
+            if (baustein.id == bausteinDbId)
+                return createIndex(visibleRow, 0, quintptr(groupIndex + 1));
+        }
+    }
+    return {};
 }

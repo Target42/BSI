@@ -13,6 +13,7 @@
 #include "ui/models/RequirementTableModel.h"
 #include "ui/models/TargetObjectTreeModel.h"
 
+#include <QHash>
 #include <QMainWindow>
 
 class QCheckBox;
@@ -26,6 +27,12 @@ class QProgressBar;
 class QTableView;
 class QTextEdit;
 class QTreeView;
+
+struct SessionSelection {
+    int targetObjectId = 0;
+    int bausteinId = 0;
+    int requirementId = 0;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -66,16 +73,32 @@ private:
     void reloadTargetObjects();
     void reloadApplicabilityMarkers();
     void reloadRecommendationMarkers();
+    void reloadBausteinMarkers();
     void reloadProgress();
     void loadRequirementsForBaustein(int bausteinDbId);
+    void loadRequirementDetails(int row, bool forceReload = false);
+    void refreshCurrentRequirementView();
+    int activeBausteinIdFromTree() const;
+    void persistTargetSelection(int targetObjectId);
+    void restoreTargetSelection(int targetObjectId);
+    bool isBausteinApplicableForActiveTarget(int bausteinDbId) const;
+    bool hasApplicableBausteineForActiveTarget() const;
+    void ensureApplicableFilterFeasible();
+    void showBausteinNotApplicableMessage(int bausteinDbId, ApplicabilityStatus status);
     void refreshAssessmentColumn();
     void syncAssessmentUi(const RequirementAssessment &assessment);
     void loadMeasuresForCurrentRequirement();
+    bool saveAssessmentFor(int targetObjectId, int requirementDbId);
     bool saveCurrentAssessment();
     Requirement currentRequirement() const;
     void updateWindowTitle();
     void updateProjectUiEnabled();
     void clearProjectSession();
+    void clearRequirementView();
+    void reloadActiveTargetContent();
+    void restoreBausteinSelection(int bausteinId);
+    void persistSessionSelection();
+    SessionSelection loadStoredSession(int projectId) const;
     void selectActiveTargetObjectInTree();
     void showTemporaryStatusMessage(const QString &message, int timeoutMs = 5000);
     int activeTargetObjectId() const;
@@ -84,6 +107,18 @@ private:
     AppContext &m_context;
     Project m_activeProject;
     TargetObject m_activeTargetObject;
+    int m_activeBausteinId = 0;
+    int m_activeRequirementId = 0;
+    int m_restoreRequirementId = 0;
+    int m_displayedAssessmentTargetId = 0;
+    int m_preferredTargetObjectId = 0;
+    int m_preferredBausteinId = 0;
+    int m_preferredRequirementId = 0;
+    bool m_suppressAssessmentSave = false;
+    bool m_blockBausteinSelectionHandler = false;
+    QHash<int, int> m_lastBausteinByTarget;
+    QHash<int, int> m_lastRequirementByTarget;
+    QHash<int, SessionSelection> m_sessionByProject;
 
     TargetObjectTreeModel *m_targetObjectModel = nullptr;
     BausteinTreeModel *m_bausteinModel = nullptr;

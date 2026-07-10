@@ -31,6 +31,9 @@ public:
     void setRecommendationTiers(const QHash<int, BausteinRecommendationTier> &tiers);
     void setHighlightRecommendations(bool highlight);
     void setHideNonApplicable(bool hide);
+    void updateTargetContext(const QHash<int, ApplicabilityStatus> &applicability,
+                             const QSet<int> &recommendedIds,
+                             const QHash<int, BausteinRecommendationTier> &tiers);
 
     QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
     QModelIndex parent(const QModelIndex &child) const override;
@@ -40,6 +43,7 @@ public:
     Qt::ItemFlags flags(const QModelIndex &index) const override;
 
     Baustein bausteinForIndex(const QModelIndex &index) const;
+    QModelIndex indexForBausteinId(int bausteinDbId) const;
 
 private:
     struct GroupNode {
