@@ -2026,7 +2026,7 @@ void MainWindow::openBausteinViewDialog(const Baustein &baustein, const QString 
         return;
 
     QList<Requirement> requirements = m_context.catalogRepository().loadRequirements(baustein.id);
-    BausteinViewDialog dialog(baustein, requirements, initialSearch, this);
+    BausteinViewDialog dialog(baustein, requirements, initialSearch, 0, this);
     dialog.exec();
 }
 
