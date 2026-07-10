@@ -23,6 +23,8 @@ SOURCES += \
     src/services/ReportService.cpp \
     src/ui/MainWindow.cpp \
     src/ui/dialogs/BausteinRecommendationDialog.cpp \
+    src/ui/dialogs/BausteinViewDialog.cpp \
+    src/ui/dialogs/CatalogSearchDialog.cpp \
     src/ui/dialogs/MeasureDialog.cpp \
     src/ui/dialogs/ProjectOpenDialog.cpp \
     src/ui/dialogs/ProjectDialog.cpp \
@@ -65,6 +67,8 @@ HEADERS += \
     src/services/ReportService.h \
     src/ui/MainWindow.h \
     src/ui/dialogs/BausteinRecommendationDialog.h \
+    src/ui/dialogs/BausteinViewDialog.h \
+    src/ui/dialogs/CatalogSearchDialog.h \
     src/ui/dialogs/MeasureDialog.h \
     src/ui/dialogs/ProjectOpenDialog.h \
     src/ui/dialogs/ProjectDialog.h \

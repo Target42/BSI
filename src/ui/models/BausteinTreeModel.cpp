@@ -74,6 +74,19 @@ void BausteinTreeModel::setHideNonApplicable(bool hide)
     endResetModel();
 }
 
+void BausteinTreeModel::setSearchFilter(const QString &query, const QSet<int> &matchingBausteinIds)
+{
+    const QString trimmedQuery = query.trimmed();
+    if (m_searchQuery == trimmedQuery && m_searchMatchingIds == matchingBausteinIds)
+        return;
+
+    m_searchQuery = trimmedQuery;
+    m_searchMatchingIds = matchingBausteinIds;
+    rebuildVisibleIndices();
+    beginResetModel();
+    endResetModel();
+}
+
 void BausteinTreeModel::updateTargetContext(const QHash<int, ApplicabilityStatus> &applicability,
                                             const QSet<int> &recommendedIds,
                                             const QHash<int, BausteinRecommendationTier> &tiers)
@@ -88,11 +101,17 @@ void BausteinTreeModel::updateTargetContext(const QHash<int, ApplicabilityStatus
 
 bool BausteinTreeModel::isBausteinVisible(const Baustein &baustein) const
 {
-    if (!m_hideNonApplicable)
-        return true;
+    if (m_hideNonApplicable) {
+        const ApplicabilityStatus status =
+            m_applicability.value(baustein.id, ApplicabilityStatus::Undefined);
+        if (status != ApplicabilityStatus::Required && status != ApplicabilityStatus::Possible)
+            return false;
+    }
 
-    const ApplicabilityStatus status = m_applicability.value(baustein.id, ApplicabilityStatus::Undefined);
-    return status == ApplicabilityStatus::Required || status == ApplicabilityStatus::Possible;
+    if (!m_searchQuery.isEmpty() && !m_searchMatchingIds.contains(baustein.id))
+        return false;
+
+    return true;
 }
 
 void BausteinTreeModel::rebuildVisibleIndices()
@@ -114,7 +133,7 @@ QModelIndex BausteinTreeModel::index(int row, int column, const QModelIndex &par
     if (!parent.isValid()) {
         int visibleGroupRow = 0;
         for (int i = 0; i < m_groups.size(); ++i) {
-            if (m_hideNonApplicable && m_groups.at(i).visibleIndices.isEmpty())
+            if (m_groups.at(i).visibleIndices.isEmpty())
                 continue;
             if (visibleGroupRow == row)
                 return createIndex(row, column, quintptr(0));
@@ -130,7 +149,7 @@ QModelIndex BausteinTreeModel::index(int row, int column, const QModelIndex &par
     int visibleGroupRow = 0;
     int groupIndex = -1;
     for (int i = 0; i < m_groups.size(); ++i) {
-        if (m_hideNonApplicable && m_groups.at(i).visibleIndices.isEmpty())
+        if (m_groups.at(i).visibleIndices.isEmpty())
             continue;
         if (visibleGroupRow == groupRow) {
             groupIndex = i;
@@ -158,7 +177,7 @@ QModelIndex BausteinTreeModel::parent(const QModelIndex &child) const
 
     int visibleGroupRow = 0;
     for (int i = 0; i < m_groups.size(); ++i) {
-        if (m_hideNonApplicable && m_groups.at(i).visibleIndices.isEmpty())
+        if (m_groups.at(i).visibleIndices.isEmpty())
             continue;
         if (i == groupIndex)
             return createIndex(visibleGroupRow, 0, quintptr(0));
@@ -172,7 +191,7 @@ int BausteinTreeModel::rowCount(const QModelIndex &parent) const
     if (!parent.isValid()) {
         int count = 0;
         for (const GroupNode &group : m_groups) {
-            if (m_hideNonApplicable && group.visibleIndices.isEmpty())
+            if (group.visibleIndices.isEmpty())
                 continue;
             ++count;
         }
@@ -208,7 +227,7 @@ QVariant BausteinTreeModel::data(const QModelIndex &index, int role) const
     if (index.internalId() == quintptr(0)) {
         int visibleGroupRow = 0;
         for (int i = 0; i < m_groups.size(); ++i) {
-            if (m_hideNonApplicable && m_groups.at(i).visibleIndices.isEmpty())
+            if (m_groups.at(i).visibleIndices.isEmpty())
                 continue;
             if (visibleGroupRow == index.row()) {
                 if (role == Qt::DisplayRole)

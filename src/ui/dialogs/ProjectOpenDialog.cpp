@@ -25,6 +25,7 @@ ProjectOpenDialog::ProjectOpenDialog(const QList<Project> &projects, QWidget *pa
     }
     if (m_list->count() > 0)
         m_list->setCurrentRow(0);
+    connect(m_list, &QListWidget::itemActivated, this, &QDialog::accept);
 
     auto *hint = new QLabel(tr("IT-Grundschutz-Projekte in der lokalen Datenbank."), this);
     hint->setWordWrap(true);

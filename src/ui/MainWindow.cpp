@@ -9,6 +9,8 @@
 #include "domain/TargetObject.h"
 #include "domain/TargetObjectType.h"
 #include "ui/dialogs/BausteinRecommendationDialog.h"
+#include "ui/dialogs/BausteinViewDialog.h"
+#include "ui/dialogs/CatalogSearchDialog.h"
 #include "services/BausteinRecommendationService.h"
 #include "services/ReportService.h"
 #include "ui/dialogs/MeasureDialog.h"
@@ -18,6 +20,7 @@
 #include "ui/dialogs/TargetObjectDialog.h"
 
 #include <QAction>
+#include <QCloseEvent>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDate>
@@ -48,6 +51,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QLineEdit>
+
+#include <algorithm>
 
 MainWindow::MainWindow(AppContext &context, QWidget *parent)
     : QMainWindow(parent)
@@ -110,9 +115,19 @@ void MainWindow::buildUi()
     connect(m_highlightRecommendationsBox, &QCheckBox::toggled, this,
             &MainWindow::toggleRecommendationHighlight);
 
+    m_bausteinSearchEdit = new QLineEdit(this);
+    m_bausteinSearchEdit->setPlaceholderText(tr("Bausteine durchsuchen…"));
+    m_bausteinSearchEdit->setClearButtonEnabled(true);
+    m_bausteinSearchEdit->setToolTip(
+        tr("Filtert die Bausteinliste.\nFür eine Volltextsuche über alle Anforderungen: "
+           "Katalog → Volltextsuche… (Strg+Umschalt+F)"));
+    connect(m_bausteinSearchEdit, &QLineEdit::textChanged, this,
+            &MainWindow::applyBausteinSearchFilter);
+
     auto *bausteinPanel = new QWidget(this);
     auto *bausteinLayout = new QVBoxLayout(bausteinPanel);
     bausteinLayout->setContentsMargins(0, 0, 0, 0);
+    bausteinLayout->addWidget(m_bausteinSearchEdit);
     bausteinLayout->addWidget(m_filterApplicableBox);
     bausteinLayout->addWidget(m_highlightRecommendationsBox);
 
@@ -126,6 +141,11 @@ void MainWindow::buildUi()
             });
     connect(m_bausteinTree, &QTreeView::customContextMenuRequested, this,
             &MainWindow::showBausteinContextMenu);
+    connect(m_bausteinTree, &QTreeView::doubleClicked, this, [this](const QModelIndex &index) {
+        if (!index.isValid() || index.data(BausteinTreeModel::IsGroupRole).toBool())
+            return;
+        viewSelectedBaustein();
+    });
     bausteinLayout->addWidget(m_bausteinTree);
 
     auto *catalogDock = new QDockWidget(tr("IT-Grundschutz Bausteine"), this);
@@ -232,11 +252,21 @@ void MainWindow::buildUi()
     m_targetProgressBar->setFormat(tr("%p% abgeschlossen"));
     m_targetProgressBar->setVisible(false);
 
+    auto *bausteinRow = new QHBoxLayout();
+    bausteinRow->addWidget(new QLabel(tr("Baustein"), this));
+    m_assignedBausteinBox = new QComboBox(this);
+    m_assignedBausteinBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_assignedBausteinBox->setMinimumContentsLength(28);
+    connect(m_assignedBausteinBox, QOverload<int>::of(&QComboBox::activated), this,
+            &MainWindow::onAssignedBausteinActivated);
+    bausteinRow->addWidget(m_assignedBausteinBox, 1);
+
     auto *requirementPanel = new QWidget(this);
     auto *requirementLayout = new QVBoxLayout(requirementPanel);
     requirementLayout->setContentsMargins(0, 0, 0, 0);
     requirementLayout->addWidget(m_targetProgressLabel);
     requirementLayout->addWidget(m_targetProgressBar);
+    requirementLayout->addLayout(bausteinRow);
     requirementLayout->addWidget(m_requirementTable, 1);
 
     auto *centerSplitter = new QSplitter(Qt::Vertical, this);
@@ -282,6 +312,12 @@ void MainWindow::buildUi()
     m_sollIstAction = reportMenu->addAction(tr("Soll-Ist-Übersicht..."));
     connect(m_sollIstAction, &QAction::triggered, this, &MainWindow::showSollIstReport);
 
+    auto *catalogMenu = menuBar()->addMenu(tr("Katalog"));
+    catalogMenu->addAction(tr("Baustein anzeigen..."), this, &MainWindow::viewSelectedBaustein);
+    auto *catalogSearchAction = catalogMenu->addAction(tr("Volltextsuche..."));
+    catalogSearchAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F));
+    connect(catalogSearchAction, &QAction::triggered, this, &MainWindow::showCatalogSearch);
+
     auto *toolBar = addToolBar(tr("Projekt"));
     toolBar->addAction(newProjectAction);
     toolBar->addAction(openProjectAction);
@@ -321,6 +357,8 @@ void MainWindow::updateProjectUiEnabled()
     m_targetObjectTree->setEnabled(hasProject);
     m_filterApplicableBox->setEnabled(hasTargetObject);
     m_highlightRecommendationsBox->setEnabled(hasTargetObject);
+    m_assignedBausteinBox->setEnabled(hasTargetObject && m_assignedBausteinBox->count() > 0
+                                      && m_assignedBausteinBox->currentData().toInt() != 0);
     m_statusBox->setEnabled(hasTargetObject);
     m_assessmentNote->setEnabled(hasTargetObject);
     m_responsibleEdit->setEnabled(hasTargetObject);
@@ -356,11 +394,14 @@ int MainWindow::activeTargetObjectId() const
 
 void MainWindow::reloadCatalog()
 {
-    const QList<Baustein> bausteine = m_context.catalogRepository().loadBausteine(
+    m_catalogBausteine = m_context.catalogRepository().loadBausteine(
         StandardType::ITGrundschutz, m_context.catalogVersion());
-    m_bausteinModel->setBausteine(bausteine);
+    m_catalogRequirements = m_context.catalogRepository().loadAllRequirements(
+        StandardType::ITGrundschutz, m_context.catalogVersion());
+    m_bausteinModel->setBausteine(m_catalogBausteine);
+    applyBausteinSearchFilter();
     m_bausteinTree->expandAll();
-    m_statusLabel->setText(tr("%1 Bausteine geladen").arg(bausteine.size()));
+    m_statusLabel->setText(tr("%1 Bausteine geladen").arg(m_catalogBausteine.size()));
     reloadApplicabilityMarkers();
     reloadRecommendationMarkers();
     updateWindowTitle();
@@ -393,6 +434,7 @@ void MainWindow::reloadBausteinMarkers()
 {
     if (!hasActiveProjectContext()) {
         m_bausteinModel->updateTargetContext({}, {}, {});
+        reloadAssignedBausteinBox();
         return;
     }
 
@@ -413,6 +455,96 @@ void MainWindow::reloadBausteinMarkers()
     }
 
     m_bausteinModel->updateTargetContext(applicability, recommendedIds, recommendationTiers);
+    reloadAssignedBausteinBox();
+}
+
+void MainWindow::reloadAssignedBausteinBox()
+{
+    m_blockAssignedBausteinBoxHandler = true;
+    QSignalBlocker blocker(m_assignedBausteinBox);
+    m_assignedBausteinBox->clear();
+
+    if (!hasActiveProjectContext()) {
+        m_assignedBausteinBox->addItem(tr("— Kein Zielobjekt gewählt —"), 0);
+        m_assignedBausteinBox->setEnabled(false);
+        m_blockAssignedBausteinBoxHandler = false;
+        return;
+    }
+
+    const QHash<int, ApplicabilityStatus> applicability =
+        m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
+                                                                m_activeTargetObject.id);
+    const QList<Baustein> bausteine = m_context.catalogRepository().loadBausteine(
+        StandardType::ITGrundschutz, m_context.catalogVersion());
+    QHash<int, Baustein> bausteinById;
+    for (const Baustein &baustein : bausteine)
+        bausteinById.insert(baustein.id, baustein);
+
+    QList<int> assignedIds;
+    for (auto it = applicability.constBegin(); it != applicability.constEnd(); ++it) {
+        if (it.value() == ApplicabilityStatus::Required
+            || it.value() == ApplicabilityStatus::Possible)
+            assignedIds.append(it.key());
+    }
+    std::sort(assignedIds.begin(), assignedIds.end(), [&bausteinById](int a, int b) {
+        return bausteinById.value(a).externalId < bausteinById.value(b).externalId;
+    });
+
+    if (assignedIds.isEmpty()) {
+        m_assignedBausteinBox->addItem(tr("— Keine Bausteine zugewiesen —"), 0);
+        m_assignedBausteinBox->setEnabled(false);
+        m_blockAssignedBausteinBoxHandler = false;
+        return;
+    }
+
+    for (int bausteinId : assignedIds) {
+        const Baustein baustein = bausteinById.value(bausteinId);
+        const QString label =
+            QStringLiteral("%1 %2 (%3)")
+                .arg(baustein.externalId,
+                     baustein.title,
+                     applicabilityStatusToString(applicability.value(bausteinId)));
+        m_assignedBausteinBox->addItem(label, bausteinId);
+    }
+
+    m_assignedBausteinBox->setEnabled(true);
+    syncAssignedBausteinBoxSelection();
+    m_blockAssignedBausteinBoxHandler = false;
+}
+
+void MainWindow::syncAssignedBausteinBoxSelection()
+{
+    if (m_assignedBausteinBox->count() == 0
+        || m_assignedBausteinBox->itemData(0).toInt() == 0)
+        return;
+
+    m_blockAssignedBausteinBoxHandler = true;
+    QSignalBlocker blocker(m_assignedBausteinBox);
+
+    if (m_activeBausteinId != 0) {
+        const int index = m_assignedBausteinBox->findData(m_activeBausteinId);
+        if (index >= 0)
+            m_assignedBausteinBox->setCurrentIndex(index);
+    }
+
+    m_blockAssignedBausteinBoxHandler = false;
+}
+
+void MainWindow::onAssignedBausteinActivated(int index)
+{
+    if (m_blockAssignedBausteinBoxHandler || index < 0 || !hasActiveProjectContext())
+        return;
+
+    const int bausteinId = m_assignedBausteinBox->itemData(index).toInt();
+    if (bausteinId == 0 || bausteinId == m_activeBausteinId)
+        return;
+
+    if (m_activeRequirementId != 0 && m_displayedAssessmentTargetId != 0)
+        saveAssessmentFor(m_displayedAssessmentTargetId, m_activeRequirementId);
+
+    restoreBausteinSelection(bausteinId);
+    reloadActiveTargetContent();
+    persistTargetSelection(m_activeTargetObject.id);
 }
 
 void MainWindow::reloadTargetObjects()
@@ -571,6 +703,10 @@ void MainWindow::clearRequirementView()
     m_responsibleEdit->clear();
     m_hasDueDateBox->setChecked(false);
     m_dueDateEdit->clear();
+    QSignalBlocker statusBlocker(m_statusBox);
+    const int openStatusIndex = m_statusBox->findData(static_cast<int>(AssessmentStatus::Open));
+    if (openStatusIndex >= 0)
+        m_statusBox->setCurrentIndex(openStatusIndex);
 }
 
 void MainWindow::restoreBausteinSelection(int bausteinId)
@@ -587,6 +723,24 @@ void MainWindow::restoreBausteinSelection(int bausteinId)
     QSignalBlocker blocker(m_bausteinTree->selectionModel());
     m_bausteinTree->setCurrentIndex(index);
     m_activeBausteinId = bausteinId;
+}
+
+void MainWindow::revertBausteinTreeSelection(int bausteinDbId)
+{
+    if (!hasActiveProjectContext() || bausteinDbId == 0
+        || !isBausteinApplicableForActiveTarget(bausteinDbId)) {
+        QSignalBlocker blocker(m_bausteinTree->selectionModel());
+        m_bausteinTree->setCurrentIndex({});
+        m_activeBausteinId = 0;
+        clearRequirementView();
+        syncAssignedBausteinBoxSelection();
+        return;
+    }
+
+    m_blockBausteinSelectionHandler = true;
+    restoreBausteinSelection(bausteinDbId);
+    m_blockBausteinSelectionHandler = false;
+    reloadActiveTargetContent();
 }
 
 void MainWindow::persistSessionSelection()
@@ -610,6 +764,59 @@ void MainWindow::persistSessionSelection()
     settings.setValue(QStringLiteral("targetObjectId"), session.targetObjectId);
     settings.setValue(QStringLiteral("bausteinId"), session.bausteinId);
     settings.setValue(QStringLiteral("requirementId"), session.requirementId);
+    settings.endGroup();
+    persistAllTargetSelections();
+}
+
+void MainWindow::persistAllTargetSelections()
+{
+    if (m_activeProject.id == 0)
+        return;
+
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("projectSessions/%1").arg(m_activeProject.id));
+    settings.remove(QStringLiteral("targets"));
+
+    QSet<int> targetIds;
+    for (auto it = m_lastBausteinByTarget.constBegin(); it != m_lastBausteinByTarget.constEnd(); ++it)
+        targetIds.insert(it.key());
+    for (auto it = m_lastRequirementByTarget.constBegin(); it != m_lastRequirementByTarget.constEnd(); ++it)
+        targetIds.insert(it.key());
+
+    settings.beginGroup(QStringLiteral("targets"));
+    for (int targetId : targetIds) {
+        settings.beginGroup(QString::number(targetId));
+        if (m_lastBausteinByTarget.contains(targetId))
+            settings.setValue(QStringLiteral("bausteinId"), m_lastBausteinByTarget.value(targetId));
+        if (m_lastRequirementByTarget.contains(targetId))
+            settings.setValue(QStringLiteral("requirementId"), m_lastRequirementByTarget.value(targetId));
+        settings.endGroup();
+    }
+    settings.endGroup();
+    settings.endGroup();
+}
+
+void MainWindow::loadStoredTargetSelections(int projectId)
+{
+    m_lastBausteinByTarget.clear();
+    m_lastRequirementByTarget.clear();
+
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("projectSessions/%1/targets").arg(projectId));
+    const QStringList groups = settings.childGroups();
+    for (const QString &group : groups) {
+        settings.beginGroup(group);
+        const int targetId = group.toInt();
+        if (targetId > 0) {
+            const int bausteinId = settings.value(QStringLiteral("bausteinId"), 0).toInt();
+            const int requirementId = settings.value(QStringLiteral("requirementId"), 0).toInt();
+            if (bausteinId != 0)
+                m_lastBausteinByTarget[targetId] = bausteinId;
+            if (requirementId != 0)
+                m_lastRequirementByTarget[targetId] = requirementId;
+        }
+        settings.endGroup();
+    }
     settings.endGroup();
 }
 
@@ -802,6 +1009,7 @@ void MainWindow::reloadActiveTargetContent()
     m_displayedAssessmentTargetId = 0;
     m_activeRequirementId = 0;
     loadRequirementsForBaustein(m_activeBausteinId);
+    syncAssignedBausteinBoxSelection();
 }
 
 void MainWindow::clearProjectSession()
@@ -882,9 +1090,8 @@ void MainWindow::openProject()
     m_preferredBausteinId = session.bausteinId;
     m_preferredRequirementId = session.requirementId;
     m_restoreRequirementId = session.requirementId;
-    m_lastBausteinByTarget.clear();
-    m_lastRequirementByTarget.clear();
-    if (session.targetObjectId != 0) {
+    loadStoredTargetSelections(m_activeProject.id);
+    if (m_lastBausteinByTarget.isEmpty() && session.targetObjectId != 0) {
         if (session.bausteinId != 0)
             m_lastBausteinByTarget[session.targetObjectId] = session.bausteinId;
         if (session.requirementId != 0)
@@ -912,6 +1119,16 @@ void MainWindow::closeProject()
     const QString projectName = m_activeProject.name;
     clearProjectSession();
     showTemporaryStatusMessage(tr("Projekt \"%1\" geschlossen").arg(projectName));
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (m_activeProject.id != 0) {
+        if (m_activeRequirementId != 0 && m_displayedAssessmentTargetId != 0)
+            saveAssessmentFor(m_displayedAssessmentTargetId, m_activeRequirementId);
+        persistSessionSelection();
+    }
+    QMainWindow::closeEvent(event);
 }
 
 void MainWindow::editProject()
@@ -981,6 +1198,11 @@ void MainWindow::createProject()
         return;
     }
 
+    if (m_activeRequirementId != 0 && m_displayedAssessmentTargetId != 0)
+        saveAssessmentFor(m_displayedAssessmentTargetId, m_activeRequirementId);
+    if (m_activeProject.id != 0)
+        persistSessionSelection();
+
     m_activeProject = m_context.projectRepository().createProject(
         projectDraft.name, projectDraft.description, m_context.catalogVersion());
     if (m_activeProject.id == 0) {
@@ -997,7 +1219,14 @@ void MainWindow::createProject()
                                  .arg(m_context.targetObjectRepository().lastError()));
     }
 
+    m_lastBausteinByTarget.clear();
+    m_lastRequirementByTarget.clear();
+    m_preferredTargetObjectId = 0;
+    m_preferredBausteinId = 0;
+    m_preferredRequirementId = 0;
+    m_restoreRequirementId = 0;
     clearRequirementView();
+    m_bausteinTree->setCurrentIndex({});
     reloadTargetObjects();
     updateWindowTitle();
     updateProjectUiEnabled();
@@ -1079,6 +1308,8 @@ void MainWindow::onBausteinSelected(const QModelIndex &index)
     if (baustein.id == 0)
         return;
 
+    const int previousBausteinId = m_activeBausteinId;
+
     if (baustein.id != m_activeBausteinId) {
         if (m_activeRequirementId != 0 && m_displayedAssessmentTargetId != 0)
             saveAssessmentFor(m_displayedAssessmentTargetId, m_activeRequirementId);
@@ -1101,8 +1332,13 @@ void MainWindow::onBausteinSelected(const QModelIndex &index)
               m_activeProject.id, m_activeTargetObject.id, baustein.id)
         : ApplicabilityStatus::Undefined;
     if (!isBausteinApplicableForActiveTarget(baustein.id)) {
-        m_activeBausteinId = 0;
         showBausteinNotApplicableMessage(baustein.id, applicability);
+        revertBausteinTreeSelection(previousBausteinId);
+        showTemporaryStatusMessage(
+            tr("Baustein \"%1 %2\" ist für dieses Zielobjekt noch nicht zugewiesen. "
+               "Rechtsklick → \"Benötigt\" oder \"Möglicherweise\".")
+                .arg(baustein.externalId, baustein.title),
+            6000);
         return;
     }
 
@@ -1111,6 +1347,7 @@ void MainWindow::onBausteinSelected(const QModelIndex &index)
         persistTargetSelection(m_activeTargetObject.id);
 
     loadRequirementsForBaustein(baustein.id);
+    syncAssignedBausteinBoxSelection();
 }
 
 void MainWindow::loadRequirementsForBaustein(int bausteinDbId)
@@ -1223,6 +1460,15 @@ bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId)
     if (m_suppressAssessmentSave || m_activeProject.id == 0)
         return false;
     if (targetObjectId == 0 || requirementDbId == 0)
+        return false;
+
+    if (m_displayedAssessmentTargetId != 0) {
+        if (m_displayedAssessmentTargetId != targetObjectId)
+            return false;
+    } else if (m_activeTargetObject.id != 0 && m_activeTargetObject.id != targetObjectId) {
+        return false;
+    }
+    if (m_activeRequirementId != 0 && m_activeRequirementId != requirementDbId)
         return false;
 
     RequirementAssessment assessment = m_context.projectRepository().loadAssessment(
@@ -1483,12 +1729,30 @@ void MainWindow::deleteTargetObject()
     if (answer != QMessageBox::Yes)
         return;
 
+    QSet<int> deletedTargetIds;
+    const auto collectSubtreeIds = [this](const auto &self, const QModelIndex &parentIndex,
+                                          QSet<int> *ids) -> void {
+        const TargetObject target = m_targetObjectModel->targetObjectForIndex(parentIndex);
+        if (target.id != 0)
+            ids->insert(target.id);
+        for (int row = 0; row < m_targetObjectModel->rowCount(parentIndex); ++row)
+            self(self, m_targetObjectModel->index(row, 0, parentIndex), ids);
+    };
+    collectSubtreeIds(collectSubtreeIds, index, &deletedTargetIds);
+
     if (!m_context.targetObjectRepository().deleteTargetObject(object.id)) {
         QMessageBox::critical(this, tr("Zielobjekt"), m_context.targetObjectRepository().lastError());
         return;
     }
 
-    if (m_activeTargetObject.id == object.id)
+    for (int targetId : deletedTargetIds) {
+        m_lastBausteinByTarget.remove(targetId);
+        m_lastRequirementByTarget.remove(targetId);
+    }
+    persistAllTargetSelections();
+
+    if (m_activeTargetObject.id == object.id
+        || deletedTargetIds.contains(m_activeTargetObject.id))
         m_activeTargetObject = {};
     reloadTargetObjects();
 }
@@ -1497,6 +1761,10 @@ void MainWindow::showTargetObjectContextMenu(const QPoint &pos)
 {
     if (m_activeProject.id == 0)
         return;
+
+    const QModelIndex index = m_targetObjectTree->indexAt(pos);
+    if (index.isValid())
+        m_targetObjectTree->setCurrentIndex(index);
 
     QMenu menu(this);
     menu.addAction(tr("Zielobjekt hinzufügen..."), this, &MainWindow::addTargetObject);
@@ -1510,28 +1778,34 @@ void MainWindow::showTargetObjectContextMenu(const QPoint &pos)
 
 void MainWindow::showBausteinContextMenu(const QPoint &pos)
 {
-    if (!hasActiveProjectContext())
-        return;
-
     const QModelIndex index = m_bausteinTree->indexAt(pos);
     if (!index.isValid() || index.data(BausteinTreeModel::IsGroupRole).toBool())
         return;
 
+    const int previousBausteinId = m_activeBausteinId;
+    QSignalBlocker selectionBlocker(m_bausteinTree->selectionModel());
+    m_bausteinTree->setCurrentIndex(index);
+
     QMenu menu(this);
-    menu.addAction(tr("Benötigt"), this, [this]() {
-        setBausteinApplicability(ApplicabilityStatus::Required);
-    });
-    menu.addAction(tr("Möglicherweise"), this, [this]() {
-        setBausteinApplicability(ApplicabilityStatus::Possible);
-    });
-    menu.addAction(tr("Nicht relevant"), this, [this]() {
-        setBausteinApplicability(ApplicabilityStatus::NotApplicable);
-    });
-    menu.addSeparator();
-    menu.addAction(tr("Zurücksetzen"), this, [this]() {
-        setBausteinApplicability(ApplicabilityStatus::Undefined);
-    });
-    menu.exec(m_bausteinTree->viewport()->mapToGlobal(pos));
+    menu.addAction(tr("Baustein anzeigen..."), this, &MainWindow::viewSelectedBaustein);
+    if (hasActiveProjectContext()) {
+        menu.addSeparator();
+        menu.addAction(tr("Benötigt"), this, [this]() {
+            setBausteinApplicability(ApplicabilityStatus::Required);
+        });
+        menu.addAction(tr("Möglicherweise"), this, [this]() {
+            setBausteinApplicability(ApplicabilityStatus::Possible);
+        });
+        menu.addAction(tr("Nicht relevant"), this, [this]() {
+            setBausteinApplicability(ApplicabilityStatus::NotApplicable);
+        });
+        menu.addSeparator();
+        menu.addAction(tr("Zurücksetzen"), this, [this]() {
+            setBausteinApplicability(ApplicabilityStatus::Undefined);
+        });
+    }
+    if (menu.exec(m_bausteinTree->viewport()->mapToGlobal(pos)) == nullptr)
+        revertBausteinTreeSelection(previousBausteinId);
 }
 
 void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
@@ -1544,6 +1818,21 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
     if (baustein.id == 0)
         return;
 
+    if (status == ApplicabilityStatus::Undefined) {
+        const QMessageBox::StandardButton answer = QMessageBox::question(
+            this,
+            tr("Zuweisung zurücksetzen"),
+            tr("Die Zuweisung von \"%1 %2\" zum Zielobjekt \"%3 – %4\" wirklich entfernen?")
+                .arg(baustein.externalId,
+                     baustein.title,
+                     targetObjectTypeToString(m_activeTargetObject.type),
+                     m_activeTargetObject.name));
+        if (answer != QMessageBox::Yes) {
+            revertBausteinTreeSelection(m_activeBausteinId);
+            return;
+        }
+    }
+
     BausteinApplicability applicability;
     applicability.projectId = m_activeProject.id;
     applicability.targetObjectId = m_activeTargetObject.id;
@@ -1552,15 +1841,15 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
 
     if (!m_context.targetObjectRepository().saveApplicability(applicability)) {
         QMessageBox::warning(this, tr("Anwendbarkeit"), m_context.targetObjectRepository().lastError());
+        revertBausteinTreeSelection(m_activeBausteinId);
         return;
     }
-
-    reloadBausteinMarkers();
-    reloadProgress();
 
     if (status == ApplicabilityStatus::Required || status == ApplicabilityStatus::Possible) {
         m_activeBausteinId = baustein.id;
         persistTargetSelection(m_activeTargetObject.id);
+        reloadBausteinMarkers();
+        reloadProgress();
         restoreBausteinSelection(baustein.id);
         reloadActiveTargetContent();
     } else if (m_bausteinTree->currentIndex() == index) {
@@ -1568,8 +1857,29 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
             m_lastBausteinByTarget.remove(m_activeTargetObject.id);
             m_lastRequirementByTarget.remove(m_activeTargetObject.id);
         }
-        m_activeBausteinId = 0;
-        onBausteinSelected(index);
+
+        int fallbackBausteinId = 0;
+        const QHash<int, ApplicabilityStatus> map =
+            m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
+                                                                    m_activeTargetObject.id);
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+            if (it.key() == baustein.id)
+                continue;
+            if (it.value() == ApplicabilityStatus::Required
+                || it.value() == ApplicabilityStatus::Possible) {
+                fallbackBausteinId = it.key();
+                break;
+            }
+        }
+
+        if (fallbackBausteinId != 0 && isBausteinApplicableForActiveTarget(fallbackBausteinId))
+            m_activeBausteinId = fallbackBausteinId;
+        else
+            m_activeBausteinId = 0;
+
+        reloadBausteinMarkers();
+        reloadProgress();
+        revertBausteinTreeSelection(fallbackBausteinId);
     }
 }
 
@@ -1654,7 +1964,7 @@ void MainWindow::applyBausteinRecommendations()
         ++appliedCount;
     }
 
-    reloadApplicabilityMarkers();
+    reloadBausteinMarkers();
     reloadProgress();
 
     const QModelIndex bausteinIndex = m_bausteinTree->currentIndex();
@@ -1675,12 +1985,77 @@ void MainWindow::showSollIstReport()
     dialog.exec();
 }
 
+QSet<int> MainWindow::matchingBausteinIdsForSearch(const QString &query) const
+{
+    QSet<int> matches;
+    const QString needle = query.trimmed();
+    if (needle.isEmpty())
+        return matches;
+
+    for (const Baustein &baustein : m_catalogBausteine) {
+        if (baustein.externalId.contains(needle, Qt::CaseInsensitive)
+            || baustein.title.contains(needle, Qt::CaseInsensitive)
+            || baustein.groupName.contains(needle, Qt::CaseInsensitive)) {
+            matches.insert(baustein.id);
+        }
+    }
+
+    for (const Requirement &requirement : m_catalogRequirements) {
+        if (requirement.externalId.contains(needle, Qt::CaseInsensitive)
+            || requirement.title.contains(needle, Qt::CaseInsensitive)
+            || requirement.text.contains(needle, Qt::CaseInsensitive)
+            || requirement.responsibleRole.contains(needle, Qt::CaseInsensitive)) {
+            matches.insert(requirement.bausteinDbId);
+        }
+    }
+
+    return matches;
+}
+
+void MainWindow::applyBausteinSearchFilter()
+{
+    const QString query = m_bausteinSearchEdit != nullptr ? m_bausteinSearchEdit->text() : QString();
+    m_bausteinModel->setSearchFilter(query, matchingBausteinIdsForSearch(query));
+    if (m_bausteinTree != nullptr)
+        m_bausteinTree->expandAll();
+}
+
+void MainWindow::openBausteinViewDialog(const Baustein &baustein, const QString &initialSearch)
+{
+    if (baustein.id == 0)
+        return;
+
+    QList<Requirement> requirements = m_context.catalogRepository().loadRequirements(baustein.id);
+    BausteinViewDialog dialog(baustein, requirements, initialSearch, this);
+    dialog.exec();
+}
+
+void MainWindow::viewSelectedBaustein()
+{
+    const QModelIndex index = m_bausteinTree->currentIndex();
+    if (!index.isValid() || index.data(BausteinTreeModel::IsGroupRole).toBool()) {
+        QMessageBox::information(this, tr("Baustein anzeigen"),
+                                 tr("Bitte zuerst einen Baustein in der Bausteinliste auswählen."));
+        return;
+    }
+
+    const Baustein baustein = m_bausteinModel->bausteinForIndex(index);
+    const QString initialSearch = m_bausteinSearchEdit != nullptr ? m_bausteinSearchEdit->text().trimmed()
+                                                                : QString();
+    openBausteinViewDialog(baustein, initialSearch);
+}
+
+void MainWindow::showCatalogSearch()
+{
+    const QString initialQuery =
+        m_bausteinSearchEdit != nullptr ? m_bausteinSearchEdit->text().trimmed() : QString();
+    CatalogSearchDialog dialog(m_catalogBausteine, m_catalogRequirements, initialQuery, this);
+    dialog.exec();
+}
+
 void MainWindow::updateWindowTitle()
 {
-    const int requirementCount = m_context.catalogRepository()
-                                     .loadAllRequirements(StandardType::ITGrundschutz,
-                                                          m_context.catalogVersion())
-                                     .size();
+    const int requirementCount = m_catalogRequirements.size();
     QString title = tr("ISMS Werkzeug – IT-Grundschutz %1").arg(m_context.catalogVersion());
     if (m_activeProject.id != 0)
         title += tr(" – Projekt: %1").arg(m_activeProject.name);

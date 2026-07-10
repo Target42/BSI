@@ -60,6 +60,11 @@ BausteinRecommendationDialog::BausteinRecommendationDialog(
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     populateTable();
+    connect(m_table, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
+        auto *checkBox = qobject_cast<QCheckBox *>(m_table->cellWidget(row, SelectColumn));
+        if (checkBox != nullptr && checkBox->isEnabled())
+            checkBox->setChecked(!checkBox->isChecked());
+    });
 
     auto *statusRow = new QHBoxLayout();
     statusRow->addWidget(new QLabel(tr("Markieren als:"), this));

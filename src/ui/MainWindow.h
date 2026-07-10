@@ -15,6 +15,7 @@
 
 #include <QHash>
 #include <QMainWindow>
+#include <QSet>
 
 class QCheckBox;
 class QComboBox;
@@ -41,6 +42,9 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(AppContext &context, QWidget *parent = nullptr);
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void importCatalog();
     void createProject();
@@ -66,6 +70,10 @@ private slots:
     void toggleRecommendationHighlight(bool enabled);
     void applyBausteinRecommendations();
     void showSollIstReport();
+    void onAssignedBausteinActivated(int index);
+    void applyBausteinSearchFilter();
+    void viewSelectedBaustein();
+    void showCatalogSearch();
 
 private:
     void buildUi();
@@ -74,6 +82,8 @@ private:
     void reloadApplicabilityMarkers();
     void reloadRecommendationMarkers();
     void reloadBausteinMarkers();
+    void reloadAssignedBausteinBox();
+    void syncAssignedBausteinBoxSelection();
     void reloadProgress();
     void loadRequirementsForBaustein(int bausteinDbId);
     void loadRequirementDetails(int row, bool forceReload = false);
@@ -97,12 +107,17 @@ private:
     void clearRequirementView();
     void reloadActiveTargetContent();
     void restoreBausteinSelection(int bausteinId);
+    void revertBausteinTreeSelection(int bausteinDbId);
     void persistSessionSelection();
+    void persistAllTargetSelections();
+    void loadStoredTargetSelections(int projectId);
     SessionSelection loadStoredSession(int projectId) const;
     void selectActiveTargetObjectInTree();
     void showTemporaryStatusMessage(const QString &message, int timeoutMs = 5000);
     int activeTargetObjectId() const;
     bool hasActiveProjectContext() const;
+    QSet<int> matchingBausteinIdsForSearch(const QString &query) const;
+    void openBausteinViewDialog(const Baustein &baustein, const QString &initialSearch = {});
 
     AppContext &m_context;
     Project m_activeProject;
@@ -116,9 +131,13 @@ private:
     int m_preferredRequirementId = 0;
     bool m_suppressAssessmentSave = false;
     bool m_blockBausteinSelectionHandler = false;
+    bool m_blockAssignedBausteinBoxHandler = false;
     QHash<int, int> m_lastBausteinByTarget;
     QHash<int, int> m_lastRequirementByTarget;
     QHash<int, SessionSelection> m_sessionByProject;
+
+    QList<Baustein> m_catalogBausteine;
+    QList<Requirement> m_catalogRequirements;
 
     TargetObjectTreeModel *m_targetObjectModel = nullptr;
     BausteinTreeModel *m_bausteinModel = nullptr;
@@ -134,8 +153,10 @@ private:
     QLineEdit *m_responsibleEdit = nullptr;
     QDateEdit *m_dueDateEdit = nullptr;
     QComboBox *m_statusBox = nullptr;
+    QComboBox *m_assignedBausteinBox = nullptr;
     QCheckBox *m_filterApplicableBox = nullptr;
     QCheckBox *m_highlightRecommendationsBox = nullptr;
+    QLineEdit *m_bausteinSearchEdit = nullptr;
     QCheckBox *m_hasDueDateBox = nullptr;
     QPushButton *m_addMeasureButton = nullptr;
     QPushButton *m_editMeasureButton = nullptr;
