@@ -1,6 +1,7 @@
 #include "AppSettings.h"
 
 #include <QSettings>
+#include <QTimeZone>
 
 namespace {
 
@@ -12,7 +13,7 @@ QDateTime parseDateTimeSetting(const QVariant &value)
     if (!parsed.isValid())
         return {};
     QDateTime utc = parsed;
-    utc.setTimeSpec(Qt::UTC);
+    utc.setTimeZone(QTimeZone::utc());
     return utc;
 }
 

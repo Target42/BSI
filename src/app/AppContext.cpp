@@ -71,6 +71,40 @@ bool AppContext::promptRelogin(QWidget *parent)
     return updateRemoteSession(dialog.apiClient(), dialog.settings());
 }
 
+bool AppContext::promptSwitchUser(QWidget *parent)
+{
+    AppSettings settings = AppSettings::load();
+    settings.setAccessToken({});
+    settings.setTokenExpiresAt({});
+
+    LoginDialog dialog(settings, parent);
+    dialog.setSwitchUserMode(true);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+
+    return applySession(dialog.settings(), dialog.apiClient());
+}
+
+bool AppContext::applySession(const AppSettings &settings, const ApiClient &client)
+{
+    const AppSettings previousSettings = AppSettings::load();
+
+    resetRepositories();
+
+    if (settings.useRemote()) {
+        if (!initializeRemote(client)) {
+            restoreSession(previousSettings);
+            return false;
+        }
+    } else if (!initializeLocal()) {
+        restoreSession(previousSettings);
+        return false;
+    }
+
+    settings.save();
+    return true;
+}
+
 bool AppContext::updateRemoteSession(const ApiClient &client, const AppSettings &settings)
 {
     if (!m_remote || !m_apiClient)
@@ -177,4 +211,33 @@ bool AppContext::importCatalogFile(const QString &xmlPath)
 QString AppContext::catalogVersion() const
 {
     return m_catalogVersion;
+}
+
+void AppContext::resetRepositories()
+{
+    m_measureRepository.reset();
+    m_targetObjectRepository.reset();
+    m_projectRepository.reset();
+    m_catalogRepository.reset();
+    m_apiClient.reset();
+    m_database.reset();
+    m_remote = false;
+    m_remoteUser = {};
+    m_lastError.clear();
+}
+
+void AppContext::restoreSession(const AppSettings &settings)
+{
+    resetRepositories();
+
+    if (settings.useRemote() && settings.hasStoredRemoteSession()) {
+        ApiClient client(settings.serverUrl());
+        client.setAccessToken(settings.accessToken());
+        client.setTokenExpiresAt(settings.tokenExpiresAt());
+        client.setInsecureSkipTlsVerify(settings.insecureSkipTlsVerify());
+        initializeRemote(client);
+        return;
+    }
+
+    initializeLocal();
 }

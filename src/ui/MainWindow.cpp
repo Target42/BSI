@@ -65,15 +65,26 @@ MainWindow::MainWindow(AppContext &context, QWidget *parent)
     buildUi();
     reloadCatalog();
     updateProjectUiEnabled();
+    configureRemoteSessionWatcher();
+}
 
+void MainWindow::configureRemoteSessionWatcher()
+{
     if (m_context.isRemote()) {
         m_context.setReloginHandler([this]() { return m_context.promptRelogin(this); });
 
-        m_sessionTimer = new QTimer(this);
-        m_sessionTimer->setInterval(60000);
-        connect(m_sessionTimer, &QTimer::timeout, this, &MainWindow::checkRemoteSession);
+        if (m_sessionTimer == nullptr) {
+            m_sessionTimer = new QTimer(this);
+            m_sessionTimer->setInterval(60000);
+            connect(m_sessionTimer, &QTimer::timeout, this, &MainWindow::checkRemoteSession);
+        }
         m_sessionTimer->start();
+        return;
     }
+
+    m_context.setReloginHandler({});
+    if (m_sessionTimer != nullptr)
+        m_sessionTimer->stop();
 }
 
 void MainWindow::buildUi()
@@ -308,6 +319,8 @@ void MainWindow::buildUi()
     connect(m_deleteProjectAction, &QAction::triggered, this, &MainWindow::deleteProject);
     m_manageMembersAction = projectMenu->addAction(tr("Projektmitglieder..."));
     connect(m_manageMembersAction, &QAction::triggered, this, &MainWindow::showProjectMembers);
+    m_switchUserAction = projectMenu->addAction(tr("Abmelden / Benutzer wechseln..."));
+    connect(m_switchUserAction, &QAction::triggered, this, &MainWindow::switchUserOrLogout);
     m_reloginAction = projectMenu->addAction(tr("Server-Sitzung erneuern..."));
     connect(m_reloginAction, &QAction::triggered, this, [this]() {
         if (m_context.isRemote())
@@ -362,44 +375,98 @@ void MainWindow::updateProjectUiEnabled()
 {
     const bool hasProject = m_activeProject.id != 0;
     const bool hasTargetObject = hasProject && m_activeTargetObject.id != 0;
+    const bool canEdit = canEditActiveProject();
+    const bool canDelete = canDeleteActiveProject();
+    const bool canManageMembers = canManageProjectMembers();
 
     m_closeProjectAction->setEnabled(hasProject);
-    m_editProjectAction->setEnabled(hasProject);
-    m_deleteProjectAction->setEnabled(hasProject);
-    m_manageMembersAction->setEnabled(m_context.isRemote() && hasProject);
+    m_editProjectAction->setEnabled(hasProject && canEdit);
+    m_deleteProjectAction->setEnabled(hasProject && canDelete);
+    m_manageMembersAction->setEnabled(canManageMembers);
+    m_switchUserAction->setEnabled(true);
     m_reloginAction->setEnabled(m_context.isRemote());
-    m_addTargetAction->setEnabled(hasProject);
-    m_editTargetAction->setEnabled(hasProject);
-    m_deleteTargetAction->setEnabled(hasProject);
-    m_applyRecommendationsAction->setEnabled(hasTargetObject);
+    m_addTargetAction->setEnabled(hasProject && canEdit);
+    m_editTargetAction->setEnabled(hasProject && canEdit);
+    m_deleteTargetAction->setEnabled(hasProject && canEdit);
+    m_applyRecommendationsAction->setEnabled(hasTargetObject && canEdit);
     m_sollIstAction->setEnabled(hasProject);
 
     m_targetObjectTree->setEnabled(hasProject);
     m_filterApplicableBox->setEnabled(hasTargetObject);
     m_highlightRecommendationsBox->setEnabled(hasTargetObject);
-    m_assignedBausteinBox->setEnabled(hasTargetObject && m_assignedBausteinBox->count() > 0
+    m_assignedBausteinBox->setEnabled(hasTargetObject && canEdit
+                                      && m_assignedBausteinBox->count() > 0
                                       && m_assignedBausteinBox->currentData().toInt() != 0);
-    m_statusBox->setEnabled(hasTargetObject);
-    m_assessmentNote->setEnabled(hasTargetObject);
-    m_responsibleEdit->setEnabled(hasTargetObject);
-    m_hasDueDateBox->setEnabled(hasTargetObject);
-    m_dueDateEdit->setEnabled(hasTargetObject && m_hasDueDateBox->isChecked());
+    m_statusBox->setEnabled(hasTargetObject && canEdit);
+    m_assessmentNote->setEnabled(hasTargetObject && canEdit);
+    m_assessmentNote->setReadOnly(hasTargetObject && !canEdit);
+    m_responsibleEdit->setEnabled(hasTargetObject && canEdit);
+    m_responsibleEdit->setReadOnly(hasTargetObject && !canEdit);
+    m_hasDueDateBox->setEnabled(hasTargetObject && canEdit);
+    m_dueDateEdit->setEnabled(hasTargetObject && canEdit && m_hasDueDateBox->isChecked());
     m_measureTable->setEnabled(hasTargetObject);
-    m_addMeasureButton->setEnabled(hasTargetObject);
+    m_addMeasureButton->setEnabled(hasTargetObject && canEdit);
     m_editMeasureButton->setEnabled(hasTargetObject);
-    m_deleteMeasureButton->setEnabled(hasTargetObject);
+    m_editMeasureButton->setText(canEdit ? tr("Bearbeiten") : tr("Anzeigen"));
+    m_deleteMeasureButton->setEnabled(hasTargetObject && canEdit);
 
     if (!hasProject) {
         m_contextLabel->setText(tr("Kein Projekt geöffnet"));
     } else if (m_activeTargetObject.id == 0) {
-        m_contextLabel->setText(tr("Projekt \"%1\" – bitte Zielobjekt wählen").arg(m_activeProject.name));
+        QString contextText =
+            tr("Projekt \"%1\" – bitte Zielobjekt wählen").arg(m_activeProject.name);
+        if (m_context.isRemote() && m_activeProject.role == QStringLiteral("viewer"))
+            contextText += tr(" (Nur Lesen)");
+        m_contextLabel->setText(contextText);
     } else {
-        m_contextLabel->setText(tr("Projekt \"%1\" – Zielobjekt: %2 – %3  (%4)")
-                                    .arg(m_activeProject.name,
-                                         targetObjectTypeToString(m_activeTargetObject.type),
-                                         m_activeTargetObject.name,
-                                         protectionNeedToString(m_activeTargetObject.protectionNeed)));
+        QString contextText = tr("Projekt \"%1\" – Zielobjekt: %2 – %3  (%4)")
+                                  .arg(m_activeProject.name,
+                                       targetObjectTypeToString(m_activeTargetObject.type),
+                                       m_activeTargetObject.name,
+                                       protectionNeedToString(m_activeTargetObject.protectionNeed));
+        if (m_context.isRemote() && m_activeProject.role == QStringLiteral("viewer"))
+            contextText += tr(" — Nur Lesen");
+        m_contextLabel->setText(contextText);
     }
+}
+
+bool MainWindow::canEditActiveProject() const
+{
+    if (!m_context.isRemote() || m_activeProject.id == 0)
+        return true;
+
+    const QString &role = m_activeProject.role;
+    return role == QStringLiteral("owner") || role == QStringLiteral("editor");
+}
+
+bool MainWindow::canDeleteActiveProject() const
+{
+    if (m_activeProject.id == 0)
+        return false;
+    if (!m_context.isRemote())
+        return true;
+
+    return m_activeProject.role == QStringLiteral("owner");
+}
+
+bool MainWindow::canManageProjectMembers() const
+{
+    return m_context.isRemote() && m_activeProject.id != 0
+           && m_activeProject.role == QStringLiteral("owner");
+}
+
+void MainWindow::notifySaveFailure(const QString &repositoryError, bool useDialog)
+{
+    QString message = repositoryError;
+    if (message == QStringLiteral("forbidden"))
+        message = tr("Keine Berechtigung zum Speichern. Ihre Rolle erlaubt nur Lesen.");
+    else if (message.isEmpty())
+        message = tr("Speichern fehlgeschlagen.");
+
+    if (useDialog)
+        QMessageBox::warning(this, tr("Speichern"), message);
+    else
+        showTemporaryStatusMessage(tr("Speichern fehlgeschlagen: %1").arg(message), 8000);
 }
 
 bool MainWindow::hasActiveProjectContext() const
@@ -1134,6 +1201,54 @@ void MainWindow::showProjectMembers()
     dialog.exec();
 }
 
+void MainWindow::switchUserOrLogout()
+{
+    if (m_activeProject.id != 0) {
+        QMessageBox::information(
+            this,
+            tr("Abmelden / Benutzer wechseln"),
+            tr("Das aktuell geöffnete Projekt wird geschlossen."));
+    }
+
+    clearProjectSession();
+
+    if (!m_context.promptSwitchUser(this)) {
+        if (!m_context.lastError().isEmpty()) {
+            QMessageBox::critical(this,
+                                  tr("Verbindung"),
+                                  tr("Verbindung konnte nicht hergestellt werden:\n%1")
+                                      .arg(m_context.lastError()));
+        }
+        reloadCatalog();
+        updateProjectUiEnabled();
+        updateWindowTitle();
+        configureRemoteSessionWatcher();
+        return;
+    }
+
+    if (!m_context.ensureGrundschutzCatalog(AppPaths::defaultGrundschutzXml())) {
+        const QString hint = m_context.isRemote()
+                                 ? tr("Bitte den Katalog als Admin über "
+                                      "\"Datei → IT-Grundschutz XML importieren\" auf den Server laden.")
+                                 : tr("Sie können den Katalog später über "
+                                      "\"Datei → IT-Grundschutz XML importieren\" laden.");
+        QMessageBox::warning(this, tr("Katalog"),
+                             tr("%1\n\n%2").arg(m_context.lastError(), hint));
+    }
+
+    reloadCatalog();
+    updateProjectUiEnabled();
+    updateWindowTitle();
+    configureRemoteSessionWatcher();
+
+    if (m_context.isRemote()) {
+        showTemporaryStatusMessage(
+            tr("Angemeldet als %1").arg(m_context.remoteUser().email), 8000);
+    } else {
+        showTemporaryStatusMessage(tr("Lokal-Modus aktiv"), 8000);
+    }
+}
+
 void MainWindow::importCatalog()
 {
     const QString filePath = QFileDialog::getOpenFileName(
@@ -1175,7 +1290,7 @@ void MainWindow::openProject()
         return;
     }
 
-    ProjectOpenDialog dialog(projects, this);
+    ProjectOpenDialog dialog(projects, m_context.isRemote(), this);
     if (dialog.exec() != QDialog::Accepted)
         return;
 
@@ -1235,7 +1350,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::editProject()
 {
-    if (m_activeProject.id == 0)
+    if (m_activeProject.id == 0 || !canEditActiveProject())
         return;
 
     ProjectDialog dialog(this);
@@ -1262,7 +1377,7 @@ void MainWindow::editProject()
 
 void MainWindow::deleteProject()
 {
-    if (m_activeProject.id == 0)
+    if (m_activeProject.id == 0 || !canDeleteActiveProject())
         return;
 
     const QMessageBox::StandardButton answer = QMessageBox::question(
@@ -1561,6 +1676,8 @@ bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId, bool
 {
     if (m_suppressAssessmentSave || m_activeProject.id == 0)
         return false;
+    if (!canEditActiveProject())
+        return true;
     if (targetObjectId == 0 || requirementDbId == 0)
         return false;
 
@@ -1601,6 +1718,13 @@ bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId, bool
         applyAssessmentConflict(result.assessment, requirementDbId, notifyConflictDialog);
         return false;
     }
+    if (result.status == AssessmentSaveResult::Status::Forbidden) {
+        if (notifyConflictDialog)
+            notifySaveFailure(m_context.projectRepository().lastError(), true);
+        return false;
+    }
+    if (notifyConflictDialog)
+        notifySaveFailure(m_context.projectRepository().lastError(), true);
     return false;
 }
 
@@ -1678,28 +1802,23 @@ void MainWindow::setAssessmentStatus(int index)
     if (saveCurrentAssessment(true))
         return;
 
-    const QString error = m_context.projectRepository().lastError();
-    if (!error.isEmpty())
-        QMessageBox::warning(this, tr("Speichern"), error);
+    notifySaveFailure(m_context.projectRepository().lastError(), true);
 }
 
 void MainWindow::saveAssessmentFields()
 {
-    if (m_suppressAssessmentSave)
+    if (m_suppressAssessmentSave || !canEditActiveProject())
         return;
 
     if (saveCurrentAssessment(false))
         return;
 
-    const QString error = m_context.projectRepository().lastError();
-    if (!error.isEmpty()) {
-        showTemporaryStatusMessage(tr("Speichern fehlgeschlagen: %1").arg(error), 8000);
-    }
+    notifySaveFailure(m_context.projectRepository().lastError(), false);
 }
 
 void MainWindow::addMeasure()
 {
-    if (!hasActiveProjectContext())
+    if (!hasActiveProjectContext() || !canEditActiveProject())
         return;
 
     const Requirement requirement = currentRequirement();
@@ -1737,10 +1856,12 @@ void MainWindow::editMeasure()
     if (!index.isValid() || !hasActiveProjectContext())
         return;
 
+    const bool canEdit = canEditActiveProject();
     Measure measure = m_measureModel->measureAt(index.row());
     MeasureDialog dialog(this);
     dialog.setMeasure(measure);
-    if (dialog.exec() != QDialog::Accepted)
+    dialog.setReadOnly(!canEdit);
+    if (dialog.exec() != QDialog::Accepted || !canEdit)
         return;
 
     measure = dialog.measure();
@@ -1760,12 +1881,19 @@ void MainWindow::editMeasure()
         reloadProgress();
         return;
     }
+    if (result.status == MeasureSaveResult::Status::Forbidden) {
+        notifySaveFailure(m_context.measureRepository().lastError(), true);
+        return;
+    }
 
     QMessageBox::critical(this, tr("Maßnahme"), m_context.measureRepository().lastError());
 }
 
 void MainWindow::deleteMeasure()
 {
+    if (!canEditActiveProject())
+        return;
+
     const QModelIndex index = m_measureTable->currentIndex();
     if (!index.isValid() || !hasActiveProjectContext())
         return;
@@ -1792,6 +1920,8 @@ void MainWindow::addTargetObject()
         QMessageBox::information(this, tr("Projekt"), tr("Bitte zuerst ein Projekt anlegen."));
         return;
     }
+    if (!canEditActiveProject())
+        return;
 
     TargetObject parentObject = m_activeTargetObject;
     const QModelIndex currentIndex = m_targetObjectTree->currentIndex();
@@ -1821,6 +1951,9 @@ void MainWindow::addTargetObject()
 
 void MainWindow::editTargetObject()
 {
+    if (!canEditActiveProject())
+        return;
+
     const QModelIndex index = m_targetObjectTree->currentIndex();
     if (!index.isValid() || m_activeProject.id == 0)
         return;
@@ -1845,6 +1978,9 @@ void MainWindow::editTargetObject()
 
 void MainWindow::deleteTargetObject()
 {
+    if (!canEditActiveProject())
+        return;
+
     const QModelIndex index = m_targetObjectTree->currentIndex();
     if (!index.isValid() || m_activeProject.id == 0)
         return;
@@ -1895,12 +2031,14 @@ void MainWindow::showTargetObjectContextMenu(const QPoint &pos)
         m_targetObjectTree->setCurrentIndex(index);
 
     QMenu menu(this);
-    menu.addAction(tr("Zielobjekt hinzufügen..."), this, &MainWindow::addTargetObject);
-    menu.addAction(tr("Bearbeiten..."), this, &MainWindow::editTargetObject);
-    menu.addAction(tr("Löschen"), this, &MainWindow::deleteTargetObject);
-    menu.addSeparator();
-    menu.addAction(tr("Baustein-Empfehlungen übernehmen..."), this,
-                   &MainWindow::applyBausteinRecommendations);
+    if (canEditActiveProject()) {
+        menu.addAction(tr("Zielobjekt hinzufügen..."), this, &MainWindow::addTargetObject);
+        menu.addAction(tr("Bearbeiten..."), this, &MainWindow::editTargetObject);
+        menu.addAction(tr("Löschen"), this, &MainWindow::deleteTargetObject);
+        menu.addSeparator();
+        menu.addAction(tr("Baustein-Empfehlungen übernehmen..."), this,
+                       &MainWindow::applyBausteinRecommendations);
+    }
     menu.exec(m_targetObjectTree->viewport()->mapToGlobal(pos));
 }
 
@@ -1916,7 +2054,7 @@ void MainWindow::showBausteinContextMenu(const QPoint &pos)
 
     QMenu menu(this);
     menu.addAction(tr("Baustein anzeigen..."), this, &MainWindow::viewSelectedBaustein);
-    if (hasActiveProjectContext()) {
+    if (hasActiveProjectContext() && canEditActiveProject()) {
         menu.addSeparator();
         menu.addAction(tr("Benötigt"), this, [this]() {
             setBausteinApplicability(ApplicabilityStatus::Required);
@@ -1938,6 +2076,9 @@ void MainWindow::showBausteinContextMenu(const QPoint &pos)
 
 void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
 {
+    if (!canEditActiveProject())
+        return;
+
     const QModelIndex index = m_bausteinTree->currentIndex();
     if (!index.isValid() || !hasActiveProjectContext())
         return;
@@ -2046,10 +2187,12 @@ void MainWindow::applyBausteinRecommendations()
 {
     if (!hasActiveProjectContext()) {
         QMessageBox::information(this,
-                                 tr("Baustein-Empfehlungen"),
-                                 tr("Bitte zuerst ein Projekt und ein Zielobjekt wählen."));
+                               tr("Baustein-Empfehlungen"),
+                               tr("Bitte zuerst ein Projekt und ein Zielobjekt wählen."));
         return;
     }
+    if (!canEditActiveProject())
+        return;
 
     const QList<Baustein> allBausteine = m_context.catalogRepository().loadBausteine(
         StandardType::ITGrundschutz, m_context.catalogVersion());

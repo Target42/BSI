@@ -32,6 +32,8 @@ public:
     bool initializeRemote(const ApiClient &client);
     void setReloginHandler(ApiClient::ReloginHandler handler);
     bool promptRelogin(QWidget *parent);
+    bool promptSwitchUser(QWidget *parent);
+    bool applySession(const AppSettings &settings, const ApiClient &client);
     bool updateRemoteSession(const ApiClient &client, const AppSettings &settings);
     QString lastError() const;
 
@@ -50,6 +52,9 @@ public:
     QString catalogVersion() const;
 
 private:
+    void resetRepositories();
+    void restoreSession(const AppSettings &settings);
+
     bool m_remote = false;
     std::unique_ptr<Database> m_database;
     std::unique_ptr<ApiClient> m_apiClient;

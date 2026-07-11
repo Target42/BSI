@@ -1,6 +1,7 @@
 #ifndef NET_APICLIENT_H
 #define NET_APICLIENT_H
 
+#include "qnetworkreply.h"
 #include <QByteArray>
 #include <QDateTime>
 #include <QJsonDocument>
@@ -56,6 +57,7 @@ private:
 
     void configureTls(QNetworkReply *reply) const;
     bool isAuthEndpoint(const QString &path) const;
+    QUrl buildUrl(const QString &path) const;
     static QString readApiError(const QJsonDocument &doc, const QString &fallback);
 
     QString m_baseUrl;

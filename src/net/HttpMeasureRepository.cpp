@@ -104,6 +104,8 @@ MeasureSaveResult HttpMeasureRepository::updateMeasure(const Measure &measure)
     }
 
     m_lastError = m_client.lastError();
+    if (status == 403)
+        return MeasureSaveResult::forbidden();
     return MeasureSaveResult::failed();
 }
 

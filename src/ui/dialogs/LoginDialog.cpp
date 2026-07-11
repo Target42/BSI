@@ -83,6 +83,19 @@ void LoginDialog::setReloginMode(bool reloginMode)
     updateTlsOptionVisibility();
 }
 
+void LoginDialog::setSwitchUserMode(bool switchUserMode)
+{
+    m_switchUserMode = switchUserMode;
+    if (!m_switchUserMode)
+        return;
+
+    setWindowTitle(tr("ISMS – Abmelden / Benutzer wechseln"));
+    m_introLabel->setText(
+        tr("Melden Sie sich erneut an, wechseln Sie den Benutzer oder arbeiten Sie lokal ohne Server."));
+    m_passwordEdit->clear();
+    m_passwordEdit->setFocus();
+}
+
 bool LoginDialog::trySilentLogin()
 {
     if (!m_settings.hasStoredRemoteSession() || m_settings.isTokenExpired())

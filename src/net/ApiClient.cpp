@@ -9,6 +9,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSslError>
+#include <QTimeZone>
 
 namespace {
 
@@ -116,7 +117,7 @@ bool ApiClient::login(const QString &email, const QString &password, QString *er
     m_tokenExpiresAt =
         QDateTime::fromString(obj.value(QStringLiteral("expiresAt")).toString(), Qt::ISODate);
     if (m_tokenExpiresAt.isValid())
-        m_tokenExpiresAt.setTimeSpec(Qt::UTC);
+        m_tokenExpiresAt.setTimeZone(QTimeZone::utc());
 
     if (m_accessToken.isEmpty()) {
         m_lastError = QStringLiteral("Server lieferte kein Token.");

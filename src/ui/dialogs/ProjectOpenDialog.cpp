@@ -7,7 +7,23 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 
-ProjectOpenDialog::ProjectOpenDialog(const QList<Project> &projects, QWidget *parent)
+namespace {
+
+QString roleLabel(const QString &role)
+{
+    if (role == QStringLiteral("owner"))
+        return ProjectOpenDialog::tr("Besitzer");
+    if (role == QStringLiteral("editor"))
+        return ProjectOpenDialog::tr("Bearbeiter");
+    if (role == QStringLiteral("viewer"))
+        return ProjectOpenDialog::tr("Leser");
+    return {};
+}
+
+} // namespace
+
+ProjectOpenDialog::ProjectOpenDialog(const QList<Project> &projects, bool remoteMode,
+                                     QWidget *parent)
     : QDialog(parent)
     , m_projects(projects)
 {
@@ -16,10 +32,15 @@ ProjectOpenDialog::ProjectOpenDialog(const QList<Project> &projects, QWidget *pa
 
     m_list = new QListWidget(this);
     for (const Project &project : projects) {
-        const QString label =
+        QString label =
             tr("%1  —  zuletzt bearbeitet: %2")
                 .arg(project.name,
                      QLocale().toString(project.updatedAt.toLocalTime(), QLocale::ShortFormat));
+        if (remoteMode) {
+            const QString role = roleLabel(project.role);
+            if (!role.isEmpty())
+                label += QStringLiteral("  [%1]").arg(role);
+        }
         auto *item = new QListWidgetItem(label, m_list);
         item->setData(Qt::UserRole, project.id);
     }
@@ -27,7 +48,10 @@ ProjectOpenDialog::ProjectOpenDialog(const QList<Project> &projects, QWidget *pa
         m_list->setCurrentRow(0);
     connect(m_list, &QListWidget::itemActivated, this, &QDialog::accept);
 
-    auto *hint = new QLabel(tr("IT-Grundschutz-Projekte in der lokalen Datenbank."), this);
+    const QString hintText = remoteMode
+                                 ? tr("Verfügbare IT-Grundschutz-Projekte auf dem Server.")
+                                 : tr("IT-Grundschutz-Projekte in der lokalen Datenbank.");
+    auto *hint = new QLabel(hintText, this);
     hint->setWordWrap(true);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);

@@ -19,6 +19,7 @@ public:
     explicit LoginDialog(AppSettings settings, QWidget *parent = nullptr);
 
     void setReloginMode(bool reloginMode);
+    void setSwitchUserMode(bool switchUserMode);
 
     bool trySilentLogin();
     AppSettings settings() const;
@@ -31,6 +32,7 @@ private:
     AppSettings m_settings;
     ApiClient m_client;
     bool m_reloginMode = false;
+    bool m_switchUserMode = false;
 
     QLabel *m_introLabel = nullptr;
     QCheckBox *m_remoteBox = nullptr;

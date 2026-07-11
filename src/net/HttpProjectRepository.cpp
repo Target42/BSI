@@ -116,6 +116,8 @@ AssessmentSaveResult HttpProjectRepository::saveAssessment(const RequirementAsse
     }
 
     m_lastError = m_client.lastError();
+    if (status == 403)
+        return AssessmentSaveResult::forbidden();
     return AssessmentSaveResult::failed();
 }
 

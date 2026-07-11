@@ -72,6 +72,7 @@ private slots:
     void applyBausteinRecommendations();
     void showSollIstReport();
     void showProjectMembers();
+    void switchUserOrLogout();
     void checkRemoteSession();
     void onAssignedBausteinActivated(int index);
     void applyBausteinSearchFilter();
@@ -109,6 +110,10 @@ private:
     Requirement currentRequirement() const;
     void updateWindowTitle();
     void updateProjectUiEnabled();
+    bool canEditActiveProject() const;
+    bool canDeleteActiveProject() const;
+    bool canManageProjectMembers() const;
+    void notifySaveFailure(const QString &repositoryError, bool useDialog);
     void clearProjectSession();
     void clearRequirementView();
     void reloadActiveTargetContent();
@@ -120,6 +125,7 @@ private:
     SessionSelection loadStoredSession(int projectId) const;
     void selectActiveTargetObjectInTree();
     void showTemporaryStatusMessage(const QString &message, int timeoutMs = 5000);
+    void configureRemoteSessionWatcher();
     int activeTargetObjectId() const;
     bool hasActiveProjectContext() const;
     QSet<int> matchingBausteinIdsForSearch(const QString &query) const;
@@ -183,6 +189,7 @@ private:
     QAction *m_deleteTargetAction = nullptr;
     QAction *m_applyRecommendationsAction = nullptr;
     QAction *m_manageMembersAction = nullptr;
+    QAction *m_switchUserAction = nullptr;
     QAction *m_reloginAction = nullptr;
     QAction *m_sollIstAction = nullptr;
     QTimer *m_sessionTimer = nullptr;

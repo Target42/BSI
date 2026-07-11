@@ -12,7 +12,8 @@ class ProjectOpenDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit ProjectOpenDialog(const QList<Project> &projects, QWidget *parent = nullptr);
+    explicit ProjectOpenDialog(const QList<Project> &projects, bool remoteMode,
+                                 QWidget *parent = nullptr);
 
     Project selectedProject() const;
 

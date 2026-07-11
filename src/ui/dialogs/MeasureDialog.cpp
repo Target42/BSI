@@ -8,6 +8,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QTextEdit>
 #include <QVBoxLayout>
 
@@ -41,13 +42,13 @@ MeasureDialog::MeasureDialog(QWidget *parent)
     form->addRow(tr("Frist"), m_dueDateEdit);
     form->addRow(tr("Status"), m_statusBox);
 
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    m_buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    connect(m_buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     auto *layout = new QVBoxLayout(this);
     layout->addLayout(form);
-    layout->addWidget(buttons);
+    layout->addWidget(m_buttons);
 }
 
 void MeasureDialog::setMeasure(const Measure &measure)
@@ -65,6 +66,36 @@ void MeasureDialog::setMeasure(const Measure &measure)
     const int statusIndex = m_statusBox->findData(static_cast<int>(measure.status));
     if (statusIndex >= 0)
         m_statusBox->setCurrentIndex(statusIndex);
+}
+
+void MeasureDialog::setReadOnly(bool readOnly)
+{
+    m_readOnly = readOnly;
+    applyReadOnlyUi();
+}
+
+void MeasureDialog::applyReadOnlyUi()
+{
+    m_titleEdit->setReadOnly(m_readOnly);
+    m_descriptionEdit->setReadOnly(m_readOnly);
+    m_responsibleEdit->setReadOnly(m_readOnly);
+    m_dueDateEdit->setEnabled(!m_readOnly);
+    m_statusBox->setEnabled(!m_readOnly);
+
+    if (m_readOnly) {
+        setWindowTitle(tr("Maßnahme anzeigen"));
+        if (QPushButton *okButton = m_buttons->button(QDialogButtonBox::Ok))
+            okButton->hide();
+        if (QPushButton *cancelButton = m_buttons->button(QDialogButtonBox::Cancel))
+            cancelButton->setText(tr("Schließen"));
+        return;
+    }
+
+    setWindowTitle(tr("Maßnahme"));
+    if (QPushButton *okButton = m_buttons->button(QDialogButtonBox::Ok))
+        okButton->show();
+    if (QPushButton *cancelButton = m_buttons->button(QDialogButtonBox::Cancel))
+        cancelButton->setText(tr("Abbrechen"));
 }
 
 Measure MeasureDialog::measure() const
