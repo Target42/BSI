@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/domain"
@@ -24,6 +25,7 @@ type loginRequest struct {
 
 type loginResponse struct {
 	AccessToken string      `json:"accessToken"`
+	ExpiresAt   string      `json:"expiresAt"`
 	User        domain.User `json:"user"`
 }
 
@@ -53,7 +55,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "token creation failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, loginResponse{AccessToken: token, User: user})
+	writeJSON(w, http.StatusOK, loginResponse{
+		AccessToken: token.AccessToken,
+		ExpiresAt:   token.ExpiresAt.UTC().Format(time.RFC3339),
+		User:        user,
+	})
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {

@@ -85,12 +85,46 @@ Umgebungsvariablen (optional `.env` im Verzeichnis `isms-server/`):
 
 | Variable | Standard | Beschreibung |
 |----------|----------|--------------|
-| `DATABASE_URL` | `postgres://isms:isms@localhost:5432/isms?sslmode=disable` | PostgreSQL |
-| `HTTP_ADDR` | `:8080` | HTTP-Listen-Adresse |
-| `JWT_SECRET` | (Dev-Fallback) | Secret für JWT-Signatur |
+| `ENV` | `development` | `production` erzwingt starkes JWT + TLS |
+| `DATABASE_URL` | `postgres://ismsserver:ismsserver@localhost:5432/isms?sslmode=disable` | PostgreSQL |
+| `HTTP_ADDR` | `:8080` | Listen-Adresse (HTTP oder HTTPS) |
+| `JWT_SECRET` | (Dev-Fallback) | Secret für JWT; **Pflicht in Produktion** (min. 32 Zeichen) |
+| `JWT_TTL` | `24h` | Token-Gültigkeit (`8h`, `30m`, …) |
+| `TLS_CERT_FILE` | — | TLS-Zertifikat (Pflicht in Produktion) |
+| `TLS_KEY_FILE` | — | TLS-Schlüssel (Pflicht in Produktion) |
 | `ADMIN_EMAIL` | `admin@example.com` | Erster Admin (nur wenn DB leer) |
 | `ADMIN_PASSWORD` | `changeme` | Passwort für ersten Admin |
 | `ADMIN_DISPLAY_NAME` | `Administrator` | Anzeigename |
+
+### JWT-Secret erzeugen (Produktion)
+
+```powershell
+# Beispiel mit OpenSSL
+openssl rand -base64 48
+```
+
+In `.env` eintragen: `JWT_SECRET=<generierter Wert>` und `ENV=production`.
+
+### HTTPS (Entwicklung)
+
+Self-signed Zertifikat erzeugen:
+
+```powershell
+cd isms-server
+.\scripts\generate-dev-cert.ps1
+```
+
+In `.env`:
+
+```env
+TLS_CERT_FILE=certs/server.crt
+TLS_KEY_FILE=certs/server.key
+HTTP_ADDR=:8443
+```
+
+Im Qt-Client: `https://localhost:8443` und **„Self-signed TLS-Zertifikat akzeptieren“** aktivieren.
+
+Login liefert `accessToken` und `expiresAt` (RFC3339). Abgelaufene Tokens antworten mit `401` und `{"error":"token_expired"}`.
 
 ## Endpunkte (MVP)
 
@@ -149,7 +183,14 @@ Voraussetzungen: PostgreSQL läuft, Server gestartet (`go run ./cmd/isms-server`
 
 - [ ] **Datei → IT-Grundschutz XML importieren** (nur Admin) → Katalog auf Server aktualisiert
 
+### 6. Sitzung & Sicherheit
+
+- [ ] Client neu starten mit gültigem Token → automatischer Login ohne Passwort
+- [ ] `JWT_TTL=2m` setzen, warten → Client fordert Re-Login (Statusleiste / Dialog)
+- [ ] **Projekt → Server-Sitzung erneuern** → neues Token ohne Neustart
+- [ ] Optional HTTPS: Dev-Zertifikat, `https://localhost:8443`, TLS-Checkbox im Login
+
 ## Nächste Schritte
 
-- Token-Ablauf / Re-Login im Client
-- HTTPS und Produktions-JWT-Secret
+- Deployment-Dokumentation (Reverse Proxy, Let's Encrypt)
+- Refresh-Tokens (optional, längere Sessions ohne erneutes Passwort)

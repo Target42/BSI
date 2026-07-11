@@ -27,3 +27,4 @@ isms-server/.env
 isms-server/isms-server
 isms-server/isms-server.exe
 isms-server/**/__debug_bin.exe
+isms-server/certs/

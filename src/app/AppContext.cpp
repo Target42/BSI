@@ -1,7 +1,9 @@
 #include "AppContext.h"
 #include "AppPaths.h"
 
+#include "app/AppSettings.h"
 #include "net/HttpTeamService.h"
+#include "ui/dialogs/LoginDialog.h"
 
 #include <QFile>
 #include <QJsonDocument>
@@ -38,6 +40,48 @@ bool AppContext::initializeRemote(const ApiClient &client)
     m_targetObjectRepository = std::make_unique<HttpTargetObjectRepository>(*m_apiClient);
     m_measureRepository = std::make_unique<HttpMeasureRepository>(*m_apiClient);
     m_catalogVersion = QStringLiteral("2023");
+
+    HttpTeamService teamService(*m_apiClient);
+    if (!teamService.fetchCurrentUser(&m_remoteUser)) {
+        m_lastError = teamService.lastError();
+        return false;
+    }
+    return true;
+}
+
+void AppContext::setReloginHandler(ApiClient::ReloginHandler handler)
+{
+    if (m_apiClient)
+        m_apiClient->setReloginHandler(std::move(handler));
+}
+
+bool AppContext::promptRelogin(QWidget *parent)
+{
+    if (!m_remote || !m_apiClient)
+        return false;
+
+    AppSettings settings = AppSettings::load();
+    settings.setUseRemote(true);
+
+    LoginDialog dialog(settings, parent);
+    dialog.setReloginMode(true);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+
+    return updateRemoteSession(dialog.apiClient(), dialog.settings());
+}
+
+bool AppContext::updateRemoteSession(const ApiClient &client, const AppSettings &settings)
+{
+    if (!m_remote || !m_apiClient)
+        return false;
+
+    m_apiClient->setBaseUrl(client.baseUrl());
+    m_apiClient->setAccessToken(client.accessToken());
+    m_apiClient->setTokenExpiresAt(client.tokenExpiresAt());
+    m_apiClient->setInsecureSkipTlsVerify(client.insecureSkipTlsVerify());
+
+    settings.save();
 
     HttpTeamService teamService(*m_apiClient);
     if (!teamService.fetchCurrentUser(&m_remoteUser)) {

@@ -15,11 +15,14 @@ int main(int argc, char *argv[])
 
     AppSettings settings = AppSettings::load();
     LoginDialog loginDialog(settings);
-    if (loginDialog.exec() != QDialog::Accepted)
-        return 0;
-
-    settings = loginDialog.settings();
-    settings.save();
+    if (!loginDialog.trySilentLogin()) {
+        if (loginDialog.exec() != QDialog::Accepted)
+            return 0;
+        settings = loginDialog.settings();
+        settings.save();
+    } else {
+        settings = loginDialog.settings();
+    }
 
     AppContext context;
     if (settings.useRemote()) {

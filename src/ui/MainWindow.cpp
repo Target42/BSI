@@ -65,6 +65,15 @@ MainWindow::MainWindow(AppContext &context, QWidget *parent)
     buildUi();
     reloadCatalog();
     updateProjectUiEnabled();
+
+    if (m_context.isRemote()) {
+        m_context.setReloginHandler([this]() { return m_context.promptRelogin(this); });
+
+        m_sessionTimer = new QTimer(this);
+        m_sessionTimer->setInterval(60000);
+        connect(m_sessionTimer, &QTimer::timeout, this, &MainWindow::checkRemoteSession);
+        m_sessionTimer->start();
+    }
 }
 
 void MainWindow::buildUi()
@@ -299,6 +308,11 @@ void MainWindow::buildUi()
     connect(m_deleteProjectAction, &QAction::triggered, this, &MainWindow::deleteProject);
     m_manageMembersAction = projectMenu->addAction(tr("Projektmitglieder..."));
     connect(m_manageMembersAction, &QAction::triggered, this, &MainWindow::showProjectMembers);
+    m_reloginAction = projectMenu->addAction(tr("Server-Sitzung erneuern..."));
+    connect(m_reloginAction, &QAction::triggered, this, [this]() {
+        if (m_context.isRemote())
+            m_context.promptRelogin(this);
+    });
     projectMenu->addSeparator();
     m_addTargetAction = projectMenu->addAction(tr("Zielobjekt hinzufügen..."));
     connect(m_addTargetAction, &QAction::triggered, this, &MainWindow::addTargetObject);
@@ -353,6 +367,7 @@ void MainWindow::updateProjectUiEnabled()
     m_editProjectAction->setEnabled(hasProject);
     m_deleteProjectAction->setEnabled(hasProject);
     m_manageMembersAction->setEnabled(m_context.isRemote() && hasProject);
+    m_reloginAction->setEnabled(m_context.isRemote());
     m_addTargetAction->setEnabled(hasProject);
     m_editTargetAction->setEnabled(hasProject);
     m_deleteTargetAction->setEnabled(hasProject);
@@ -1086,6 +1101,26 @@ void MainWindow::reloadApplicabilityMarkers()
         m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
                                                                 m_activeTargetObject.id);
     m_bausteinModel->setApplicabilityMap(map);
+}
+
+void MainWindow::checkRemoteSession()
+{
+    if (!m_context.isRemote())
+        return;
+
+    ApiClient &client = m_context.apiClient();
+    if (!client.isTokenExpired())
+        return;
+
+    if (m_context.promptRelogin(this)) {
+        showTemporaryStatusMessage(tr("Sitzung erneuert"));
+        return;
+    }
+
+    QMessageBox::warning(
+        this,
+        tr("Sitzung abgelaufen"),
+        tr("Die Server-Sitzung ist abgelaufen. Bitte melden Sie sich erneut an, bevor Sie weiterarbeiten."));
 }
 
 void MainWindow::showProjectMembers()

@@ -12,7 +12,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const tokenTTL = 24 * time.Hour
+type TokenPair struct {
+	AccessToken string
+	ExpiresAt   time.Time
+}
 
 type Claims struct {
 	UserID      int64  `json:"uid"`
@@ -27,10 +30,18 @@ const userContextKey contextKey = "user"
 
 type Service struct {
 	secret []byte
+	ttl    time.Duration
 }
 
-func NewService(secret string) *Service {
-	return &Service{secret: []byte(secret)}
+func NewService(secret string, ttl time.Duration) *Service {
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+	return &Service{secret: []byte(secret), ttl: ttl}
+}
+
+func (s *Service) TokenTTL() time.Duration {
+	return s.ttl
 }
 
 func HashPassword(password string) (string, error) {
@@ -45,8 +56,9 @@ func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-func (s *Service) CreateToken(userID int64, email, displayName string) (string, error) {
+func (s *Service) CreateToken(userID int64, email, displayName string) (TokenPair, error) {
 	now := time.Now()
+	expiresAt := now.Add(s.ttl)
 	claims := Claims{
 		UserID:      userID,
 		Email:       email,
@@ -54,11 +66,15 @@ func (s *Service) CreateToken(userID int64, email, displayName string) (string, 
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   fmt.Sprintf("%d", userID),
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.secret)
+	signed, err := token.SignedString(s.secret)
+	if err != nil {
+		return TokenPair{}, err
+	}
+	return TokenPair{AccessToken: signed, ExpiresAt: expiresAt}, nil
 }
 
 func (s *Service) ParseToken(tokenString string) (*Claims, error) {
@@ -87,6 +103,10 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 		}
 		claims, err := s.ParseToken(strings.TrimPrefix(header, "Bearer "))
 		if err != nil {
+			if errors.Is(err, jwt.ErrTokenExpired) {
+				http.Error(w, `{"error":"token_expired"}`, http.StatusUnauthorized)
+				return
+			}
 			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
 			return
 		}

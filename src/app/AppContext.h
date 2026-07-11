@@ -7,6 +7,7 @@
 #include "persistence/ITargetObjectRepository.h"
 #include "catalog/GrundschutzImporter.h"
 #include "domain/ServerUser.h"
+#include "app/AppSettings.h"
 #include "net/ApiClient.h"
 #include "net/HttpCatalogRepository.h"
 #include "net/HttpMeasureRepository.h"
@@ -20,6 +21,8 @@
 
 #include <memory>
 
+class QWidget;
+
 class AppContext
 {
 public:
@@ -27,6 +30,9 @@ public:
 
     bool initializeLocal();
     bool initializeRemote(const ApiClient &client);
+    void setReloginHandler(ApiClient::ReloginHandler handler);
+    bool promptRelogin(QWidget *parent);
+    bool updateRemoteSession(const ApiClient &client, const AppSettings &settings);
     QString lastError() const;
 
     bool isRemote() const { return m_remote; }

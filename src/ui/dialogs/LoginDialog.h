@@ -8,6 +8,7 @@
 
 class QCheckBox;
 class QDialogButtonBox;
+class QLabel;
 class QLineEdit;
 
 class LoginDialog : public QDialog
@@ -17,16 +18,23 @@ class LoginDialog : public QDialog
 public:
     explicit LoginDialog(AppSettings settings, QWidget *parent = nullptr);
 
+    void setReloginMode(bool reloginMode);
+
+    bool trySilentLogin();
     AppSettings settings() const;
     ApiClient apiClient() const;
 
 private:
+    void updateTlsOptionVisibility();
     void tryAccept();
 
     AppSettings m_settings;
     ApiClient m_client;
+    bool m_reloginMode = false;
 
+    QLabel *m_introLabel = nullptr;
     QCheckBox *m_remoteBox = nullptr;
+    QCheckBox *m_insecureTlsBox = nullptr;
     QLineEdit *m_serverEdit = nullptr;
     QLineEdit *m_emailEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;

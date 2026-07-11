@@ -53,11 +53,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	authService := auth.NewService(cfg.JWTSecret)
+	authService := auth.NewService(cfg.JWTSecret, cfg.JWTTTL)
 	server := httpx.NewServer(authService, store)
 
-	slog.Info("starting ISMS server", "addr", cfg.HTTPAddr)
-	if err := http.ListenAndServe(cfg.HTTPAddr, server.Router()); err != nil {
+	router := server.Router()
+	if cfg.TLSEnabled() {
+		slog.Info("starting ISMS server with TLS", "addr", cfg.HTTPAddr, "jwt_ttl", cfg.JWTTTL.String())
+		err = http.ListenAndServeTLS(cfg.HTTPAddr, cfg.TLSCertFile, cfg.TLSKeyFile, router)
+	} else {
+		if cfg.Environment == "production" {
+			slog.Error("refusing to start without TLS in production")
+			os.Exit(1)
+		}
+		slog.Warn("TLS not configured, serving plain HTTP (development only)", "addr", cfg.HTTPAddr)
+		slog.Info("starting ISMS server", "addr", cfg.HTTPAddr, "jwt_ttl", cfg.JWTTTL.String())
+		err = http.ListenAndServe(cfg.HTTPAddr, router)
+	}
+	if err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}

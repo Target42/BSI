@@ -27,6 +27,7 @@ class QPushButton;
 class QProgressBar;
 class QTableView;
 class QTextEdit;
+class QTimer;
 class QTreeView;
 
 struct SessionSelection {
@@ -71,6 +72,7 @@ private slots:
     void applyBausteinRecommendations();
     void showSollIstReport();
     void showProjectMembers();
+    void checkRemoteSession();
     void onAssignedBausteinActivated(int index);
     void applyBausteinSearchFilter();
     void viewSelectedBaustein();
@@ -181,7 +183,9 @@ private:
     QAction *m_deleteTargetAction = nullptr;
     QAction *m_applyRecommendationsAction = nullptr;
     QAction *m_manageMembersAction = nullptr;
+    QAction *m_reloginAction = nullptr;
     QAction *m_sollIstAction = nullptr;
+    QTimer *m_sessionTimer = nullptr;
 };
 
 #endif
