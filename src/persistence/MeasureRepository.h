@@ -1,26 +1,23 @@
 #ifndef PERSISTENCE_MEASUREREPOSITORY_H
 #define PERSISTENCE_MEASUREREPOSITORY_H
 
-#include "domain/Measure.h"
+#include "IMeasureRepository.h"
 
-#include <QHash>
-#include <QList>
 #include <QSqlDatabase>
-#include <QString>
 
-class MeasureRepository
+class MeasureRepository : public IMeasureRepository
 {
 public:
     explicit MeasureRepository(QSqlDatabase db);
 
-    QList<Measure> loadMeasures(int projectId, int targetObjectId, int requirementDbId) const;
-    QHash<int, int> measureCounts(int projectId, int targetObjectId) const;
+    QList<Measure> loadMeasures(int projectId, int targetObjectId, int requirementDbId) const override;
+    QHash<int, int> measureCounts(int projectId, int targetObjectId) const override;
 
-    Measure createMeasure(const Measure &measure);
-    bool updateMeasure(const Measure &measure);
-    bool deleteMeasure(int measureId);
+    Measure createMeasure(const Measure &measure) override;
+    MeasureSaveResult updateMeasure(const Measure &measure) override;
+    bool deleteMeasure(int measureId) override;
 
-    QString lastError() const;
+    QString lastError() const override;
 
 private:
     QSqlDatabase m_db;

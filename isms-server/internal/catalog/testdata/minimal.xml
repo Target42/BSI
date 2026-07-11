@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<book>
+  <chapter>
+    <title>Netze und Netzkomponenten</title>
+    <section>
+      <title>NET.1.1 Netzarchitektur und -design</title>
+      <section>
+        <title>Anforderungen</title>
+        <section>
+          <title>Basis-Anforderungen</title>
+          <section>
+            <title>NET.1.1.A1 Netztopologie dokumentieren (B) [Netzadministrator]</title>
+            <para>Die <emphasis>Netztopologie</emphasis> ist dokumentiert.</para>
+          </section>
+        </section>
+      </section>
+    </section>
+  </chapter>
+</book>

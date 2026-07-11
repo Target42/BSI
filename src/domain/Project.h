@@ -9,6 +9,7 @@ struct Project {
     QString name;
     QString description;
     QString catalogVersion;
+    QString role;
     QDateTime createdAt;
     QDateTime updatedAt;
 };

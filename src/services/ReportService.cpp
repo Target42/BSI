@@ -22,10 +22,10 @@ QString reportServiceTr(const char *text)
 
 } // namespace
 
-ReportService::ReportService(CatalogRepository &catalog,
-                             ProjectRepository &project,
-                             TargetObjectRepository &targetObjects,
-                             MeasureRepository &measures)
+ReportService::ReportService(ICatalogRepository &catalog,
+                             IProjectRepository &project,
+                             ITargetObjectRepository &targetObjects,
+                             IMeasureRepository &measures)
     : m_catalog(catalog)
     , m_project(project)
     , m_targetObjects(targetObjects)

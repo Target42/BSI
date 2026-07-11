@@ -27,6 +27,7 @@ class QPushButton;
 class QProgressBar;
 class QTableView;
 class QTextEdit;
+class QTimer;
 class QTreeView;
 
 struct SessionSelection {
@@ -70,6 +71,8 @@ private slots:
     void toggleRecommendationHighlight(bool enabled);
     void applyBausteinRecommendations();
     void showSollIstReport();
+    void showProjectMembers();
+    void checkRemoteSession();
     void onAssignedBausteinActivated(int index);
     void applyBausteinSearchFilter();
     void viewSelectedBaustein();
@@ -98,8 +101,11 @@ private:
     void refreshAssessmentColumn();
     void syncAssessmentUi(const RequirementAssessment &assessment);
     void loadMeasuresForCurrentRequirement();
-    bool saveAssessmentFor(int targetObjectId, int requirementDbId);
-    bool saveCurrentAssessment();
+    bool saveAssessmentFor(int targetObjectId, int requirementDbId, bool notifyConflictDialog = false);
+    bool saveCurrentAssessment(bool notifyConflictDialog = false);
+    void applyAssessmentConflict(const RequirementAssessment &serverAssessment, int requirementDbId,
+                                 bool showDialog);
+    QString sessionSettingsGroup(int projectId) const;
     Requirement currentRequirement() const;
     void updateWindowTitle();
     void updateProjectUiEnabled();
@@ -129,6 +135,7 @@ private:
     int m_preferredTargetObjectId = 0;
     int m_preferredBausteinId = 0;
     int m_preferredRequirementId = 0;
+    int m_lastConflictNotifiedRequirementId = 0;
     bool m_suppressAssessmentSave = false;
     bool m_blockBausteinSelectionHandler = false;
     bool m_blockAssignedBausteinBoxHandler = false;
@@ -175,7 +182,10 @@ private:
     QAction *m_editTargetAction = nullptr;
     QAction *m_deleteTargetAction = nullptr;
     QAction *m_applyRecommendationsAction = nullptr;
+    QAction *m_manageMembersAction = nullptr;
+    QAction *m_reloginAction = nullptr;
     QAction *m_sollIstAction = nullptr;
+    QTimer *m_sessionTimer = nullptr;
 };
 
 #endif

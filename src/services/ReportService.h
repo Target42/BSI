@@ -2,10 +2,10 @@
 #define SERVICES_REPORTSERVICE_H
 
 #include "domain/ReportRow.h"
-#include "persistence/CatalogRepository.h"
-#include "persistence/MeasureRepository.h"
-#include "persistence/ProjectRepository.h"
-#include "persistence/TargetObjectRepository.h"
+#include "persistence/ICatalogRepository.h"
+#include "persistence/IMeasureRepository.h"
+#include "persistence/IProjectRepository.h"
+#include "persistence/ITargetObjectRepository.h"
 
 #include <QHash>
 #include <QList>
@@ -14,10 +14,10 @@
 class ReportService
 {
 public:
-    ReportService(CatalogRepository &catalog,
-                  ProjectRepository &project,
-                  TargetObjectRepository &targetObjects,
-                  MeasureRepository &measures);
+    ReportService(ICatalogRepository &catalog,
+                  IProjectRepository &project,
+                  ITargetObjectRepository &targetObjects,
+                  IMeasureRepository &measures);
 
     QList<ReportRow> buildSollIstReport(int projectId,
                                         int targetObjectId,
@@ -32,10 +32,10 @@ public:
     static QString formatTreeProgressSuffix(const ReportSummary &summary);
 
 private:
-    CatalogRepository &m_catalog;
-    ProjectRepository &m_project;
-    TargetObjectRepository &m_targetObjects;
-    MeasureRepository &m_measures;
+    ICatalogRepository &m_catalog;
+    IProjectRepository &m_project;
+    ITargetObjectRepository &m_targetObjects;
+    IMeasureRepository &m_measures;
 };
 
 #endif

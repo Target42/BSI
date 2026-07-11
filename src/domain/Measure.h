@@ -16,6 +16,7 @@ struct Measure {
     QString responsible;
     QDate dueDate;
     MeasureStatus status = MeasureStatus::Open;
+    int version = 0;
 };
 
 #endif

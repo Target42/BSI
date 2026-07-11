@@ -1,12 +1,18 @@
 #include "AppContext.h"
 #include "AppPaths.h"
 
+#include "app/AppSettings.h"
+#include "net/HttpTeamService.h"
+#include "ui/dialogs/LoginDialog.h"
+
 #include <QFile>
+#include <QJsonDocument>
 
 AppContext::AppContext() = default;
 
-bool AppContext::initialize()
+bool AppContext::initializeLocal()
 {
+    m_remote = false;
     m_database = std::make_unique<Database>(AppPaths::databaseFile());
     if (AppPaths::databaseFile().isEmpty()) {
         m_lastError = QStringLiteral("Datenverzeichnis konnte nicht erstellt werden.");
@@ -25,27 +31,92 @@ bool AppContext::initialize()
     return true;
 }
 
+bool AppContext::initializeRemote(const ApiClient &client)
+{
+    m_remote = true;
+    m_apiClient = std::make_unique<ApiClient>(client);
+    m_catalogRepository = std::make_unique<HttpCatalogRepository>(*m_apiClient);
+    m_projectRepository = std::make_unique<HttpProjectRepository>(*m_apiClient);
+    m_targetObjectRepository = std::make_unique<HttpTargetObjectRepository>(*m_apiClient);
+    m_measureRepository = std::make_unique<HttpMeasureRepository>(*m_apiClient);
+    m_catalogVersion = QStringLiteral("2023");
+
+    HttpTeamService teamService(*m_apiClient);
+    if (!teamService.fetchCurrentUser(&m_remoteUser)) {
+        m_lastError = teamService.lastError();
+        return false;
+    }
+    return true;
+}
+
+void AppContext::setReloginHandler(ApiClient::ReloginHandler handler)
+{
+    if (m_apiClient)
+        m_apiClient->setReloginHandler(std::move(handler));
+}
+
+bool AppContext::promptRelogin(QWidget *parent)
+{
+    if (!m_remote || !m_apiClient)
+        return false;
+
+    AppSettings settings = AppSettings::load();
+    settings.setUseRemote(true);
+
+    LoginDialog dialog(settings, parent);
+    dialog.setReloginMode(true);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+
+    return updateRemoteSession(dialog.apiClient(), dialog.settings());
+}
+
+bool AppContext::updateRemoteSession(const ApiClient &client, const AppSettings &settings)
+{
+    if (!m_remote || !m_apiClient)
+        return false;
+
+    m_apiClient->setBaseUrl(client.baseUrl());
+    m_apiClient->setAccessToken(client.accessToken());
+    m_apiClient->setTokenExpiresAt(client.tokenExpiresAt());
+    m_apiClient->setInsecureSkipTlsVerify(client.insecureSkipTlsVerify());
+
+    settings.save();
+
+    HttpTeamService teamService(*m_apiClient);
+    if (!teamService.fetchCurrentUser(&m_remoteUser)) {
+        m_lastError = teamService.lastError();
+        return false;
+    }
+    return true;
+}
+
+ApiClient &AppContext::apiClient()
+{
+    return *m_apiClient;
+}
+
 QString AppContext::lastError() const
 {
     return m_lastError;
 }
 
-CatalogRepository &AppContext::catalogRepository()
+ICatalogRepository &AppContext::catalogRepository()
 {
     return *m_catalogRepository;
 }
 
-ProjectRepository &AppContext::projectRepository()
+IProjectRepository &AppContext::projectRepository()
 {
     return *m_projectRepository;
 }
 
-TargetObjectRepository &AppContext::targetObjectRepository()
+ITargetObjectRepository &AppContext::targetObjectRepository()
 {
     return *m_targetObjectRepository;
 }
 
-MeasureRepository &AppContext::measureRepository()
+IMeasureRepository &AppContext::measureRepository()
 {
     return *m_measureRepository;
 }
@@ -54,6 +125,9 @@ bool AppContext::ensureGrundschutzCatalog(const QString &xmlPath)
 {
     if (m_catalogRepository->hasGrundschutzCatalog(m_catalogVersion))
         return true;
+
+    if (m_remote)
+        return importCatalogFile(xmlPath);
 
     const QString sourcePath = QFile::exists(xmlPath) ? xmlPath : AppPaths::defaultGrundschutzXml();
     if (!QFile::exists(sourcePath)) {
@@ -74,6 +148,29 @@ bool AppContext::ensureGrundschutzCatalog(const QString &xmlPath)
         return false;
     }
 
+    return true;
+}
+
+bool AppContext::importCatalogFile(const QString &xmlPath)
+{
+    if (!m_remote || !m_apiClient) {
+        m_lastError = QStringLiteral("Katalog-Upload nur im Server-Modus verfügbar.");
+        return false;
+    }
+    if (!QFile::exists(xmlPath)) {
+        m_lastError = QStringLiteral("Datei nicht gefunden: %1").arg(xmlPath);
+        return false;
+    }
+
+    int status = 0;
+    const QJsonDocument doc = m_apiClient->uploadFile(
+        QStringLiteral("/api/v1/admin/catalog/import"), QStringLiteral("file"), xmlPath, &status);
+    if (status != 200) {
+        m_lastError = m_apiClient->lastError();
+        if (doc.isObject() && doc.object().contains(QStringLiteral("message")))
+            m_lastError = doc.object().value(QStringLiteral("message")).toString();
+        return false;
+    }
     return true;
 }
 
