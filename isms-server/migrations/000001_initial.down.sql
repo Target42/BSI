@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS measures;
+DROP TABLE IF EXISTS requirement_assessments;
+DROP TABLE IF EXISTS baustein_applicability;
+DROP TABLE IF EXISTS target_objects;
+DROP TABLE IF EXISTS project_members;
+DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS requirements;
+DROP TABLE IF EXISTS bausteine;
+DROP TABLE IF EXISTS catalog_meta;

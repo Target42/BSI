@@ -16,6 +16,7 @@ struct RequirementAssessment {
     QString responsible;
     QDate dueDate;
     int measureCount = 0;
+    int version = 0;
 };
 
 #endif

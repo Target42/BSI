@@ -4,6 +4,7 @@
 #include "catalog/GrundschutzImporter.h"
 #include "domain/AssessmentStatus.h"
 #include "domain/Measure.h"
+#include "domain/SaveResult.h"
 #include "domain/ProtectionNeed.h"
 #include "domain/Standard.h"
 #include "domain/TargetObject.h"
@@ -16,6 +17,7 @@
 #include "ui/dialogs/MeasureDialog.h"
 #include "ui/dialogs/ProjectOpenDialog.h"
 #include "ui/dialogs/ProjectDialog.h"
+#include "ui/dialogs/ProjectMembersDialog.h"
 #include "ui/dialogs/ReportDialog.h"
 #include "ui/dialogs/TargetObjectDialog.h"
 
@@ -295,6 +297,8 @@ void MainWindow::buildUi()
     connect(m_editProjectAction, &QAction::triggered, this, &MainWindow::editProject);
     m_deleteProjectAction = projectMenu->addAction(tr("Projekt löschen..."));
     connect(m_deleteProjectAction, &QAction::triggered, this, &MainWindow::deleteProject);
+    m_manageMembersAction = projectMenu->addAction(tr("Projektmitglieder..."));
+    connect(m_manageMembersAction, &QAction::triggered, this, &MainWindow::showProjectMembers);
     projectMenu->addSeparator();
     m_addTargetAction = projectMenu->addAction(tr("Zielobjekt hinzufügen..."));
     connect(m_addTargetAction, &QAction::triggered, this, &MainWindow::addTargetObject);
@@ -348,6 +352,7 @@ void MainWindow::updateProjectUiEnabled()
     m_closeProjectAction->setEnabled(hasProject);
     m_editProjectAction->setEnabled(hasProject);
     m_deleteProjectAction->setEnabled(hasProject);
+    m_manageMembersAction->setEnabled(m_context.isRemote() && hasProject);
     m_addTargetAction->setEnabled(hasProject);
     m_editTargetAction->setEnabled(hasProject);
     m_deleteTargetAction->setEnabled(hasProject);
@@ -760,7 +765,7 @@ void MainWindow::persistSessionSelection()
     m_preferredRequirementId = session.requirementId;
 
     QSettings settings;
-    settings.beginGroup(QStringLiteral("projectSessions/%1").arg(m_activeProject.id));
+    settings.beginGroup(sessionSettingsGroup(m_activeProject.id));
     settings.setValue(QStringLiteral("targetObjectId"), session.targetObjectId);
     settings.setValue(QStringLiteral("bausteinId"), session.bausteinId);
     settings.setValue(QStringLiteral("requirementId"), session.requirementId);
@@ -774,7 +779,7 @@ void MainWindow::persistAllTargetSelections()
         return;
 
     QSettings settings;
-    settings.beginGroup(QStringLiteral("projectSessions/%1").arg(m_activeProject.id));
+    settings.beginGroup(sessionSettingsGroup(m_activeProject.id));
     settings.remove(QStringLiteral("targets"));
 
     QSet<int> targetIds;
@@ -802,7 +807,8 @@ void MainWindow::loadStoredTargetSelections(int projectId)
     m_lastRequirementByTarget.clear();
 
     QSettings settings;
-    settings.beginGroup(QStringLiteral("projectSessions/%1/targets").arg(projectId));
+    settings.beginGroup(sessionSettingsGroup(projectId));
+    settings.beginGroup(QStringLiteral("targets"));
     const QStringList groups = settings.childGroups();
     for (const QString &group : groups) {
         settings.beginGroup(group);
@@ -818,6 +824,7 @@ void MainWindow::loadStoredTargetSelections(int projectId)
         settings.endGroup();
     }
     settings.endGroup();
+    settings.endGroup();
 }
 
 SessionSelection MainWindow::loadStoredSession(int projectId) const
@@ -827,12 +834,54 @@ SessionSelection MainWindow::loadStoredSession(int projectId) const
 
     SessionSelection session;
     QSettings settings;
-    settings.beginGroup(QStringLiteral("projectSessions/%1").arg(projectId));
+    settings.beginGroup(sessionSettingsGroup(projectId));
     session.targetObjectId = settings.value(QStringLiteral("targetObjectId"), 0).toInt();
     session.bausteinId = settings.value(QStringLiteral("bausteinId"), 0).toInt();
     session.requirementId = settings.value(QStringLiteral("requirementId"), 0).toInt();
     settings.endGroup();
     return session;
+}
+
+QString MainWindow::sessionSettingsGroup(int projectId) const
+{
+    if (m_context.isRemote()) {
+        const QString userKey = m_context.remoteUser().email.trimmed().toLower();
+        if (!userKey.isEmpty())
+            return QStringLiteral("projectSessions/%1/%2").arg(userKey, QString::number(projectId));
+    }
+    return QStringLiteral("projectSessions/%1").arg(projectId);
+}
+
+void MainWindow::applyAssessmentConflict(const RequirementAssessment &serverAssessment,
+                                         int requirementDbId, bool showDialog)
+{
+    RequirementAssessment refreshed = serverAssessment;
+    refreshed.measureCount = m_context.measureRepository()
+                                 .measureCounts(m_activeProject.id, serverAssessment.targetObjectId)
+                                 .value(requirementDbId, 0);
+
+    m_suppressAssessmentSave = true;
+    if (m_activeTargetObject.id == serverAssessment.targetObjectId
+        && m_activeRequirementId == requirementDbId) {
+        syncAssessmentUi(refreshed);
+    }
+    m_suppressAssessmentSave = false;
+
+    m_requirementModel->setAssessment(requirementDbId, refreshed);
+
+    if (showDialog) {
+        QMessageBox::warning(
+            this,
+            tr("Konflikt"),
+            tr("Ein anderer Benutzer hat diese Bewertung zwischenzeitlich geändert. "
+               "Die aktuelle Server-Version wurde geladen."));
+        m_lastConflictNotifiedRequirementId = 0;
+    } else if (m_lastConflictNotifiedRequirementId != requirementDbId) {
+        showTemporaryStatusMessage(
+            tr("Konflikt: Bewertung wurde von einem anderen Benutzer geändert und neu geladen."),
+            10000);
+        m_lastConflictNotifiedRequirementId = requirementDbId;
+    }
 }
 
 int MainWindow::activeBausteinIdFromTree() const
@@ -1039,6 +1088,17 @@ void MainWindow::reloadApplicabilityMarkers()
     m_bausteinModel->setApplicabilityMap(map);
 }
 
+void MainWindow::showProjectMembers()
+{
+    if (!m_context.isRemote() || m_activeProject.id == 0)
+        return;
+
+    const bool canManage = m_activeProject.role == QStringLiteral("owner");
+    ProjectMembersDialog dialog(m_context.apiClient(), m_activeProject.id, m_activeProject.name,
+                                canManage, m_context.isRemoteAdmin(), this);
+    dialog.exec();
+}
+
 void MainWindow::importCatalog()
 {
     const QString filePath = QFileDialog::getOpenFileName(
@@ -1049,16 +1109,23 @@ void MainWindow::importCatalog()
     if (filePath.isEmpty())
         return;
 
-    GrundschutzImporter importer;
-    const GrundschutzImportResult importResult = importer.importFromFile(filePath);
-    if (!importResult.success) {
-        QMessageBox::critical(this, tr("Import fehlgeschlagen"), importResult.errorMessage);
-        return;
-    }
+    if (m_context.isRemote()) {
+        if (!m_context.importCatalogFile(filePath)) {
+            QMessageBox::critical(this, tr("Import fehlgeschlagen"), m_context.lastError());
+            return;
+        }
+    } else {
+        GrundschutzImporter importer;
+        const GrundschutzImportResult importResult = importer.importFromFile(filePath);
+        if (!importResult.success) {
+            QMessageBox::critical(this, tr("Import fehlgeschlagen"), importResult.errorMessage);
+            return;
+        }
 
-    if (!m_context.catalogRepository().replaceGrundschutzCatalog(importResult)) {
-        QMessageBox::critical(this, tr("Import fehlgeschlagen"), m_context.catalogRepository().lastError());
-        return;
+        if (!m_context.catalogRepository().replaceGrundschutzCatalog(importResult)) {
+            QMessageBox::critical(this, tr("Import fehlgeschlagen"), m_context.catalogRepository().lastError());
+            return;
+        }
     }
 
     reloadCatalog();
@@ -1455,7 +1522,7 @@ void MainWindow::loadMeasuresForCurrentRequirement()
     m_measureModel->setMeasures(measures);
 }
 
-bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId)
+bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId, bool notifyConflictDialog)
 {
     if (m_suppressAssessmentSave || m_activeProject.id == 0)
         return false;
@@ -1484,16 +1551,25 @@ bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId)
                                   .measureCounts(m_activeProject.id, targetObjectId)
                                   .value(requirementDbId, 0);
 
-    if (!m_context.projectRepository().saveAssessment(assessment))
+    const AssessmentSaveResult result = m_context.projectRepository().saveAssessment(assessment);
+    if (result.status == AssessmentSaveResult::Status::Ok) {
+        if (m_activeTargetObject.id == targetObjectId && m_activeRequirementId == requirementDbId) {
+            RequirementAssessment updated = result.assessment;
+            updated.measureCount = assessment.measureCount;
+            m_requirementModel->setAssessment(requirementDbId, updated);
+        }
+        if (m_lastConflictNotifiedRequirementId == requirementDbId)
+            m_lastConflictNotifiedRequirementId = 0;
+        return true;
+    }
+    if (result.status == AssessmentSaveResult::Status::VersionConflict) {
+        applyAssessmentConflict(result.assessment, requirementDbId, notifyConflictDialog);
         return false;
-
-    if (m_activeTargetObject.id == targetObjectId && m_activeRequirementId == requirementDbId)
-        m_requirementModel->setAssessment(requirementDbId, assessment);
-
-    return true;
+    }
+    return false;
 }
 
-bool MainWindow::saveCurrentAssessment()
+bool MainWindow::saveCurrentAssessment(bool notifyConflictDialog)
 {
     if (!hasActiveProjectContext())
         return false;
@@ -1512,7 +1588,7 @@ bool MainWindow::saveCurrentAssessment()
     if (m_displayedAssessmentTargetId != 0 && m_displayedAssessmentTargetId != m_activeTargetObject.id)
         return false;
 
-    return saveAssessmentFor(targetObjectId, requirementDbId);
+    return saveAssessmentFor(targetObjectId, requirementDbId, notifyConflictDialog);
 }
 
 void MainWindow::onRequirementSelected(const QModelIndex &index)
@@ -1564,9 +1640,12 @@ void MainWindow::setAssessmentStatus(int index)
 {
     Q_UNUSED(index)
 
-    if (!saveCurrentAssessment()) {
-        QMessageBox::warning(this, tr("Speichern"), m_context.projectRepository().lastError());
-    }
+    if (saveCurrentAssessment(true))
+        return;
+
+    const QString error = m_context.projectRepository().lastError();
+    if (!error.isEmpty())
+        QMessageBox::warning(this, tr("Speichern"), error);
 }
 
 void MainWindow::saveAssessmentFields()
@@ -1574,9 +1653,12 @@ void MainWindow::saveAssessmentFields()
     if (m_suppressAssessmentSave)
         return;
 
-    if (!saveCurrentAssessment()) {
-        showTemporaryStatusMessage(
-            tr("Speichern fehlgeschlagen: %1").arg(m_context.projectRepository().lastError()), 8000);
+    if (saveCurrentAssessment(false))
+        return;
+
+    const QString error = m_context.projectRepository().lastError();
+    if (!error.isEmpty()) {
+        showTemporaryStatusMessage(tr("Speichern fehlgeschlagen: %1").arg(error), 8000);
     }
 }
 
@@ -1627,13 +1709,24 @@ void MainWindow::editMeasure()
         return;
 
     measure = dialog.measure();
-    if (!m_context.measureRepository().updateMeasure(measure)) {
-        QMessageBox::critical(this, tr("Maßnahme"), m_context.measureRepository().lastError());
+    const MeasureSaveResult result = m_context.measureRepository().updateMeasure(measure);
+    if (result.status == MeasureSaveResult::Status::Ok) {
+        loadMeasuresForCurrentRequirement();
+        reloadProgress();
+        return;
+    }
+    if (result.status == MeasureSaveResult::Status::VersionConflict) {
+        QMessageBox::warning(
+            this,
+            tr("Konflikt"),
+            tr("Ein anderer Benutzer hat diese Maßnahme zwischenzeitlich geändert. "
+               "Die Liste wurde neu geladen."));
+        loadMeasuresForCurrentRequirement();
+        reloadProgress();
         return;
     }
 
-    loadMeasuresForCurrentRequirement();
-    reloadProgress();
+    QMessageBox::critical(this, tr("Maßnahme"), m_context.measureRepository().lastError());
 }
 
 void MainWindow::deleteMeasure()

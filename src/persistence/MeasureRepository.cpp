@@ -92,7 +92,7 @@ Measure MeasureRepository::createMeasure(const Measure &measure)
     return created;
 }
 
-bool MeasureRepository::updateMeasure(const Measure &measure)
+MeasureSaveResult MeasureRepository::updateMeasure(const Measure &measure)
 {
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
@@ -107,9 +107,9 @@ bool MeasureRepository::updateMeasure(const Measure &measure)
 
     if (!query.exec()) {
         m_lastError = query.lastError().text();
-        return false;
+        return MeasureSaveResult::failed();
     }
-    return true;
+    return MeasureSaveResult::ok(measure);
 }
 
 bool MeasureRepository::deleteMeasure(int measureId)

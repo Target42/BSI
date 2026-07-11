@@ -1,27 +1,23 @@
 #ifndef PERSISTENCE_CATALOGREPOSITORY_H
 #define PERSISTENCE_CATALOGREPOSITORY_H
 
-#include "catalog/GrundschutzImporter.h"
-#include "domain/Baustein.h"
-#include "domain/Requirement.h"
+#include "ICatalogRepository.h"
 
 #include <QSqlDatabase>
-#include <QList>
-#include <QString>
 
-class CatalogRepository
+class CatalogRepository : public ICatalogRepository
 {
 public:
     explicit CatalogRepository(QSqlDatabase db);
 
-    bool replaceGrundschutzCatalog(const GrundschutzImportResult &importResult);
-    bool hasGrundschutzCatalog(const QString &catalogVersion) const;
+    bool replaceGrundschutzCatalog(const GrundschutzImportResult &importResult) override;
+    bool hasGrundschutzCatalog(const QString &catalogVersion) const override;
 
-    QList<Baustein> loadBausteine(StandardType standard, const QString &catalogVersion) const;
-    QList<Requirement> loadRequirements(int bausteinDbId) const;
-    QList<Requirement> loadAllRequirements(StandardType standard, const QString &catalogVersion) const;
+    QList<Baustein> loadBausteine(StandardType standard, const QString &catalogVersion) const override;
+    QList<Requirement> loadRequirements(int bausteinDbId) const override;
+    QList<Requirement> loadAllRequirements(StandardType standard, const QString &catalogVersion) const override;
 
-    QString lastError() const;
+    QString lastError() const override;
 
 private:
     QSqlDatabase m_db;

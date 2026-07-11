@@ -1,31 +1,27 @@
 #ifndef PERSISTENCE_TARGETOBJECTREPOSITORY_H
 #define PERSISTENCE_TARGETOBJECTREPOSITORY_H
 
-#include "domain/BausteinApplicability.h"
-#include "domain/TargetObject.h"
+#include "ITargetObjectRepository.h"
 
-#include <QHash>
-#include <QList>
 #include <QSqlDatabase>
-#include <QString>
 
-class TargetObjectRepository
+class TargetObjectRepository : public ITargetObjectRepository
 {
 public:
     explicit TargetObjectRepository(QSqlDatabase db);
 
-    QList<TargetObject> loadTargetObjects(int projectId) const;
-    TargetObject createTargetObject(const TargetObject &targetObject);
-    bool updateTargetObject(const TargetObject &targetObject);
-    bool deleteTargetObject(int targetObjectId);
+    QList<TargetObject> loadTargetObjects(int projectId) const override;
+    TargetObject createTargetObject(const TargetObject &targetObject) override;
+    bool updateTargetObject(const TargetObject &targetObject) override;
+    bool deleteTargetObject(int targetObjectId) override;
 
-    TargetObject createDefaultScope(int projectId, const QString &projectName);
+    TargetObject createDefaultScope(int projectId, const QString &projectName) override;
 
-    QHash<int, ApplicabilityStatus> loadApplicabilityMap(int projectId, int targetObjectId) const;
-    ApplicabilityStatus applicability(int projectId, int targetObjectId, int bausteinDbId) const;
-    bool saveApplicability(const BausteinApplicability &applicability);
+    QHash<int, ApplicabilityStatus> loadApplicabilityMap(int projectId, int targetObjectId) const override;
+    ApplicabilityStatus applicability(int projectId, int targetObjectId, int bausteinDbId) const override;
+    bool saveApplicability(const BausteinApplicability &applicability) override;
 
-    QString lastError() const;
+    QString lastError() const override;
 
 private:
     void deleteTargetObjectSubtree(int targetObjectId);

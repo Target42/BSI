@@ -1,4 +1,4 @@
-QT       += core gui widgets sql xml printsupport
+QT       += core gui widgets sql xml printsupport network
 
 CONFIG += c++17
 
@@ -11,8 +11,15 @@ SOURCES += \
     src/main.cpp \
     src/app/AppContext.cpp \
     src/app/AppPaths.cpp \
+    src/app/AppSettings.cpp \
     src/catalog/GrundschutzImporter.cpp \
     src/catalog/XmlTextExtractor.cpp \
+    src/net/ApiClient.cpp \
+    src/net/HttpCatalogRepository.cpp \
+    src/net/HttpMeasureRepository.cpp \
+    src/net/HttpProjectRepository.cpp \
+    src/net/HttpTargetObjectRepository.cpp \
+    src/net/HttpTeamService.cpp \
     src/persistence/CatalogRepository.cpp \
     src/persistence/Database.cpp \
     src/persistence/MeasureRepository.cpp \
@@ -25,9 +32,12 @@ SOURCES += \
     src/ui/dialogs/BausteinRecommendationDialog.cpp \
     src/ui/dialogs/BausteinViewDialog.cpp \
     src/ui/dialogs/CatalogSearchDialog.cpp \
+    src/ui/dialogs/CreateUserDialog.cpp \
+    src/ui/dialogs/LoginDialog.cpp \
     src/ui/dialogs/MeasureDialog.cpp \
     src/ui/dialogs/ProjectOpenDialog.cpp \
     src/ui/dialogs/ProjectDialog.cpp \
+    src/ui/dialogs/ProjectMembersDialog.cpp \
     src/ui/dialogs/ReportDialog.cpp \
     src/ui/dialogs/TargetObjectDialog.cpp \
     src/ui/models/BausteinTreeModel.cpp \
@@ -39,8 +49,16 @@ SOURCES += \
 HEADERS += \
     src/app/AppContext.h \
     src/app/AppPaths.h \
+    src/app/AppSettings.h \
     src/catalog/GrundschutzImporter.h \
     src/catalog/XmlTextExtractor.h \
+    src/net/ApiClient.h \
+    src/net/HttpCatalogRepository.h \
+    src/net/HttpJson.h \
+    src/net/HttpMeasureRepository.h \
+    src/net/HttpProjectRepository.h \
+    src/net/HttpTargetObjectRepository.h \
+    src/net/HttpTeamService.h \
     src/domain/ApplicabilityStatus.h \
     src/domain/AssessmentStatus.h \
     src/domain/BausteinApplicability.h \
@@ -54,11 +72,17 @@ HEADERS += \
     src/domain/Requirement.h \
     src/domain/RequirementAssessment.h \
     src/domain/RequirementLevel.h \
+    src/domain/SaveResult.h \
+    src/domain/ServerUser.h \
     src/domain/Standard.h \
     src/domain/TargetObject.h \
     src/domain/TargetObjectType.h \
     src/persistence/CatalogRepository.h \
     src/persistence/Database.h \
+    src/persistence/ICatalogRepository.h \
+    src/persistence/IMeasureRepository.h \
+    src/persistence/IProjectRepository.h \
+    src/persistence/ITargetObjectRepository.h \
     src/persistence/MeasureRepository.h \
     src/persistence/ProjectRepository.h \
     src/persistence/TargetObjectRepository.h \
@@ -69,9 +93,12 @@ HEADERS += \
     src/ui/dialogs/BausteinRecommendationDialog.h \
     src/ui/dialogs/BausteinViewDialog.h \
     src/ui/dialogs/CatalogSearchDialog.h \
+    src/ui/dialogs/CreateUserDialog.h \
+    src/ui/dialogs/LoginDialog.h \
     src/ui/dialogs/MeasureDialog.h \
     src/ui/dialogs/ProjectOpenDialog.h \
     src/ui/dialogs/ProjectDialog.h \
+    src/ui/dialogs/ProjectMembersDialog.h \
     src/ui/dialogs/ReportDialog.h \
     src/ui/dialogs/TargetObjectDialog.h \
     src/ui/models/BausteinTreeModel.h \

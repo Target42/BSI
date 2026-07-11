@@ -1,27 +1,24 @@
 #ifndef PERSISTENCE_PROJECTREPOSITORY_H
 #define PERSISTENCE_PROJECTREPOSITORY_H
 
-#include "domain/Project.h"
-#include "domain/RequirementAssessment.h"
+#include "IProjectRepository.h"
 
-#include <QList>
 #include <QSqlDatabase>
-#include <QString>
 
-class ProjectRepository
+class ProjectRepository : public IProjectRepository
 {
 public:
     explicit ProjectRepository(QSqlDatabase db);
 
-    QList<Project> loadProjects() const;
-    Project createProject(const QString &name, const QString &description, const QString &catalogVersion);
-    bool updateProject(const Project &project);
-    bool deleteProject(int projectId);
+    QList<Project> loadProjects() const override;
+    Project createProject(const QString &name, const QString &description, const QString &catalogVersion) override;
+    bool updateProject(const Project &project) override;
+    bool deleteProject(int projectId) override;
 
-    RequirementAssessment loadAssessment(int projectId, int targetObjectId, int requirementDbId) const;
-    bool saveAssessment(const RequirementAssessment &assessment);
+    RequirementAssessment loadAssessment(int projectId, int targetObjectId, int requirementDbId) const override;
+    AssessmentSaveResult saveAssessment(const RequirementAssessment &assessment) override;
 
-    QString lastError() const;
+    QString lastError() const override;
 
 private:
     QSqlDatabase m_db;

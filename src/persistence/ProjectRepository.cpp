@@ -122,7 +122,7 @@ RequirementAssessment ProjectRepository::loadAssessment(int projectId,
     return assessment;
 }
 
-bool ProjectRepository::saveAssessment(const RequirementAssessment &assessment)
+AssessmentSaveResult ProjectRepository::saveAssessment(const RequirementAssessment &assessment)
 {
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
@@ -143,7 +143,7 @@ bool ProjectRepository::saveAssessment(const RequirementAssessment &assessment)
 
     if (!query.exec()) {
         m_lastError = query.lastError().text();
-        return false;
+        return AssessmentSaveResult::failed();
     }
 
     QSqlQuery touchProject(m_db);
@@ -151,7 +151,8 @@ bool ProjectRepository::saveAssessment(const RequirementAssessment &assessment)
     touchProject.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
     touchProject.addBindValue(assessment.projectId);
     touchProject.exec();
-    return true;
+    return AssessmentSaveResult::ok(
+        loadAssessment(assessment.projectId, assessment.targetObjectId, assessment.requirementDbId));
 }
 
 QString ProjectRepository::lastError() const
