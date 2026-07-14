@@ -190,6 +190,17 @@ function ProjectMemberRoleOptions: TArray<string>;
 
 implementation
 
+const
+  S_Erfuellt = 'Erf'#$00FC'llt';
+  S_Entfaellt = 'Entf'#$00E4'llt';
+  S_Benoetigt = 'Ben'#$00F6'tigt';
+  S_Moeglicherweise = 'M'#$00F6'glicherweise';
+  S_Erhoeht = 'Erh'#$00F6'ht';
+  S_ErhoehtFull = 'Erh'#$00F6'ht (Basis + Standard + Erh'#$00F6'ht)';
+  S_Geschaefstsprozess = 'Gesch'#$00E4'ftsprozess';
+  S_Ergaenzend = 'Erg'#$00E4'nzend';
+  S_ErhoehtemSchutzbedarf = 'Anforderungen bei erh'#$00F6'htem Schutzbedarf';
+
 function StandardTypeToString(AValue: TStandardType): string;
 begin
   case AValue of
@@ -212,8 +223,8 @@ begin
   case AValue of
     asOpen: Result := 'Offen';
     asPartial: Result := 'Teilweise';
-    asFulfilled: Result := 'Erfüllt';
-    asNotApplicable: Result := 'Entfällt';
+    asFulfilled: Result := S_Erfuellt;
+    asNotApplicable: Result := S_Entfaellt;
   else
     Result := 'Offen';
   end;
@@ -225,8 +236,8 @@ var
 begin
   Normalized := Trim(AValue);
   if Normalized = 'Teilweise' then Exit(asPartial);
-  if Normalized = 'Erfüllt' then Exit(asFulfilled);
-  if Normalized = 'Entfällt' then Exit(asNotApplicable);
+  if SameText(Normalized, S_Erfuellt) then Exit(asFulfilled);
+  if SameText(Normalized, S_Entfaellt) then Exit(asNotApplicable);
   Result := asOpen;
 end;
 
@@ -234,8 +245,8 @@ function ApplicabilityStatusToString(AValue: TApplicabilityStatus): string;
 begin
   case AValue of
     apUndefined: Result := 'Undefiniert';
-    apRequired: Result := 'Benötigt';
-    apPossible: Result := 'Möglicherweise';
+    apRequired: Result := S_Benoetigt;
+    apPossible: Result := S_Moeglicherweise;
     apNotApplicable: Result := 'Nicht relevant';
   else
     Result := 'Undefiniert';
@@ -247,16 +258,16 @@ var
   Normalized, Lower: string;
 begin
   Normalized := Trim(AValue);
-  if SameText(Normalized, 'Benötigt') or SameText(Normalized, 'Benoetigt') then
+  if SameText(Normalized, S_Benoetigt) or SameText(Normalized, 'Benoetigt') then
     Exit(apRequired);
-  if SameText(Normalized, 'Möglicherweise') or SameText(Normalized, 'Moeglicherweise') then
+  if SameText(Normalized, S_Moeglicherweise) or SameText(Normalized, 'Moeglicherweise') then
     Exit(apPossible);
   if SameText(Normalized, 'Nicht relevant') then
     Exit(apNotApplicable);
   Lower := LowerCase(Normalized);
   if (Pos('ben', Lower) > 0) and (Pos('tigt', Lower) > 0) then
     Exit(apRequired);
-  if (Pos('mog', Lower) > 0) or (Pos('mög', Lower) > 0) then
+  if (Pos('mog', Lower) > 0) or (Pos('m'#$00F6'g', Lower) > 0) then
     if Pos('lich', Lower) > 0 then
       Exit(apPossible);
   Result := apUndefined;
@@ -267,7 +278,7 @@ begin
   case AValue of
     pnBasisOnly: Result := 'Basis-Anforderungen';
     pnNormal: Result := 'Normal (Basis + Standard)';
-    pnElevated: Result := 'Erhöht (Basis + Standard + Erhöht)';
+    pnElevated: Result := S_ErhoehtFull;
   else
     Result := 'Normal (Basis + Standard)';
   end;
@@ -279,7 +290,7 @@ var
 begin
   Normalized := Trim(AValue);
   if Normalized = 'Basis-Anforderungen' then Exit(pnBasisOnly);
-  if Normalized.StartsWith('Erhöht') then Exit(pnElevated);
+  if Normalized.StartsWith(S_Erhoeht) then Exit(pnElevated);
   Result := pnNormal;
 end;
 
@@ -287,7 +298,7 @@ function TargetObjectTypeToString(AValue: TTargetObjectType): string;
 begin
   case AValue of
     totScope: Result := 'Informationsverbund';
-    totProcess: Result := 'Geschäftsprozess';
+    totProcess: Result := S_Geschaefstsprozess;
     totApplication: Result := 'Anwendung';
     totITSystem: Result := 'IT-System';
     totNetwork: Result := 'Kommunikationsverbindung';
@@ -303,7 +314,7 @@ var
 begin
   Normalized := Trim(AValue);
   if SameText(Normalized, 'Informationsverbund') then Exit(totScope);
-  if SameText(Normalized, 'Geschäftsprozess') then Exit(totProcess);
+  if SameText(Normalized, S_Geschaefstsprozess) then Exit(totProcess);
   if SameText(Normalized, 'Anwendung') then Exit(totApplication);
   if SameText(Normalized, 'IT-System') then Exit(totITSystem);
   if SameText(Normalized, 'Kommunikationsverbindung') then Exit(totNetwork);
@@ -316,7 +327,7 @@ begin
   case AValue of
     rlBasis: Result := 'Basis';
     rlStandard: Result := 'Standard';
-    rlErhoeht: Result := 'Erhöht';
+    rlErhoeht: Result := S_Erhoeht;
   else
     Result := 'Unbekannt';
   end;
@@ -329,7 +340,7 @@ begin
   Normalized := Trim(AValue);
   if Normalized = 'Basis' then Exit(rlBasis);
   if Normalized = 'Standard' then Exit(rlStandard);
-  if Normalized = 'Erhöht' then Exit(rlErhoeht);
+  if SameText(Normalized, S_Erhoeht) then Exit(rlErhoeht);
   Result := rlUnknown;
 end;
 
@@ -337,7 +348,7 @@ function RequirementLevelFromSectionTitle(const ATitle: string): TRequirementLev
 begin
   if ATitle = 'Basis-Anforderungen' then Exit(rlBasis);
   if ATitle = 'Standard-Anforderungen' then Exit(rlStandard);
-  if ATitle = 'Anforderungen bei erhöhtem Schutzbedarf' then Exit(rlErhoeht);
+  if ATitle = S_ErhoehtemSchutzbedarf then Exit(rlErhoeht);
   Result := rlUnknown;
 end;
 
@@ -448,7 +459,7 @@ function BausteinRecommendationTierToString(AValue: TBausteinRecommendationTier)
 begin
   case AValue of
     brtCore: Result := 'Kern';
-    brtSupplementary: Result := 'Ergänzend';
+    brtSupplementary: Result := S_Ergaenzend;
   else
     Result := 'Kern';
   end;

@@ -1,7 +1,5 @@
 ﻿program BSIClient;
 
-
-
 uses
 
   Vcl.Forms,
@@ -85,8 +83,6 @@ uses
 
 
 {$R *.res}
-
-
 
 var
 

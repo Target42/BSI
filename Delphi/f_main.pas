@@ -179,7 +179,7 @@ type
     procedure OpenBausteinView(const B: TBaustein; const AInitialSearch: string);
     procedure SelectBausteinInTree(ABausteinId: Integer);
     procedure SelectTargetInTree(ATargetId: Integer);
-    procedure ApplyTargetSelection(ATargetId: Integer);
+    procedure ApplyTargetSelection(ATargetId: Integer; AAutoSwitchIfEmpty: Boolean = False);
     procedure ApplyBausteinSelection(ABausteinId: Integer);
     procedure SelectRequirementRow(ARequirementId: Integer);
     procedure LoadRequirementsForBaustein(ABausteinDbId: Integer);
@@ -546,7 +546,6 @@ var
   O: TTargetObject;
   Fallback: Integer;
 begin
-  Result := 0;
   Fallback := 0;
   for O in Objects do
   begin
@@ -559,7 +558,7 @@ begin
     if Fallback = 0 then
       Fallback := O.Id;
   end;
-  Result := Fallback;
+  Exit(Fallback);
 end;
 
 function TMainForm.FindDescendantTargetWithAssignments(const Objects: TArray<TTargetObject>;
@@ -734,7 +733,7 @@ begin
         if TargetId <= 0 then
           TargetId := Integer(tvTargets.Items[0].Data);
         tvTargets.FullExpand;
-        ApplyTargetSelection(TargetId);
+        ApplyTargetSelection(TargetId, True);
       end;
     finally
       NodeMap.Free;
@@ -1238,7 +1237,7 @@ begin
   end;
 end;
 
-procedure TMainForm.ApplyTargetSelection(ATargetId: Integer);
+procedure TMainForm.ApplyTargetSelection(ATargetId: Integer; AAutoSwitchIfEmpty: Boolean);
 var
   Objects: TArray<TTargetObject>;
   O: TTargetObject;
@@ -1269,9 +1268,7 @@ begin
 
   SelectTargetInTree(ATargetId);
 
-  FApplicabilityMap.Free;
-  FApplicabilityMap := FContext.TargetObjectRepository.LoadApplicabilityMap(
-    FActiveProject.Id, FActiveTarget.Id);
+  ReloadApplicabilityFromServer;
   FMeasureCounts.Free;
   FMeasureCounts := FContext.MeasureRepository.MeasureCounts(
     FActiveProject.Id, FActiveTarget.Id);
@@ -1282,7 +1279,7 @@ begin
     if (Pair.Value = apRequired) or (Pair.Value = apPossible) then
       Inc(AssignedCount);
 
-  if AssignedCount = 0 then
+  if AAutoSwitchIfEmpty and (AssignedCount = 0) then
   begin
     AlternateId := FindAlternateTargetWithAssignments(Objects, FActiveTarget);
     if AlternateId > 0 then
@@ -1295,7 +1292,7 @@ begin
             [TargetObjectTypeToString(O.ObjType), O.Name, ProtectionNeedToString(O.ProtectionNeed)]);
           Break;
         end;
-      ApplyTargetSelection(AlternateId);
+      ApplyTargetSelection(AlternateId, False);
       Exit;
     end;
   end;

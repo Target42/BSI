@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.JSON, System.DateUtils,
-  IdHTTP, IdSSLOpenSSL, IdMultipartFormData, IdGlobal, IsmsDomain;
+  IdHTTP, IdSSLOpenSSL, IdMultipartFormData, IdGlobal, IsmsDomain, HttpJson;
 
 type
   TReloginHandler = reference to function: Boolean;
@@ -28,7 +28,6 @@ type
     procedure ConfigureHttp;
     class function StreamToUtf8Bytes(AStream: TStream): TBytes; static;
     class function ParseUtf8Json(const ABytes: TBytes): TJSONValue; static;
-    class function StreamToUtf8String(AStream: TStream): string; static;
   public
     constructor Create(const ABaseUrl: string = '');
     destructor Destroy; override;
@@ -172,9 +171,15 @@ begin
     Exit;
   Obj := TJSONObject(ADoc);
   if Obj.TryGetValue<string>('error', Result) then
+  begin
+    Result := RepairUtf8Mojibake(Result);
     Exit;
+  end;
   if Obj.TryGetValue<string>('message', Result) then
+  begin
+    Result := RepairUtf8Mojibake(Result);
     Exit;
+  end;
   Result := AFallback;
 end;
 
@@ -194,21 +199,20 @@ begin
 end;
 
 class function TApiClient.ParseUtf8Json(const ABytes: TBytes): TJSONValue;
+var
+  JsonText: string;
+  Utf8: UTF8String;
 begin
   Result := nil;
   if Length(ABytes) = 0 then
     Exit;
-  Result := TJSONObject.ParseJSONValue(ABytes, 0, Length(ABytes), True);
-end;
-
-class function TApiClient.StreamToUtf8String(AStream: TStream): string;
-var
-  Bytes: TBytes;
-begin
-  Bytes := StreamToUtf8Bytes(AStream);
-  if Length(Bytes) = 0 then
-    Exit('');
-  Result := TEncoding.UTF8.GetString(Bytes);
+  // IsUTF8=True expects a UTF-8 BOM; API responses are UTF-8 without BOM.
+  JsonText := TEncoding.UTF8.GetString(ABytes);
+  Result := TJSONObject.ParseJSONValue(JsonText);
+  if Result <> nil then
+    Exit;
+  SetString(Utf8, PAnsiChar(@ABytes[0]), Length(ABytes));
+  Result := TJSONObject.ParseJSONValue(Utf8);
 end;
 
 function TApiClient.DoHttpRequest(const AMethod, APath: string; const ABody: string;
