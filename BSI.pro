@@ -13,6 +13,7 @@ SOURCES += \
     src/app/AppPaths.cpp \
     src/app/AppSettings.cpp \
     src/catalog/GrundschutzImporter.cpp \
+    src/catalog/RequirementTextFormatter.cpp \
     src/catalog/XmlTextExtractor.cpp \
     src/net/ApiClient.cpp \
     src/net/HttpCatalogRepository.cpp \
@@ -51,6 +52,7 @@ HEADERS += \
     src/app/AppPaths.h \
     src/app/AppSettings.h \
     src/catalog/GrundschutzImporter.h \
+    src/catalog/RequirementTextFormatter.h \
     src/catalog/XmlTextExtractor.h \
     src/net/ApiClient.h \
     src/net/HttpCatalogRepository.h \

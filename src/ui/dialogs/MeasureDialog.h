@@ -2,6 +2,7 @@
 #define UI_MEASUREDIALOG_H
 
 #include "domain/Measure.h"
+#include "qdialogbuttonbox.h"
 
 #include <QDialog>
 

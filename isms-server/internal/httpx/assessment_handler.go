@@ -213,6 +213,36 @@ func (h *AssessmentHandler) SaveApplicability(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (h *AssessmentHandler) DeleteApplicability(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	projectID, targetObjectID, err := parseProjectTarget(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	bausteinID, err := strconv.ParseInt(chi.URLParam(r, "bausteinID"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid baustein id")
+		return
+	}
+	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	if err := h.store.DeleteApplicability(r.Context(), projectID, targetObjectID, bausteinID); err != nil {
+		writeError(w, http.StatusInternalServerError, "delete applicability failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func parseProjectTarget(r *http.Request) (int64, int64, error) {
 	projectID, err := strconv.ParseInt(chi.URLParam(r, "projectID"), 10, 64)
 	if err != nil {

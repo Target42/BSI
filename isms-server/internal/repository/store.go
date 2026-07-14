@@ -433,6 +433,14 @@ func (s *Store) SaveApplicability(ctx context.Context, item domain.BausteinAppli
 	return item, err
 }
 
+func (s *Store) DeleteApplicability(ctx context.Context, projectID, targetObjectID, bausteinID int64) error {
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM baustein_applicability
+		WHERE project_id = $1 AND target_object_id = $2 AND baustein_id = $3`,
+		projectID, targetObjectID, bausteinID)
+	return err
+}
+
 func nullableDate(value *string) any {
 	if value == nil || *value == "" {
 		return nil

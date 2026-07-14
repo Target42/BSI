@@ -2,6 +2,7 @@
 
 #include "app/AppPaths.h"
 #include "catalog/GrundschutzImporter.h"
+#include "catalog/RequirementTextFormatter.h"
 #include "domain/AssessmentStatus.h"
 #include "domain/Measure.h"
 #include "domain/SaveResult.h"
@@ -53,8 +54,19 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QLineEdit>
+#include <QUrl>
 
 #include <algorithm>
+
+namespace {
+
+QString serverDisplayName(const QString &baseUrl)
+{
+    const QString host = QUrl(baseUrl).host();
+    return host.isEmpty() ? baseUrl : host;
+}
+
+} // namespace
 
 MainWindow::MainWindow(AppContext &context, QWidget *parent)
     : QMainWindow(parent)
@@ -66,12 +78,18 @@ MainWindow::MainWindow(AppContext &context, QWidget *parent)
     reloadCatalog();
     updateProjectUiEnabled();
     configureRemoteSessionWatcher();
+    updateSessionInfoLabel();
 }
 
 void MainWindow::configureRemoteSessionWatcher()
 {
     if (m_context.isRemote()) {
-        m_context.setReloginHandler([this]() { return m_context.promptRelogin(this); });
+        m_context.setReloginHandler([this]() {
+        if (!m_context.promptRelogin(this))
+            return false;
+        updateSessionInfoLabel();
+        return true;
+    });
 
         if (m_sessionTimer == nullptr) {
             m_sessionTimer = new QTimer(this);
@@ -323,8 +341,8 @@ void MainWindow::buildUi()
     connect(m_switchUserAction, &QAction::triggered, this, &MainWindow::switchUserOrLogout);
     m_reloginAction = projectMenu->addAction(tr("Server-Sitzung erneuern..."));
     connect(m_reloginAction, &QAction::triggered, this, [this]() {
-        if (m_context.isRemote())
-            m_context.promptRelogin(this);
+        if (m_context.isRemote() && m_context.promptRelogin(this))
+            updateSessionInfoLabel();
     });
     projectMenu->addSeparator();
     m_addTargetAction = projectMenu->addAction(tr("Zielobjekt hinzufügen..."));
@@ -359,6 +377,8 @@ void MainWindow::buildUi()
     statusBar()->addWidget(m_contextLabel, 1);
     m_statusLabel = new QLabel(this);
     statusBar()->addPermanentWidget(m_statusLabel);
+    m_sessionInfoLabel = new QLabel(this);
+    statusBar()->addPermanentWidget(m_sessionInfoLabel);
 }
 
 void MainWindow::showTemporaryStatusMessage(const QString &message, int timeoutMs)
@@ -369,6 +389,21 @@ void MainWindow::showTemporaryStatusMessage(const QString &message, int timeoutM
         if (m_statusLabel->text() == message)
             m_statusLabel->setText(previousText);
     });
+}
+
+void MainWindow::updateSessionInfoLabel()
+{
+    if (!m_context.isRemote()) {
+        m_sessionInfoLabel->setText(tr("Lokaler Modus"));
+        return;
+    }
+
+    const QString email = m_context.remoteUser().email.trimmed();
+    const QString server = serverDisplayName(m_context.apiClient().baseUrl());
+    if (email.isEmpty())
+        m_sessionInfoLabel->setText(tr("Server: %1").arg(server));
+    else
+        m_sessionInfoLabel->setText(tr("%1 · %2").arg(email, server));
 }
 
 void MainWindow::updateProjectUiEnabled()
@@ -1180,6 +1215,7 @@ void MainWindow::checkRemoteSession()
         return;
 
     if (m_context.promptRelogin(this)) {
+        updateSessionInfoLabel();
         showTemporaryStatusMessage(tr("Sitzung erneuert"));
         return;
     }
@@ -1223,6 +1259,7 @@ void MainWindow::switchUserOrLogout()
         updateProjectUiEnabled();
         updateWindowTitle();
         configureRemoteSessionWatcher();
+        updateSessionInfoLabel();
         return;
     }
 
@@ -1240,13 +1277,10 @@ void MainWindow::switchUserOrLogout()
     updateProjectUiEnabled();
     updateWindowTitle();
     configureRemoteSessionWatcher();
+    updateSessionInfoLabel();
 
-    if (m_context.isRemote()) {
-        showTemporaryStatusMessage(
-            tr("Angemeldet als %1").arg(m_context.remoteUser().email), 8000);
-    } else {
-        showTemporaryStatusMessage(tr("Lokal-Modus aktiv"), 8000);
-    }
+    showTemporaryStatusMessage(
+        m_context.isRemote() ? tr("Server-Verbindung aktiv") : tr("Lokal-Modus aktiv"), 4000);
 }
 
 void MainWindow::importCatalog()
@@ -1776,7 +1810,7 @@ void MainWindow::loadRequirementDetails(int row, bool forceReload)
     if (hasActiveProjectContext())
         persistTargetSelection(m_activeTargetObject.id);
 
-    m_requirementText->setPlainText(requirement.text);
+    m_requirementText->setHtml(RequirementTextFormatter::toHtml(requirement.text));
 
     if (!hasActiveProjectContext()) {
         m_assessmentNote->clear();

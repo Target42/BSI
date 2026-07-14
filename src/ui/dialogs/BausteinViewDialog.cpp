@@ -1,5 +1,6 @@
 #include "BausteinViewDialog.h"
 
+#include "catalog/RequirementTextFormatter.h"
 #include "domain/RequirementLevel.h"
 
 #include <QDialogButtonBox>
@@ -134,7 +135,7 @@ void BausteinViewDialog::showRequirementAt(int row)
     }
 
     const Requirement &requirement = m_requirements.at(row);
-    m_text->setPlainText(requirement.text);
+    m_text->setHtml(RequirementTextFormatter::toHtml(requirement.text));
 }
 
 void BausteinViewDialog::applyRequirementSearch(const QString &query)

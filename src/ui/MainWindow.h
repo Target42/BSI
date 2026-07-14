@@ -110,6 +110,7 @@ private:
     Requirement currentRequirement() const;
     void updateWindowTitle();
     void updateProjectUiEnabled();
+    void updateSessionInfoLabel();
     bool canEditActiveProject() const;
     bool canDeleteActiveProject() const;
     bool canManageProjectMembers() const;
@@ -175,6 +176,7 @@ private:
     QPushButton *m_editMeasureButton = nullptr;
     QPushButton *m_deleteMeasureButton = nullptr;
     QLabel *m_statusLabel = nullptr;
+    QLabel *m_sessionInfoLabel = nullptr;
     QLabel *m_contextLabel = nullptr;
     QLabel *m_projectProgressLabel = nullptr;
     QLabel *m_targetProgressLabel = nullptr;

@@ -124,16 +124,25 @@ ApplicabilityStatus HttpTargetObjectRepository::applicability(int projectId, int
 
 bool HttpTargetObjectRepository::saveApplicability(const BausteinApplicability &applicability)
 {
-    QJsonObject body;
-    body.insert(QStringLiteral("status"), applicabilityStatusToString(applicability.status));
-
-    int status = 0;
-    m_client.put(
+    const QString path =
         QStringLiteral("/api/v1/projects/%1/target-objects/%2/bausteine/%3/applicability")
             .arg(applicability.projectId)
             .arg(applicability.targetObjectId)
-            .arg(applicability.bausteinDbId),
-        body, &status);
+            .arg(applicability.bausteinDbId);
+
+    int status = 0;
+    if (applicability.status == ApplicabilityStatus::Undefined) {
+        if (!m_client.del(path, &status)) {
+            m_lastError = m_client.lastError();
+            return false;
+        }
+        return status == 204;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("status"), applicabilityStatusToString(applicability.status));
+
+    m_client.put(path, body, &status);
     if (status != 200) {
         m_lastError = m_client.lastError();
         return false;

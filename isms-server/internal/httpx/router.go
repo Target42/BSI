@@ -94,6 +94,7 @@ func (s *Server) Router() http.Handler {
 
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/applicability", s.assessmentHandler.ListApplicability)
 			protected.Put("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/applicability", s.assessmentHandler.SaveApplicability)
+			protected.Delete("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/applicability", s.assessmentHandler.DeleteApplicability)
 
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/measure-counts", s.measureHandler.MeasureCounts)
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/requirements/{requirementID}/measures", s.measureHandler.List)

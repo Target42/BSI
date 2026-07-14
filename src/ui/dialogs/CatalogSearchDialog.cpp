@@ -1,5 +1,6 @@
 #include "CatalogSearchDialog.h"
 
+#include "catalog/RequirementTextFormatter.h"
 #include "ui/dialogs/BausteinViewDialog.h"
 
 #include <QDialogButtonBox>
@@ -257,25 +258,33 @@ void CatalogSearchDialog::showHitAt(int row)
 
     const SearchHit &hit = m_hits.at(row);
 
-    QString previewText = tr("Baustein: %1\nKapitel: %2\nFundstelle: %3\n")
-                              .arg(hit.bausteinLabel, hit.groupName, hit.matchField);
-    if (hit.requirementId != 0)
-        previewText += tr("Anforderung: %1\n\n").arg(hit.requirementLabel);
-    else
-        previewText += QLatin1Char('\n');
-
+    QString previewHtml;
     if (hit.requirementId != 0) {
+        previewHtml =
+            QString(tr("Baustein: %1<br>Kapitel: %2<br>Fundstelle: %3<br>"))
+                .arg(hit.bausteinLabel.toHtmlEscaped(),
+                     hit.groupName.toHtmlEscaped(),
+                     hit.matchField.toHtmlEscaped());
+        previewHtml += tr("Anforderung: %1<br><br>").arg(hit.requirementLabel.toHtmlEscaped());
+
         for (const Requirement &requirement : m_requirements) {
             if (requirement.id == hit.requirementId) {
-                previewText += requirement.text;
+                previewHtml += RequirementTextFormatter::formatEscaped(requirement.text);
                 break;
             }
         }
     } else {
-        previewText += tr("Treffer im Baustein selbst. „Baustein öffnen…“ zeigt alle Anforderungen.");
+        previewHtml =
+            QString(tr("Baustein: %1<br>Kapitel: %2<br>Fundstelle: %3<br><br>"))
+                .arg(hit.bausteinLabel.toHtmlEscaped(),
+                     hit.groupName.toHtmlEscaped(),
+                     hit.matchField.toHtmlEscaped());
+        previewHtml += tr("Treffer im Baustein selbst. „Baustein öffnen…“ zeigt alle Anforderungen.")
+                           .toHtmlEscaped();
     }
 
-    m_preview->setPlainText(previewText);
+    m_preview->setHtml(QStringLiteral("<html><body style=\"font-family:'Segoe UI',sans-serif;\">%1</body></html>")
+                           .arg(previewHtml));
 }
 
 void CatalogSearchDialog::openSelectedHit()
