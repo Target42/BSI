@@ -46,7 +46,7 @@ begin
   try
     Form.FBaustein := ABaustein;
     Form.FRequirements := ARequirements;
-    Form.Caption := ABaustein.ExternalId + ' – ' + ABaustein.Title;
+    Form.Caption := ABaustein.ExternalId + ' - ' + ABaustein.Title;
     Form.lblHeader.Caption := ABaustein.ExternalId + ' ' + ABaustein.Title + sLineBreak + ABaustein.GroupName;
     Form.edtSearch.Text := AInitialSearch;
     Form.SetupGrid;
@@ -123,7 +123,6 @@ begin
   for I := 0 to High(FVisibleRows) do
   begin
     R := FRequirements[FVisibleRows[I]];
-    Inc(Row);
     sgRequirements.RowCount := Row + 1;
     IdLabel := R.ExternalId;
     if R.Withdrawn then
@@ -132,6 +131,7 @@ begin
     sgRequirements.Cells[1, Row] := R.Title;
     sgRequirements.Cells[2, Row] := RequirementLevelToString(R.Level);
     sgRequirements.Cells[3, Row] := R.ResponsibleRole;
+    Inc(Row);
   end;
 
   if sgRequirements.RowCount > 1 then
