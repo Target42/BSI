@@ -15,7 +15,7 @@ type
     function LoadMeasures(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TArray<TMeasure>; override;
     function MeasureCounts(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, Integer>; override;
     function CreateMeasure(const AMeasure: TMeasure): TMeasure; override;
-    function UpdateMeasure(const AMeasure: TMeasure): Boolean; override;
+    function UpdateMeasure(const AMeasure: TMeasure): TMeasureSaveResult; override;
     function DeleteMeasure(AMeasureId: Integer): Boolean; override;
     function GetLastError: string; override;
   end;
@@ -137,12 +137,13 @@ begin
   Q.Free;
 end;
 
-function TMeasureRepository.UpdateMeasure(const AMeasure: TMeasure): Boolean;
+function TMeasureRepository.UpdateMeasure(const AMeasure: TMeasure): TMeasureSaveResult;
 var
   Q: TFDQuery;
   DueStr: string;
+  Updated: TMeasure;
 begin
-  Result := False;
+  Result := MeasureSaveFailed;
   if IsValidDate(AMeasure.DueDate) then
     DueStr := DateToIso(AMeasure.DueDate)
   else
@@ -163,7 +164,8 @@ begin
     Q.ParamByName('status').AsString := MeasureStatusToString(AMeasure.Status);
     Q.ParamByName('id').AsInteger := AMeasure.Id;
     Q.ExecSQL;
-    Result := True;
+    Updated := AMeasure;
+    Result := MeasureSaveOk(Updated);
   except
     on E: Exception do
       FLastError := E.Message;

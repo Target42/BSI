@@ -13,6 +13,7 @@ object LoginForm: TLoginForm
   Font.Style = []
   Position = poScreenCenter
   OnCreate = FormCreate
+  OnShow = FormShow
   TextHeight = 15
   object pnlMain: TPanel
     Left = 0

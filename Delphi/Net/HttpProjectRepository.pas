@@ -17,7 +17,7 @@ type
     function UpdateProject(const AProject: TProject): Boolean; override;
     function DeleteProject(AProjectId: Integer): Boolean; override;
     function LoadAssessment(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TRequirementAssessment; override;
-    function SaveAssessment(const AAssessment: TRequirementAssessment): Boolean; override;
+    function SaveAssessment(const AAssessment: TRequirementAssessment): TAssessmentSaveResult; override;
     function GetLastError: string; override;
   end;
 
@@ -145,13 +145,15 @@ begin
   end;
 end;
 
-function THttpProjectRepository.SaveAssessment(const AAssessment: TRequirementAssessment): Boolean;
+function THttpProjectRepository.SaveAssessment(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
 var
   Body: TJSONObject;
   Doc: TJSONValue;
+  Obj: TJSONObject;
+  Current: TJSONValue;
   Status: Integer;
 begin
-  Result := False;
+  Result := AssessmentSaveFailed;
   Body := TJSONObject.Create;
   try
     Body.AddPair('status', AssessmentStatusToString(AAssessment.Status));
@@ -168,17 +170,21 @@ begin
       if Status = 403 then
       begin
         FLastError := 'Keine Berechtigung zum Speichern.';
-        Exit;
+        Exit(AssessmentSaveForbidden);
       end;
-      if Status = 409 then
+      if (Status = 409) and (Doc is TJSONObject) then
       begin
+        Obj := TJSONObject(Doc);
+        Current := Obj.GetValue('current');
+        if (Current <> nil) and (Current is TJSONObject) then
+          Exit(AssessmentSaveConflict(AssessmentFromJson(TJSONObject(Current))));
         FLastError := 'Datensatz wurde zwischenzeitlich geändert. Bitte neu laden.';
         Exit;
       end;
       if (Status <> 200) or not (Doc is TJSONObject) then
         FLastError := FClient.LastError
       else
-        Result := True;
+        Result := AssessmentSaveOk(AssessmentFromJson(TJSONObject(Doc)));
     finally
       Doc.Free;
     end;

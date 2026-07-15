@@ -16,7 +16,7 @@ type
     function LoadMeasures(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TArray<TMeasure>; override;
     function MeasureCounts(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, Integer>; override;
     function CreateMeasure(const AMeasure: TMeasure): TMeasure; override;
-    function UpdateMeasure(const AMeasure: TMeasure): Boolean; override;
+    function UpdateMeasure(const AMeasure: TMeasure): TMeasureSaveResult; override;
     function DeleteMeasure(AMeasureId: Integer): Boolean; override;
     function GetLastError: string; override;
   end;
@@ -119,13 +119,15 @@ begin
   end;
 end;
 
-function THttpMeasureRepository.UpdateMeasure(const AMeasure: TMeasure): Boolean;
+function THttpMeasureRepository.UpdateMeasure(const AMeasure: TMeasure): TMeasureSaveResult;
 var
   Body: TJSONObject;
   Doc: TJSONValue;
+  Obj: TJSONObject;
+  Current: TJSONValue;
   Status: Integer;
 begin
-  Result := False;
+  Result := MeasureSaveFailed;
   Body := TJSONObject.Create;
   try
     Body.AddPair('title', AMeasure.Title);
@@ -140,17 +142,21 @@ begin
       if Status = 403 then
       begin
         FLastError := 'Keine Berechtigung zum Speichern.';
-        Exit;
+        Exit(MeasureSaveForbidden);
       end;
-      if Status = 409 then
+      if (Status = 409) and (Doc is TJSONObject) then
       begin
+        Obj := TJSONObject(Doc);
+        Current := Obj.GetValue('current');
+        if (Current <> nil) and (Current is TJSONObject) then
+          Exit(MeasureSaveConflict(MeasureFromJson(TJSONObject(Current))));
         FLastError := 'Datensatz wurde zwischenzeitlich geändert. Bitte neu laden.';
         Exit;
       end;
-      if Status <> 200 then
+      if (Status <> 200) or not (Doc is TJSONObject) then
         FLastError := FClient.LastError
       else
-        Result := True;
+        Result := MeasureSaveOk(MeasureFromJson(TJSONObject(Doc)));
     finally
       Doc.Free;
     end;

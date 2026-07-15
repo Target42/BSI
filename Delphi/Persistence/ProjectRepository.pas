@@ -17,7 +17,7 @@ type
     function UpdateProject(const AProject: TProject): Boolean; override;
     function DeleteProject(AProjectId: Integer): Boolean; override;
     function LoadAssessment(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TRequirementAssessment; override;
-    function SaveAssessment(const AAssessment: TRequirementAssessment): Boolean; override;
+    function SaveAssessment(const AAssessment: TRequirementAssessment): TAssessmentSaveResult; override;
     function GetLastError: string; override;
   end;
 
@@ -173,12 +173,12 @@ begin
   end;
 end;
 
-function TProjectRepository.SaveAssessment(const AAssessment: TRequirementAssessment): Boolean;
+function TProjectRepository.SaveAssessment(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
 var
   Q: TFDQuery;
   DueStr: string;
 begin
-  Result := False;
+  Result := AssessmentSaveFailed;
   if IsValidDate(AAssessment.DueDate) then
     DueStr := DateToIso(AAssessment.DueDate)
   else
@@ -208,7 +208,8 @@ begin
     Q.ParamByName('upd').AsString := DateTimeToIso(TTimeZone.Local.ToUniversalTime(Now));
     Q.ParamByName('id').AsInteger := AAssessment.ProjectId;
     Q.ExecSQL;
-    Result := True;
+    Result := AssessmentSaveOk(LoadAssessment(AAssessment.ProjectId, AAssessment.TargetObjectId,
+      AAssessment.RequirementDbId));
   except
     on E: Exception do
       FLastError := E.Message;

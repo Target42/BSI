@@ -11,6 +11,11 @@ uses
 
 type
   TMainForm = class(TForm)
+    ToolBar: TToolBar;
+    btnToolNewProject: TToolButton;
+    btnToolOpenProject: TToolButton;
+    btnToolAddTarget: TToolButton;
+    btnToolImportCatalog: TToolButton;
     StatusBar: TStatusBar;
     pnlLeft: TPanel;
     grpTargets: TGroupBox;
@@ -39,16 +44,22 @@ type
     splMain: TSplitter;
     pnlCenter: TPanel;
     grpRequirements: TGroupBox;
+    lblTargetProgress: TLabel;
+    pbTargetProgress: TProgressBar;
+    lblBaustein: TLabel;
     cboAssignedBausteine: TComboBox;
     sgRequirements: TStringGrid;
     splCenter: TSplitter;
     pnlDetail: TPanel;
+    lblRequirementText: TLabel;
     reRequirementText: TRichEdit;
     lblStatus: TLabel;
     cboAssessmentStatus: TComboBox;
+    lblResponsible: TLabel;
     edtResponsible: TEdit;
     chkHasDueDate: TCheckBox;
     dtpDueDate: TDateTimePicker;
+    lblAssessmentNote: TLabel;
     memAssessmentNote: TMemo;
     grpMeasures: TGroupBox;
     sgMeasures: TStringGrid;
@@ -99,11 +110,16 @@ type
     procedure tvTargetsChange(Sender: TObject; Node: TTreeNode);
     procedure tvBausteineChange(Sender: TObject; Node: TTreeNode);
     procedure tvBausteineClick(Sender: TObject);
+    procedure tvBausteineDblClick(Sender: TObject);
+    procedure tvBausteineCustomDrawItem(Sender: TCustomTreeView; Node: TTreeNode; State: TCustomDrawState;
+      var DefaultDraw: Boolean);
     procedure tvBausteineContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
     procedure sgRequirementsSelectCell(Sender: TObject; ACol, ARow: Integer; var CanSelect: Boolean);
+    procedure sgRequirementsDrawCell(Sender: TObject; ACol, ARow: Integer; Rect: TRect; State: TGridDrawState);
     procedure cboAssessmentStatusChange(Sender: TObject);
     procedure edtResponsibleExit(Sender: TObject);
     procedure memAssessmentNoteExit(Sender: TObject);
+    procedure memAssessmentNoteChange(Sender: TObject);
     procedure chkHasDueDateClick(Sender: TObject);
     procedure dtpDueDateChange(Sender: TObject);
     procedure edtBausteinSearchChange(Sender: TObject);
@@ -111,6 +127,7 @@ type
     procedure DoAddMeasure(Sender: TObject);
     procedure DoEditMeasure(Sender: TObject);
     procedure DoDeleteMeasure(Sender: TObject);
+    procedure sgMeasuresDblClick(Sender: TObject);
     procedure endProgramm(Sender: TObject);
     procedure DoViewBaustein(Sender: TObject);
     procedure DoCatalogSearch(Sender: TObject);
@@ -147,6 +164,9 @@ type
     FSuppressAssignedBausteinChange: Boolean;
     FCurrentAssessmentVersion: Integer;
     FSessionTimer: TTimer;
+    FStatusTimer: TTimer;
+    FStatusPreviousMessage: string;
+    FLastConflictNotifiedRequirementId: Integer;
     FContextMenuBausteinId: Integer;
     FBlockTargetSelection: Boolean;
 
@@ -154,7 +174,10 @@ type
     procedure ActivateWithContext;
     procedure InitializeUi;
     procedure UpdateProjectUi;
+    procedure UpdateContextLabel;
     procedure UpdateSessionInfoLabel;
+    procedure ShowTemporaryStatusMessage(const AMessage: string; ATimeoutMs: Integer = 5000);
+    procedure StatusTimerElapsed(Sender: TObject);
     function CanEditActiveProject: Boolean;
     function CanDeleteActiveProject: Boolean;
     function CanManageProjectMembers: Boolean;
@@ -165,6 +188,7 @@ type
     procedure ReloadApplicabilityFromServer;
     procedure PopulateAssignedBausteinBox;
     procedure ReloadProgress;
+    procedure UpdateTargetProgress;
     procedure PersistSessionSelection;
     function FindBausteinById(ABausteinId: Integer): TBaustein;
     function BuildTargetTreeCaption(const Obj: TTargetObject): string;
@@ -176,6 +200,9 @@ type
     function FindDescendantTargetWithAssignments(const Objects: TArray<TTargetObject>;
       AParentId: Integer): Integer;
     function BuildBausteinCaption(const B: TBaustein): string;
+    function MatchingBausteinIdsForSearch(const ANeedle: string): TDictionary<Integer, Byte>;
+    procedure EnsureApplicableFilterFeasible;
+    procedure ShowBausteinNotApplicableMessage(ABausteinDbId: Integer; AStatus: TApplicabilityStatus);
     procedure OpenBausteinView(const B: TBaustein; const AInitialSearch: string);
     procedure SelectBausteinInTree(ABausteinId: Integer);
     procedure SelectTargetInTree(ATargetId: Integer);
@@ -186,10 +213,15 @@ type
     procedure LoadRequirementDetails(ARow: Integer);
     procedure LoadMeasuresForCurrentRequirement;
     procedure ClearRequirementView;
-    procedure SaveCurrentAssessment;
+    function SaveCurrentAssessment(ANotifyDialog: Boolean = False): Boolean;
+    procedure SaveAssessmentFields;
+    procedure SyncAssessmentUi(const AAssessment: TRequirementAssessment);
+    procedure ApplyAssessmentConflict(const AAssessment: TRequirementAssessment;
+      ARequirementDbId: Integer; AShowDialog: Boolean);
     function HasActiveProject: Boolean;
     function SelectedBausteinId: Integer;
     function IsBausteinApplicable(ABausteinDbId: Integer): Boolean;
+    function IsAssessmentDueDateOverdue(const AAssessment: TRequirementAssessment): Boolean;
     procedure SetBausteinApplicability(AStatus: TApplicabilityStatus; ABausteinId: Integer = 0);
   public
     property AppContext: TAppContext read FContext write SetAppContext;
@@ -220,8 +252,14 @@ begin
   FRecommendationTiers := TDictionary<Integer, TBausteinRecommendationTier>.Create;
   FLastBausteinByTarget := TDictionary<Integer, Integer>.Create;
   FLastRequirementByTarget := TDictionary<Integer, Integer>.Create;
+  FLastConflictNotifiedRequirementId := 0;
+  FStatusTimer := TTimer.Create(Self);
+  FStatusTimer.Enabled := False;
+  FStatusTimer.Interval := 5000;
+  FStatusTimer.OnTimer := StatusTimerElapsed;
   InitializeUi;
-  StatusBar.Panels[0].Text := 'Lokaler Modus';
+  UpdateContextLabel;
+  StatusBar.Panels[2].Text := 'Lokaler Modus';
 end;
 
 procedure TMainForm.SetAppContext(const AContext: TAppContext);
@@ -275,20 +313,28 @@ procedure TMainForm.InitializeUi;
 begin
   pbProjectProgress.Min := 0;
   pbProjectProgress.Max := 100;
+  pbTargetProgress.Min := 0;
+  pbTargetProgress.Max := 100;
 
   sgRequirements.FixedRows := 1;
+  sgRequirements.ColCount := 8;
+  sgRequirements.DefaultDrawing := False;
   sgRequirements.Cells[0, 0] := 'ID';
-  sgRequirements.Cells[1, 0] := 'Titel';
+  sgRequirements.Cells[1, 0] := 'Anforderung';
   sgRequirements.Cells[2, 0] := 'Stufe';
   sgRequirements.Cells[3, 0] := 'Rolle';
   sgRequirements.Cells[4, 0] := 'Status';
-  sgRequirements.Cells[5, 0] := 'Maßnahmen';
+  sgRequirements.Cells[5, 0] := 'Umsetzung durch';
+  sgRequirements.Cells[6, 0] := 'Frist';
+  sgRequirements.Cells[7, 0] := 'Maßnahmen';
   sgRequirements.ColWidths[0] := 90;
-  sgRequirements.ColWidths[1] := 280;
-  sgRequirements.ColWidths[2] := 70;
-  sgRequirements.ColWidths[3] := 100;
-  sgRequirements.ColWidths[4] := 90;
-  sgRequirements.ColWidths[5] := 70;
+  sgRequirements.ColWidths[1] := 240;
+  sgRequirements.ColWidths[2] := 60;
+  sgRequirements.ColWidths[3] := 90;
+  sgRequirements.ColWidths[4] := 80;
+  sgRequirements.ColWidths[5] := 120;
+  sgRequirements.ColWidths[6] := 80;
+  sgRequirements.ColWidths[7] := 70;
 
   sgMeasures.FixedRows := 1;
   sgMeasures.Cells[0, 0] := 'Titel';
@@ -337,15 +383,57 @@ var
   Server: string;
 begin
   if not FContext.IsRemote then
-    StatusBar.Panels[0].Text := 'Lokaler Modus'
+    StatusBar.Panels[2].Text := 'Lokaler Modus'
   else
   begin
     Server := FContext.Settings.ServerUrl;
     if Trim(FContext.RemoteUser.Email) <> '' then
-      StatusBar.Panels[0].Text := Trim(FContext.RemoteUser.Email) + ' · ' + Server
+      StatusBar.Panels[2].Text := Trim(FContext.RemoteUser.Email) + ' · ' + Server
     else
-      StatusBar.Panels[0].Text := 'Server: ' + Server;
+      StatusBar.Panels[2].Text := 'Server: ' + Server;
   end;
+end;
+
+procedure TMainForm.UpdateContextLabel;
+var
+  ContextText: string;
+begin
+  if not HasActiveProject then
+    ContextText := 'Kein Projekt geöffnet'
+  else if FActiveTarget.Id = 0 then
+  begin
+    ContextText := Format('Projekt "%s" – bitte Zielobjekt wählen', [FActiveProject.Name]);
+    if FContext.IsRemote and SameText(FActiveProject.Role, 'viewer') then
+      ContextText := ContextText + ' (Nur Lesen)';
+  end
+  else
+  begin
+    ContextText := Format('Projekt "%s" – Zielobjekt: %s – %s  (%s)',
+      [FActiveProject.Name,
+       TargetObjectTypeToString(FActiveTarget.ObjType),
+       FActiveTarget.Name,
+       ProtectionNeedToString(FActiveTarget.ProtectionNeed)]);
+    if FContext.IsRemote and SameText(FActiveProject.Role, 'viewer') then
+      ContextText := ContextText + ' — Nur Lesen';
+  end;
+  StatusBar.Panels[0].Text := ContextText;
+end;
+
+procedure TMainForm.ShowTemporaryStatusMessage(const AMessage: string; ATimeoutMs: Integer);
+begin
+  if AMessage = '' then
+    Exit;
+  FStatusPreviousMessage := StatusBar.Panels[1].Text;
+  StatusBar.Panels[1].Text := AMessage;
+  FStatusTimer.Interval := ATimeoutMs;
+  FStatusTimer.Enabled := False;
+  FStatusTimer.Enabled := True;
+end;
+
+procedure TMainForm.StatusTimerElapsed(Sender: TObject);
+begin
+  FStatusTimer.Enabled := False;
+  StatusBar.Panels[1].Text := FStatusPreviousMessage;
 end;
 
 procedure TMainForm.CheckRemoteSession(Sender: TObject);
@@ -413,6 +501,14 @@ begin
   btnAddMeasure.Enabled := HasProject and CanEdit and (FActiveRequirementId > 0);
   btnEditMeasure.Enabled := HasProject and (FActiveRequirementId > 0);
   btnDeleteMeasure.Enabled := HasProject and CanEdit and (FActiveRequirementId > 0);
+  if CanEdit then
+    btnEditMeasure.Caption := 'Bearbeiten'
+  else
+    btnEditMeasure.Caption := 'Anzeigen';
+  btnToolNewProject.Enabled := True;
+  btnToolOpenProject.Enabled := True;
+  btnToolAddTarget.Enabled := HasProject and CanEdit;
+  btnToolImportCatalog.Enabled := True;
   cboAssessmentStatus.Enabled := HasProject and (FActiveTarget.Id > 0) and CanEdit;
   edtResponsible.Enabled := HasProject and (FActiveTarget.Id > 0) and CanEdit;
   chkHasDueDate.Enabled := HasProject and (FActiveTarget.Id > 0) and CanEdit;
@@ -426,12 +522,6 @@ begin
     else
       Caption := Format('ISMS Werkzeug – IT-Grundschutz %s – Projekt: %s (%d Anforderungen im Katalog)',
         [FContext.CatalogVersion, FActiveProject.Name, Length(FCatalogRequirements)]);
-    lblProjectProgress.Caption := FActiveProject.Name;
-    if FActiveTarget.Id > 0 then
-      grpRequirements.Caption := Format('Anforderungen – %s – %s',
-        [TargetObjectTypeToString(FActiveTarget.ObjType), FActiveTarget.Name])
-    else
-      grpRequirements.Caption := 'Anforderungen';
   end
   else
   begin
@@ -439,8 +529,9 @@ begin
       [FContext.CatalogVersion, Length(FCatalogRequirements)]);
     lblProjectProgress.Caption := 'Kein Projekt geöffnet';
     pbProjectProgress.Visible := False;
-    grpRequirements.Caption := 'Anforderungen';
   end;
+  UpdateTargetProgress;
+  UpdateContextLabel;
 end;
 
 procedure TMainForm.ReloadProgress;
@@ -455,6 +546,7 @@ begin
     pbProjectProgress.Visible := False;
     lblProjectProgress.Caption := 'Kein Projekt geöffnet';
     FSummariesByTarget.Clear;
+    UpdateTargetProgress;
     Exit;
   end;
   Service := TReportService.Create(
@@ -468,12 +560,91 @@ begin
     NewSummaries := Service.SummarizeByTargetObject(Rows);
     FSummariesByTarget.Free;
     FSummariesByTarget := NewSummaries;
-    lblProjectProgress.Caption := TReportService.FormatSummaryText(ProjectSummary);
+    lblProjectProgress.Caption := 'Projekt: ' + TReportService.FormatSummaryText(ProjectSummary);
     pbProjectProgress.Position := TReportService.ProgressPercent(ProjectSummary);
     pbProjectProgress.Visible := ProjectSummary.TotalRequirements > 0;
+    UpdateTargetProgress;
   finally
     Service.Free;
   end;
+end;
+
+procedure TMainForm.UpdateTargetProgress;
+var
+  Summary: TReportSummary;
+begin
+  if not HasActiveProject then
+  begin
+    lblTargetProgress.Caption := '';
+    pbTargetProgress.Visible := False;
+    Exit;
+  end;
+  if FActiveTarget.Id = 0 then
+  begin
+    lblTargetProgress.Caption := 'Bitte Zielobjekt wählen';
+    pbTargetProgress.Position := 0;
+    pbTargetProgress.Visible := False;
+    Exit;
+  end;
+  if FSummariesByTarget.TryGetValue(FActiveTarget.Id, Summary) then
+  begin
+    lblTargetProgress.Caption := Format('Zielobjekt "%s – %s": %s',
+      [TargetObjectTypeToString(FActiveTarget.ObjType),
+       FActiveTarget.Name,
+       TReportService.FormatSummaryText(Summary)]);
+    pbTargetProgress.Position := TReportService.ProgressPercent(Summary);
+    pbTargetProgress.Visible := Summary.TotalRequirements > 0;
+  end
+  else
+  begin
+    lblTargetProgress.Caption := Format('Zielobjekt "%s – %s": Keine anwendbaren Anforderungen',
+      [TargetObjectTypeToString(FActiveTarget.ObjType), FActiveTarget.Name]);
+    pbTargetProgress.Position := 0;
+    pbTargetProgress.Visible := False;
+  end;
+end;
+
+function TMainForm.IsAssessmentDueDateOverdue(const AAssessment: TRequirementAssessment): Boolean;
+begin
+  Result := IsValidDate(AAssessment.DueDate) and
+    (Trunc(AAssessment.DueDate) < Trunc(Date)) and
+    (AAssessment.Status <> asFulfilled) and
+    (AAssessment.Status <> asNotApplicable);
+end;
+
+procedure TMainForm.sgRequirementsDrawCell(Sender: TObject; ACol, ARow: Integer;
+  Rect: TRect; State: TGridDrawState);
+var
+  Text: string;
+  DrawRect: TRect;
+begin
+  Text := sgRequirements.Cells[ACol, ARow];
+  if ARow = 0 then
+  begin
+    sgRequirements.Canvas.Brush.Color := clBtnFace;
+    sgRequirements.Canvas.FillRect(Rect);
+    sgRequirements.Canvas.Font.Color := clWindowText;
+    sgRequirements.Canvas.Font.Style := [fsBold];
+  end
+  else
+  begin
+    sgRequirements.Canvas.Brush.Color := clWindow;
+    if gdSelected in State then
+    begin
+      sgRequirements.Canvas.Brush.Color := clHighlight;
+      sgRequirements.Canvas.Font.Color := clHighlightText;
+    end
+    else if (ACol = 6) and (sgRequirements.Objects[2, ARow] <> nil) then
+      sgRequirements.Canvas.Font.Color := clRed
+    else
+      sgRequirements.Canvas.Font.Color := clWindowText;
+    sgRequirements.Canvas.FillRect(Rect);
+  end;
+  DrawRect := Rect;
+  Inc(DrawRect.Left, 2);
+  sgRequirements.Canvas.TextRect(DrawRect, DrawRect.Left, DrawRect.Top + 2, Text);
+  if ARow = 0 then
+    sgRequirements.Canvas.Font.Style := [];
 end;
 
 procedure TMainForm.ReloadCatalog;
@@ -759,41 +930,152 @@ var
   GroupMap: TDictionary<string, TTreeNode>;
   SearchText: string;
   Caption: string;
+  MatchingIds: TDictionary<Integer, Byte>;
+  HasSearch: Boolean;
 begin
   tvBausteine.Items.BeginUpdate;
   try
     tvBausteine.Items.Clear;
     GroupMap := TDictionary<string, TTreeNode>.Create;
     try
-      SearchText := LowerCase(Trim(edtBausteinSearch.Text));
-      for B in FCatalogBausteine do
-      begin
-        if chkFilterApplicable.Checked and HasActiveProject and (FActiveTarget.Id > 0) then
-          if not IsBausteinApplicable(B.Id) then
-            Continue;
-        if (SearchText <> '') and
-           (Pos(SearchText, LowerCase(B.ExternalId)) = 0) and
-           (Pos(SearchText, LowerCase(B.Title)) = 0) then
-          Continue;
-        if not GroupMap.TryGetValue(B.GroupName, GroupNode) then
+      SearchText := Trim(edtBausteinSearch.Text);
+      HasSearch := SearchText <> '';
+      if HasSearch then
+        MatchingIds := MatchingBausteinIdsForSearch(SearchText)
+      else
+        MatchingIds := nil;
+      try
+        for B in FCatalogBausteine do
         begin
-          GroupNode := tvBausteine.Items.AddChild(nil, B.GroupName);
-          GroupNode.Data := nil;
-          GroupMap.Add(B.GroupName, GroupNode);
+          if chkFilterApplicable.Checked and HasActiveProject and (FActiveTarget.Id > 0) then
+            if not IsBausteinApplicable(B.Id) then
+              Continue;
+          if HasSearch then
+          begin
+            if (MatchingIds = nil) or not MatchingIds.ContainsKey(B.Id) then
+              Continue;
+          end;
+          if not GroupMap.TryGetValue(B.GroupName, GroupNode) then
+          begin
+            GroupNode := tvBausteine.Items.AddChild(nil, B.GroupName);
+            GroupNode.Data := nil;
+            GroupMap.Add(B.GroupName, GroupNode);
+          end;
+          Caption := BuildBausteinCaption(B);
+          BausteinNode := tvBausteine.Items.AddChild(GroupNode, Caption);
+          BausteinNode.Data := Pointer(B.Id);
         end;
-        Caption := BuildBausteinCaption(B);
-        BausteinNode := tvBausteine.Items.AddChild(GroupNode, Caption);
-        BausteinNode.Data := Pointer(B.Id);
+        tvBausteine.FullExpand;
+        if FActiveBausteinId > 0 then
+          SelectBausteinInTree(FActiveBausteinId);
+      finally
+        MatchingIds.Free;
       end;
-      tvBausteine.FullExpand;
-      if FActiveBausteinId > 0 then
-        SelectBausteinInTree(FActiveBausteinId);
     finally
       GroupMap.Free;
     end;
   finally
     tvBausteine.Items.EndUpdate;
   end;
+end;
+
+function TMainForm.MatchingBausteinIdsForSearch(const ANeedle: string): TDictionary<Integer, Byte>;
+var
+  NeedleLower: string;
+  B: TBaustein;
+  R: TRequirement;
+begin
+  Result := TDictionary<Integer, Byte>.Create;
+  NeedleLower := LowerCase(Trim(ANeedle));
+  if NeedleLower = '' then
+    Exit;
+  for B in FCatalogBausteine do
+  begin
+    if (Pos(NeedleLower, LowerCase(B.ExternalId)) > 0) or
+       (Pos(NeedleLower, LowerCase(B.Title)) > 0) or
+       (Pos(NeedleLower, LowerCase(B.GroupName)) > 0) then
+      Result.AddOrSetValue(B.Id, 1);
+  end;
+  for R in FCatalogRequirements do
+  begin
+    if (Pos(NeedleLower, LowerCase(R.ExternalId)) > 0) or
+       (Pos(NeedleLower, LowerCase(R.Title)) > 0) or
+       (Pos(NeedleLower, LowerCase(R.Text)) > 0) or
+       (Pos(NeedleLower, LowerCase(R.ResponsibleRole)) > 0) then
+      Result.AddOrSetValue(R.BausteinDbId, 1);
+  end;
+end;
+
+procedure TMainForm.EnsureApplicableFilterFeasible;
+begin
+  if not chkFilterApplicable.Checked or not HasActiveProject or (FActiveTarget.Id = 0) then
+    Exit;
+  if TargetHasAssignedBausteine(FActiveTarget.Id) then
+    Exit;
+  chkFilterApplicable.Checked := False;
+  ReloadBausteinTree;
+  ShowTemporaryStatusMessage(
+    Format('Filter deaktiviert: Für "%s – %s" sind noch keine Bausteine markiert. ' +
+      'Baustein wählen → Rechtsklick → "Benötigt" oder "Möglicherweise".',
+      [TargetObjectTypeToString(FActiveTarget.ObjType), FActiveTarget.Name]), 8000);
+end;
+
+procedure TMainForm.ShowBausteinNotApplicableMessage(ABausteinDbId: Integer;
+  AStatus: TApplicabilityStatus);
+begin
+  ClearRequirementView;
+  if AStatus = apNotApplicable then
+    reRequirementText.Text :=
+      Format('Dieser Baustein ist für das Zielobjekt "%s – %s" als "Nicht relevant" markiert.',
+        [TargetObjectTypeToString(FActiveTarget.ObjType), FActiveTarget.Name])
+  else
+    reRequirementText.Text :=
+      Format('Der Baustein ist für "%s – %s" noch nicht als anwendbar markiert.' + sLineBreak +
+        sLineBreak +
+        'Bitte zuerst per Rechtsklick auf den Baustein "Benötigt" oder "Möglicherweise" wählen. ' +
+        'Erst dann können Anforderungen und Maßnahmen für dieses Zielobjekt bearbeitet werden.',
+        [TargetObjectTypeToString(FActiveTarget.ObjType), FActiveTarget.Name]);
+end;
+
+procedure TMainForm.tvBausteineCustomDrawItem(Sender: TCustomTreeView; Node: TTreeNode;
+  State: TCustomDrawState; var DefaultDraw: Boolean);
+var
+  BausteinId: Integer;
+  Status: TApplicabilityStatus;
+  Tier: TBausteinRecommendationTier;
+begin
+  DefaultDraw := True;
+  if Node.Data = nil then
+    Exit;
+  BausteinId := Integer(Node.Data);
+  if not FApplicabilityMap.TryGetValue(BausteinId, Status) then
+    Status := apUndefined;
+  if chkHighlightRecommendations.Checked and HasActiveProject and (FActiveTarget.Id > 0) and
+     FRecommendedIds.ContainsKey(BausteinId) and (Status = apUndefined) then
+  begin
+    if FRecommendationTiers.TryGetValue(BausteinId, Tier) and (Tier = brtCore) then
+      tvBausteine.Canvas.Font.Color := RGB(0, 102, 153)
+    else
+      tvBausteine.Canvas.Font.Color := RGB(0, 128, 96);
+  end
+  else
+    case Status of
+      apRequired: tvBausteine.Canvas.Font.Color := clMaroon;
+      apPossible: tvBausteine.Canvas.Font.Color := RGB(0, 128, 0);
+      apNotApplicable: tvBausteine.Canvas.Font.Color := clGrayText;
+    else
+      tvBausteine.Canvas.Font.Color := clWindowText;
+    end;
+end;
+
+procedure TMainForm.tvBausteineDblClick(Sender: TObject);
+begin
+  DoViewBaustein(Sender);
+end;
+
+procedure TMainForm.sgMeasuresDblClick(Sender: TObject);
+begin
+  DoEditMeasure(Sender);
 end;
 
 function TMainForm.SelectedBausteinId: Integer;
@@ -854,8 +1136,20 @@ begin
     sgRequirements.Cells[2, Row] := RequirementLevelToString(R.Level);
     sgRequirements.Cells[3, Row] := R.ResponsibleRole;
     sgRequirements.Cells[4, Row] := AssessmentStatusToString(Assessment.Status);
-    sgRequirements.Cells[5, Row] := IntToStr(MeasureCnt);
+    sgRequirements.Cells[5, Row] := Assessment.Responsible;
+    if IsValidDate(Assessment.DueDate) then
+      sgRequirements.Cells[6, Row] := FormatDateTime('dd.mm.yyyy', Assessment.DueDate)
+    else
+      sgRequirements.Cells[6, Row] := '';
+    if MeasureCnt > 0 then
+      sgRequirements.Cells[7, Row] := IntToStr(MeasureCnt)
+    else
+      sgRequirements.Cells[7, Row] := '';
     sgRequirements.Objects[0, Row] := TObject(R.Id);
+    if IsAssessmentDueDateOverdue(Assessment) then
+      sgRequirements.Objects[2, Row] := TObject(1)
+    else
+      sgRequirements.Objects[2, Row] := nil;
   end;
   if sgRequirements.RowCount > 1 then
   begin
@@ -893,16 +1187,7 @@ begin
   TRequirementTextFormatter.ApplyToRichEdit(reRequirementText, R.Text);
   Assessment := FContext.ProjectRepository.LoadAssessment(
     FActiveProject.Id, FActiveTarget.Id, ReqId);
-  FSuppressAssessmentSave := True;
-  cboAssessmentStatus.ItemIndex := Ord(Assessment.Status);
-  edtResponsible.Text := Assessment.Responsible;
-  chkHasDueDate.Checked := IsValidDate(Assessment.DueDate);
-  dtpDueDate.Enabled := chkHasDueDate.Checked;
-  if chkHasDueDate.Checked then
-    dtpDueDate.Date := Assessment.DueDate;
-  memAssessmentNote.Text := Assessment.Note;
-  FCurrentAssessmentVersion := Assessment.Version;
-  FSuppressAssessmentSave := False;
+  SyncAssessmentUi(Assessment);
   LoadMeasuresForCurrentRequirement;
 end;
 
@@ -932,14 +1217,58 @@ begin
   end;
 end;
 
-procedure TMainForm.SaveCurrentAssessment;
+procedure TMainForm.SyncAssessmentUi(const AAssessment: TRequirementAssessment);
+begin
+  FSuppressAssessmentSave := True;
+  cboAssessmentStatus.ItemIndex := Ord(AAssessment.Status);
+  edtResponsible.Text := AAssessment.Responsible;
+  chkHasDueDate.Checked := IsValidDate(AAssessment.DueDate);
+  dtpDueDate.Enabled := chkHasDueDate.Checked and CanEditActiveProject;
+  if chkHasDueDate.Checked then
+    dtpDueDate.Date := AAssessment.DueDate;
+  memAssessmentNote.Text := AAssessment.Note;
+  FCurrentAssessmentVersion := AAssessment.Version;
+  FSuppressAssessmentSave := False;
+end;
+
+procedure TMainForm.ApplyAssessmentConflict(const AAssessment: TRequirementAssessment;
+  ARequirementDbId: Integer; AShowDialog: Boolean);
+var
+  Refreshed: TRequirementAssessment;
+begin
+  Refreshed := AAssessment;
+  if FMeasureCounts.TryGetValue(ARequirementDbId, Refreshed.MeasureCount) then
+  else
+    Refreshed.MeasureCount := 0;
+  FSuppressAssessmentSave := True;
+  if (FActiveTarget.Id = Refreshed.TargetObjectId) and
+     (FActiveRequirementId = ARequirementDbId) then
+    SyncAssessmentUi(Refreshed);
+  FSuppressAssessmentSave := False;
+  if FActiveBausteinId > 0 then
+    LoadRequirementsForBaustein(FActiveBausteinId);
+  if AShowDialog then
+  begin
+    MessageDlg('Ein anderer Benutzer hat diese Bewertung zwischenzeitlich geändert. ' +
+      'Die aktuelle Server-Version wurde geladen.', mtWarning, [mbOK], 0);
+    FLastConflictNotifiedRequirementId := 0;
+  end
+  else if FLastConflictNotifiedRequirementId <> ARequirementDbId then
+  begin
+    ShowTemporaryStatusMessage(
+      'Konflikt: Bewertung wurde von einem anderen Benutzer geändert und neu geladen.', 10000);
+    FLastConflictNotifiedRequirementId := ARequirementDbId;
+  end;
+end;
+
+function TMainForm.SaveCurrentAssessment(ANotifyDialog: Boolean): Boolean;
 var
   Assessment: TRequirementAssessment;
-  Saved: TRequirementAssessment;
+  SaveResult: TAssessmentSaveResult;
 begin
   if FSuppressAssessmentSave or not HasActiveProject or
      (FActiveTarget.Id = 0) or (FActiveRequirementId = 0) or not CanEditActiveProject then
-    Exit;
+    Exit(True);
   FillChar(Assessment, SizeOf(Assessment), 0);
   Assessment.ProjectId := FActiveProject.Id;
   Assessment.TargetObjectId := FActiveTarget.Id;
@@ -951,18 +1280,40 @@ begin
   if chkHasDueDate.Checked then
     Assessment.DueDate := dtpDueDate.Date;
   Assessment.Note := memAssessmentNote.Text;
-  if not FContext.ProjectRepository.SaveAssessment(Assessment) then
-    MessageDlg('Speichern fehlgeschlagen: ' + FContext.ProjectRepository.LastError,
-      mtError, [mbOK], 0)
-  else
+  SaveResult := FContext.ProjectRepository.SaveAssessment(Assessment);
+  if SaveResult.Status = assOk then
   begin
-    Saved := FContext.ProjectRepository.LoadAssessment(
-      FActiveProject.Id, FActiveTarget.Id, FActiveRequirementId);
-    FCurrentAssessmentVersion := Saved.Version;
+    FCurrentAssessmentVersion := SaveResult.Assessment.Version;
+    if FLastConflictNotifiedRequirementId = FActiveRequirementId then
+      FLastConflictNotifiedRequirementId := 0;
     ReloadProgress;
     if FActiveBausteinId > 0 then
       LoadRequirementsForBaustein(FActiveBausteinId);
+    Exit(True);
   end;
+  if SaveResult.Status = assVersionConflict then
+  begin
+    ApplyAssessmentConflict(SaveResult.Assessment, FActiveRequirementId, ANotifyDialog);
+    Exit(False);
+  end;
+  if ANotifyDialog then
+    MessageDlg('Speichern fehlgeschlagen: ' + FContext.ProjectRepository.LastError,
+      mtError, [mbOK], 0);
+  Result := False;
+end;
+
+procedure TMainForm.SaveAssessmentFields;
+begin
+  if FSuppressAssessmentSave or not CanEditActiveProject then
+    Exit;
+  if not SaveCurrentAssessment(False) then
+    ShowTemporaryStatusMessage('Speichern fehlgeschlagen: ' +
+      FContext.ProjectRepository.LastError, 5000);
+end;
+
+procedure TMainForm.memAssessmentNoteChange(Sender: TObject);
+begin
+  SaveAssessmentFields;
 end;
 
 procedure TMainForm.DoShowSollIstReport(Sender: TObject);
@@ -1305,6 +1656,7 @@ begin
 
   ReloadBausteinTree;
   PopulateAssignedBausteinBox;
+  EnsureApplicableFilterFeasible;
   if FActiveBausteinId > 0 then
   begin
     LoadRequirementsForBaustein(FActiveBausteinId);
@@ -1332,6 +1684,8 @@ begin
 end;
 
 procedure TMainForm.ApplyBausteinSelection(ABausteinId: Integer);
+var
+  ApplicabilityStatus: TApplicabilityStatus;
 begin
   if ABausteinId <= 0 then
   begin
@@ -1350,8 +1704,9 @@ begin
 
   if not IsBausteinApplicable(ABausteinId) then
   begin
-    MessageDlg('Baustein ist für dieses Zielobjekt noch nicht zugewiesen.' + sLineBreak +
-      'Rechtsklick → "Benötigt" oder "Möglicherweise".', mtInformation, [mbOK], 0);
+    if not FApplicabilityMap.TryGetValue(ABausteinId, ApplicabilityStatus) then
+      ApplicabilityStatus := apUndefined;
+    ShowBausteinNotApplicableMessage(ABausteinId, ApplicabilityStatus);
     if FActiveBausteinId > 0 then
       SelectBausteinInTree(FActiveBausteinId);
     Exit;
@@ -1569,12 +1924,14 @@ end;
 
 procedure TMainForm.cboAssessmentStatusChange(Sender: TObject);
 begin
-  SaveCurrentAssessment;
+  if not SaveCurrentAssessment(True) then
+    ShowTemporaryStatusMessage('Speichern fehlgeschlagen: ' +
+      FContext.ProjectRepository.LastError, 5000);
 end;
 
 procedure TMainForm.edtResponsibleExit(Sender: TObject);
 begin
-  SaveCurrentAssessment;
+  SaveCurrentAssessment(False);
 end;
 
 procedure TMainForm.endProgramm(Sender: TObject);
@@ -1599,18 +1956,18 @@ end;
 
 procedure TMainForm.memAssessmentNoteExit(Sender: TObject);
 begin
-  SaveCurrentAssessment;
+  SaveCurrentAssessment(False);
 end;
 
 procedure TMainForm.chkHasDueDateClick(Sender: TObject);
 begin
-  dtpDueDate.Enabled := chkHasDueDate.Checked;
-  SaveCurrentAssessment;
+  dtpDueDate.Enabled := chkHasDueDate.Checked and CanEditActiveProject;
+  SaveCurrentAssessment(True);
 end;
 
 procedure TMainForm.dtpDueDateChange(Sender: TObject);
 begin
-  SaveCurrentAssessment;
+  SaveCurrentAssessment(False);
 end;
 
 procedure TMainForm.edtBausteinSearchChange(Sender: TObject);
@@ -1825,7 +2182,7 @@ begin
     Exit;
   if Length(Selections) = 0 then
   begin
-    StatusBar.Panels[0].Text := 'Keine Baustein-Empfehlungen übernommen';
+    ShowTemporaryStatusMessage('Keine Baustein-Empfehlungen übernommen', 5000);
     Exit;
   end;
 
@@ -1927,26 +2284,45 @@ var
   Row, I: Integer;
   MeasureId: Integer;
   M: TMeasure;
+  SaveResult: TMeasureSaveResult;
 begin
   Row := sgMeasures.Row;
   if Row < 1 then
     Exit;
   MeasureId := Integer(sgMeasures.Objects[0, Row]);
+  FillChar(M, SizeOf(M), 0);
   for I := 0 to High(FCurrentMeasures) do
     if FCurrentMeasures[I].Id = MeasureId then
     begin
       M := FCurrentMeasures[I];
       Break;
     end;
-  if not TMeasureForm.ExecuteEdit(M) then
+  if M.Id = 0 then
     Exit;
-  if not FContext.MeasureRepository.UpdateMeasure(M) then
+  if CanEditActiveProject then
   begin
+    if not TMeasureForm.ExecuteEdit(M) then
+      Exit;
+    SaveResult := FContext.MeasureRepository.UpdateMeasure(M);
+    if SaveResult.Status = mssOk then
+    begin
+      LoadMeasuresForCurrentRequirement;
+      ReloadProgress;
+      Exit;
+    end;
+    if SaveResult.Status = mssVersionConflict then
+    begin
+      MessageDlg('Ein anderer Benutzer hat diese Maßnahme zwischenzeitlich geändert. ' +
+        'Die Liste wurde neu geladen.', mtWarning, [mbOK], 0);
+      LoadMeasuresForCurrentRequirement;
+      ReloadProgress;
+      Exit;
+    end;
     MessageDlg('Speichern fehlgeschlagen: ' + FContext.MeasureRepository.LastError,
       mtError, [mbOK], 0);
-    Exit;
-  end;
-  LoadMeasuresForCurrentRequirement;
+  end
+  else
+    TMeasureForm.ExecuteView(M);
 end;
 
 procedure TMainForm.DoDeleteMeasure(Sender: TObject);

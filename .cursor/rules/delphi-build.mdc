@@ -1,0 +1,25 @@
+---
+description: Delphi/RAD Studio Build-Konfiguration
+globs: Delphi/**
+alwaysApply: false
+---
+
+# Delphi Build
+
+RAD Studio 12 (37.0) ist installiert unter:
+`D:\Program Files (x86)\Embarcadero\Studio\37.0`
+
+Vor jedem Build die Umgebung laden:
+
+```bat
+call "D:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"
+```
+
+Build-Befehl (PowerShell — Anführungszeichen beachten):
+
+```bat
+cmd /c 'call "D:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat" && msbuild "Delphi\BSIClient.dproj" /p:Config=Debug /p:Platform=Win32'
+```
+
+Projekt: `Delphi/BSIClient.dproj`
+Standard: Config=Debug, Platform=Win32

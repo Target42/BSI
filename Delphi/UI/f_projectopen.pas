@@ -28,6 +28,8 @@ type
 
     procedure btnOkClick(Sender: TObject);
 
+    procedure lstProjectsDblClick(Sender: TObject);
+
   private
 
     FProjects: TArray<TProject>;
@@ -171,6 +173,16 @@ begin
   end;
 
   ModalResult := mrOk;
+
+end;
+
+
+
+procedure TProjectOpenForm.lstProjectsDblClick(Sender: TObject);
+
+begin
+
+  btnOkClick(Sender);
 
 end;
 

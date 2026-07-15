@@ -15,6 +15,43 @@ object MainForm: TMainForm
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   TextHeight = 15
+  object ToolBar: TToolBar
+    Left = 0
+    Top = 0
+    Width = 1400
+    Height = 29
+    Align = alTop
+    ButtonHeight = 25
+    ButtonWidth = 25
+    Caption = 'ToolBar'
+    Images = nil
+    ShowCaptions = True
+    TabOrder = 0
+    object btnToolNewProject: TToolButton
+      Left = 0
+      Top = 0
+      Caption = 'Neues Projekt'
+      OnClick = DoCreateProject
+    end
+    object btnToolOpenProject: TToolButton
+      Left = 85
+      Top = 0
+      Caption = 'Projekt '#246'ffnen'
+      OnClick = DoOpenProject
+    end
+    object btnToolAddTarget: TToolButton
+      Left = 178
+      Top = 0
+      Caption = 'Zielobjekt hinzuf'#252'gen'
+      OnClick = DoAddTarget
+    end
+    object btnToolImportCatalog: TToolButton
+      Left = 296
+      Top = 0
+      Caption = 'Katalog importieren'
+      OnClick = DoImportCatalog
+    end
+  end
   object splMain: TSplitter
     Left = 320
     Top = 0
@@ -28,10 +65,13 @@ object MainForm: TMainForm
     Height = 19
     Panels = <
       item
-        Width = 350
+        Width = 500
       end
       item
         Width = 450
+      end
+      item
+        Width = 350
       end>
   end
   object pnlLeft: TPanel
@@ -142,6 +182,8 @@ object MainForm: TMainForm
         TabOrder = 2
         OnChange = tvBausteineChange
         OnClick = tvBausteineClick
+        OnDblClick = tvBausteineDblClick
+        OnCustomDrawItem = tvBausteineCustomDrawItem
         OnContextPopup = tvBausteineContextPopup
         PopupMenu = mnuBaustein
       end
@@ -157,107 +199,147 @@ object MainForm: TMainForm
     TabOrder = 1
     object splCenter: TSplitter
       Left = 0
-      Top = 220
+      Top = 280
       Width = 1076
       Height = 4
       Cursor = crVSplit
       Align = alTop
-      ExplicitTop = 200
     end
     object grpRequirements: TGroupBox
       Left = 0
       Top = 0
       Width = 1076
-      Height = 220
+      Height = 280
       Align = alTop
       Caption = 'Anforderungen'
       TabOrder = 0
       DesignSize = (
         1076
-        220)
-      object cboAssignedBausteine: TComboBox
+        280)
+      object lblTargetProgress: TLabel
         Left = 8
         Top = 20
         Width = 1060
+        Height = 30
+        Anchors = [akLeft, akTop, akRight]
+        AutoSize = False
+        WordWrap = True
+      end
+      object pbTargetProgress: TProgressBar
+        Left = 8
+        Top = 52
+        Width = 1060
+        Height = 17
+        Anchors = [akLeft, akTop, akRight]
+        TabOrder = 0
+        Visible = False
+      end
+      object lblBaustein: TLabel
+        Left = 8
+        Top = 80
+        Width = 48
+        Height = 15
+        Caption = 'Baustein'
+      end
+      object cboAssignedBausteine: TComboBox
+        Left = 62
+        Top = 76
+        Width = 1006
         Height = 23
         Anchors = [akLeft, akTop, akRight]
         Style = csDropDownList
-        TabOrder = 0
+        TabOrder = 1
         OnChange = cboAssignedBausteineChange
       end
       object sgRequirements: TStringGrid
         Left = 8
-        Top = 50
+        Top = 106
         Width = 1060
-        Height = 162
+        Height = 166
         Anchors = [akLeft, akTop, akRight, akBottom]
-        ColCount = 6
+        ColCount = 8
         DefaultRowHeight = 20
         FixedCols = 0
         RowCount = 2
         Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
-        TabOrder = 1
+        TabOrder = 2
+        OnDrawCell = sgRequirementsDrawCell
         OnSelectCell = sgRequirementsSelectCell
       end
     end
     object pnlDetail: TPanel
       Left = 0
-      Top = 224
+      Top = 284
       Width = 1076
-      Height = 607
+      Height = 547
       Align = alClient
       BevelOuter = bvNone
       TabOrder = 1
       DesignSize = (
         1076
-        607)
-      object lblStatus: TLabel
+        547)
+      object lblRequirementText: TLabel
         Left = 8
-        Top = 108
-        Width = 35
+        Top = 8
+        Width = 90
         Height = 15
-        Caption = 'Status:'
+        Caption = 'Anforderungstext'
       end
       object reRequirementText: TRichEdit
-        Left = 0
-        Top = 0
-        Width = 1076
+        Left = 8
+        Top = 28
+        Width = 1060
         Height = 100
-        Align = alTop
+        Anchors = [akLeft, akTop, akRight]
         ReadOnly = True
         ScrollBars = ssVertical
         TabOrder = 0
       end
+      object lblStatus: TLabel
+        Left = 8
+        Top = 138
+        Width = 32
+        Height = 15
+        Caption = 'Status'
+      end
       object cboAssessmentStatus: TComboBox
-        Left = 60
-        Top = 104
-        Width = 140
+        Left = 56
+        Top = 134
+        Width = 160
         Height = 23
         Style = csDropDownList
         TabOrder = 1
         OnChange = cboAssessmentStatusChange
       end
+      object lblResponsible: TLabel
+        Left = 8
+        Top = 168
+        Width = 88
+        Height = 15
+        Caption = 'Umsetzung durch'
+      end
       object edtResponsible: TEdit
-        Left = 280
-        Top = 104
-        Width = 200
+        Left = 8
+        Top = 188
+        Width = 1060
         Height = 23
+        Anchors = [akLeft, akTop, akRight]
         TabOrder = 2
-        TextHint = 'Verantwortlicher'
+        TextHint = 'Verantwortliche Person oder Rolle'
         OnExit = edtResponsibleExit
       end
       object chkHasDueDate: TCheckBox
-        Left = 500
-        Top = 106
-        Width = 50
+        Left = 8
+        Top = 220
+        Width = 80
         Height = 17
-        Caption = 'Frist'
+        Caption = 'Frist setzen'
         TabOrder = 3
         OnClick = chkHasDueDateClick
       end
       object dtpDueDate: TDateTimePicker
-        Left = 560
-        Top = 104
+        Left = 96
+        Top = 216
         Width = 120
         Height = 23
         Date = 46217.000000000000000000
@@ -266,21 +348,29 @@ object MainForm: TMainForm
         TabOrder = 4
         OnChange = dtpDueDateChange
       end
+      object lblAssessmentNote: TLabel
+        Left = 8
+        Top = 248
+        Width = 58
+        Height = 15
+        Caption = 'Umsetzung'
+      end
       object memAssessmentNote: TMemo
         Left = 8
-        Top = 136
+        Top = 268
         Width = 1060
         Height = 80
         Anchors = [akLeft, akTop, akRight]
         ScrollBars = ssVertical
         TabOrder = 5
+        OnChange = memAssessmentNoteChange
         OnExit = memAssessmentNoteExit
       end
       object grpMeasures: TGroupBox
         Left = 8
-        Top = 224
+        Top = 356
         Width = 1060
-        Height = 375
+        Height = 183
         Anchors = [akLeft, akTop, akRight, akBottom]
         Caption = 'Ma'#223'nahmen'
         TabOrder = 6
@@ -299,6 +389,7 @@ object MainForm: TMainForm
           RowCount = 2
           Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
           TabOrder = 0
+          OnDblClick = sgMeasuresDblClick
         end
         object btnAddMeasure: TButton
           Left = 8
@@ -352,6 +443,7 @@ object MainForm: TMainForm
       end
       object mnuCloseProject: TMenuItem
         Caption = 'Projekt schlie'#223'en'
+        ShortCut = 49159
         OnClick = DoCloseProject
       end
       object mnuSepSession: TMenuItem
@@ -425,6 +517,7 @@ object MainForm: TMainForm
       end
       object mnuCatalogSearch: TMenuItem
         Caption = 'Volltextsuche'#8230
+        ShortCut = 24646
         OnClick = DoCatalogSearch
       end
     end

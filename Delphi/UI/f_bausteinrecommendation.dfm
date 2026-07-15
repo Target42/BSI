@@ -34,6 +34,7 @@ object BausteinRecommendationForm: TBausteinRecommendationForm
     RowCount = 2
     Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
     TabOrder = 0
+    OnClick = sgRecommendationsClick
     OnDblClick = sgRecommendationsDblClick
   end
   object lblStatus: TLabel

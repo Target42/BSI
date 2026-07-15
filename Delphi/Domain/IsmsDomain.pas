@@ -146,6 +146,18 @@ type
     RequirementId: Integer;
   end;
 
+  TAssessmentSaveStatus = (assOk, assVersionConflict, assForbidden, assFailed);
+  TAssessmentSaveResult = record
+    Status: TAssessmentSaveStatus;
+    Assessment: TRequirementAssessment;
+  end;
+
+  TMeasureSaveStatus = (mssOk, mssVersionConflict, mssForbidden, mssFailed);
+  TMeasureSaveResult = record
+    Status: TMeasureSaveStatus;
+    Measure: TMeasure;
+  end;
+
   TServerUser = record
     Id: Integer;
     Email: string;
@@ -187,6 +199,15 @@ function BausteinRecommendationTierToString(AValue: TBausteinRecommendationTier)
 
 function ProjectMemberRoleLabel(const ARole: string): string;
 function ProjectMemberRoleOptions: TArray<string>;
+
+function AssessmentSaveOk(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
+function AssessmentSaveConflict(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
+function AssessmentSaveForbidden: TAssessmentSaveResult;
+function AssessmentSaveFailed: TAssessmentSaveResult;
+function MeasureSaveOk(const AMeasure: TMeasure): TMeasureSaveResult;
+function MeasureSaveConflict(const AMeasure: TMeasure): TMeasureSaveResult;
+function MeasureSaveForbidden: TMeasureSaveResult;
+function MeasureSaveFailed: TMeasureSaveResult;
 
 implementation
 
@@ -479,6 +500,54 @@ end;
 function ProjectMemberRoleOptions: TArray<string>;
 begin
   Result := TArray<string>.Create('owner', 'editor', 'viewer');
+end;
+
+function AssessmentSaveOk(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
+begin
+  Result.Status := assOk;
+  Result.Assessment := AAssessment;
+end;
+
+function AssessmentSaveConflict(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
+begin
+  Result.Status := assVersionConflict;
+  Result.Assessment := AAssessment;
+end;
+
+function AssessmentSaveForbidden: TAssessmentSaveResult;
+begin
+  Result.Status := assForbidden;
+  FillChar(Result.Assessment, SizeOf(Result.Assessment), 0);
+end;
+
+function AssessmentSaveFailed: TAssessmentSaveResult;
+begin
+  Result.Status := assFailed;
+  FillChar(Result.Assessment, SizeOf(Result.Assessment), 0);
+end;
+
+function MeasureSaveOk(const AMeasure: TMeasure): TMeasureSaveResult;
+begin
+  Result.Status := mssOk;
+  Result.Measure := AMeasure;
+end;
+
+function MeasureSaveConflict(const AMeasure: TMeasure): TMeasureSaveResult;
+begin
+  Result.Status := mssVersionConflict;
+  Result.Measure := AMeasure;
+end;
+
+function MeasureSaveForbidden: TMeasureSaveResult;
+begin
+  Result.Status := mssForbidden;
+  FillChar(Result.Measure, SizeOf(Result.Measure), 0);
+end;
+
+function MeasureSaveFailed: TMeasureSaveResult;
+begin
+  Result.Status := mssFailed;
+  FillChar(Result.Measure, SizeOf(Result.Measure), 0);
 end;
 
 end.

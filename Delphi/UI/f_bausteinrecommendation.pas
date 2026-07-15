@@ -16,6 +16,7 @@ type
     btnOk: TButton;
     btnCancel: TButton;
     procedure FormCreate(Sender: TObject);
+    procedure sgRecommendationsClick(Sender: TObject);
     procedure sgRecommendationsDblClick(Sender: TObject);
     procedure btnOkClick(Sender: TObject);
   private
@@ -145,9 +146,20 @@ begin
   Result := True;
 end;
 
+procedure TBausteinRecommendationForm.sgRecommendationsClick(Sender: TObject);
+var
+  ACol, ARow: Integer;
+  P: TPoint;
+begin
+  P := sgRecommendations.ScreenToClient(Mouse.CursorPos);
+  sgRecommendations.MouseToCell(P.X, P.Y, ACol, ARow);
+  if ACol = 0 then
+    ToggleSelected(ARow);
+end;
+
 procedure TBausteinRecommendationForm.sgRecommendationsDblClick(Sender: TObject);
 begin
-  ToggleSelected(sgRecommendations.Row);
+  btnOkClick(Sender);
 end;
 
 function SelectedStatusFromCombo(AIndex: Integer): TApplicabilityStatus;

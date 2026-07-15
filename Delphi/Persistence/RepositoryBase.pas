@@ -25,7 +25,7 @@ type
     function UpdateProject(const AProject: TProject): Boolean; virtual; abstract;
     function DeleteProject(AProjectId: Integer): Boolean; virtual; abstract;
     function LoadAssessment(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TRequirementAssessment; virtual; abstract;
-    function SaveAssessment(const AAssessment: TRequirementAssessment): Boolean; virtual; abstract;
+    function SaveAssessment(const AAssessment: TRequirementAssessment): TAssessmentSaveResult; virtual; abstract;
     function GetLastError: string; virtual; abstract;
     property LastError: string read GetLastError;
   end;
@@ -49,7 +49,7 @@ type
     function LoadMeasures(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TArray<TMeasure>; virtual; abstract;
     function MeasureCounts(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, Integer>; virtual; abstract;
     function CreateMeasure(const AMeasure: TMeasure): TMeasure; virtual; abstract;
-    function UpdateMeasure(const AMeasure: TMeasure): Boolean; virtual; abstract;
+    function UpdateMeasure(const AMeasure: TMeasure): TMeasureSaveResult; virtual; abstract;
     function DeleteMeasure(AMeasureId: Integer): Boolean; virtual; abstract;
     function GetLastError: string; virtual; abstract;
     property LastError: string read GetLastError;

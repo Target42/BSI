@@ -29,6 +29,7 @@ object ProjectOpenForm: TProjectOpenForm
     Height = 220
     ItemHeight = 15
     TabOrder = 0
+    OnDblClick = lstProjectsDblClick
   end
   object btnOk: TButton
     Left = 328

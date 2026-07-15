@@ -1,0 +1,76 @@
+---
+description: BSI Delphi-Client – Architektur, Konventionen, Patterns
+globs: Delphi/**
+alwaysApply: false
+---
+
+# BSI Delphi Client (BSIClient)
+
+RAD Studio 12, **VCL**, Win32. Build: siehe `delphi-build.mdc`.
+
+## Architektur
+
+```
+BSIClient.dpr → Login → TAppContext → TMainForm
+                    ↓
+         lokal (SQLite/FireDAC)  oder  remote (HTTP/Indy)
+```
+
+| Ordner | Rolle | Beispiel |
+|--------|-------|----------|
+| `App/` | Settings, Session, zentraler Context | `AppContext.pas` |
+| `Domain/` | Records, Enums, Domain-Logik | `IsmsDomain.pas` |
+| `Persistence/` | SQLite-Repositories (FireDAC) | `ProjectRepository.pas` |
+| `Net/` | HTTP-Client + Remote-Repositories | `HttpProjectRepository.pas` |
+| `UI/` | Dialog-Forms | `f_projectopen.pas` |
+| `Services/` | Anwendungslogik ohne UI | `BausteinRecommendationService.pas` |
+| `Catalog/` | Grundschutz-Import, Textformatierung | `GrundschutzImporter.pas` |
+
+**Dual-Mode:** `TAppContext` wählt lokal vs. remote. Beide Implementierungen erben von `*RepositoryBase` in `RepositoryBase.pas`. Neue Datenzugriffe **immer** in Base + SQLite + HTTP implementieren.
+
+UI greift auf Daten über `MainForm.AppContext` bzw. übergebene Repositories zu — **nicht** direkt auf `TFDConnection` oder `TApiClient`.
+
+## Namenskonventionen
+
+- Units: `f_<name>.pas` (Forms), sonst `<Thema><Rolle>.pas`
+- Form-Klassen: `T<Name>Form` (z. B. `TProjectOpenForm`)
+- Controls: Präfix `btn`, `edt`, `lbl`, `mnu`, `tv`, `sg`, `cbo`, `mem`, `pnl`, `grp`
+- Parameter: `A` + Name (`AProjectId`); Felder: `F` + Name
+- Domain-Typen als **Records** in `IsmsDomain.pas` — keine parallelen Typen erfinden
+
+## UI-Patterns
+
+- Modal-Dialoge: `class function Execute(...): Boolean` — siehe `f_projectopen.pas`
+- `{$R *.dfm}` in der Implementation
+- `.dfm`: Standard-Font **Segoe UI**, Dialoge `BorderStyle = bsDialog`, `Position = poScreenCenter`
+- Neue Forms in `BSIClient.dpr` registrieren (`uses` + `{FormName}`)
+- `.dfm` nur ändern, wenn nötig; Layout-Properties konsistent zum bestehenden Form halten
+
+## Netzwerk & JSON
+
+- HTTP ausschließlich über `TApiClient` (`Net/ApiClient.pas`, Indy)
+- JSON-Mapping in `HttpJson.pas` (`ProjectFromJson`, …) — nicht inline duplizieren
+- API-Pfade: `/api/v1/...`; Fehler über `Repository.LastError` / `FClient.LastError`
+
+## Bibliotheken (installiert)
+
+FireDAC/SQLite, Indy, Raize Components, JEDI (Jv*), VirtualTrees, SynEdit, Skia VCL.
+
+Keine neuen Third-Party-Pakete ohne Absprache.
+
+## Workflow für Agent
+
+1. **Zuerst** ähnliche bestehende Unit lesen und Pattern übernehmen
+2. Nach Änderungen **Build ausführen** (siehe `delphi-build.mdc`)
+3. Bei Compiler-Fehlern: erste Meldung mit Zeilennummer beheben, erneut bauen
+4. Scope minimal halten — nur angeforderte Delphi-Dateien ändern
+
+## Referenz-Dateien
+
+| Aufgabe | Vorlage |
+|---------|---------|
+| Neuer Dialog | `UI/f_projectopen.pas` |
+| SQLite-Repository | `Persistence/ProjectRepository.pas` |
+| HTTP-Repository | `Net/HttpProjectRepository.pas` |
+| App-Initialisierung | `App/AppContext.pas`, `BSIClient.dpr` |
+| Domain-Typen | `Domain/IsmsDomain.pas` |
