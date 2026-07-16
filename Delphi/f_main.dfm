@@ -10,23 +10,29 @@ object MainForm: TMainForm
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
-  Position = poScreenCenter
   Menu = MainMenu
+  Position = poScreenCenter
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   TextHeight = 15
+  object splMain: TSplitter
+    Left = 320
+    Top = 29
+    Width = 4
+    Height = 802
+    ExplicitTop = 0
+    ExplicitHeight = 831
+  end
   object ToolBar: TToolBar
     Left = 0
     Top = 0
     Width = 1400
     Height = 29
-    Align = alTop
-    ButtonHeight = 25
-    ButtonWidth = 25
+    ButtonHeight = 23
+    ButtonWidth = 122
     Caption = 'ToolBar'
-    Images = nil
     ShowCaptions = True
-    TabOrder = 0
+    TabOrder = 2
     object btnToolNewProject: TToolButton
       Left = 0
       Top = 0
@@ -34,29 +40,23 @@ object MainForm: TMainForm
       OnClick = DoCreateProject
     end
     object btnToolOpenProject: TToolButton
-      Left = 85
+      Left = 122
       Top = 0
       Caption = 'Projekt '#246'ffnen'
       OnClick = DoOpenProject
     end
     object btnToolAddTarget: TToolButton
-      Left = 178
+      Left = 244
       Top = 0
       Caption = 'Zielobjekt hinzuf'#252'gen'
       OnClick = DoAddTarget
     end
     object btnToolImportCatalog: TToolButton
-      Left = 296
+      Left = 366
       Top = 0
       Caption = 'Katalog importieren'
       OnClick = DoImportCatalog
     end
-  end
-  object splMain: TSplitter
-    Left = 320
-    Top = 0
-    Width = 4
-    Height = 831
   end
   object StatusBar: TStatusBar
     Left = 0
@@ -76,13 +76,12 @@ object MainForm: TMainForm
   end
   object pnlLeft: TPanel
     Left = 0
-    Top = 0
+    Top = 29
     Width = 320
-    Height = 831
+    Height = 802
     Align = alLeft
     BevelOuter = bvNone
     TabOrder = 0
-    ExplicitHeight = 422
     object grpTargets: TGroupBox
       Left = 0
       Top = 0
@@ -121,11 +120,11 @@ object MainForm: TMainForm
         Anchors = [akLeft, akTop, akRight, akBottom]
         HideSelection = False
         Indent = 19
-        ReadOnly = True
         PopupMenu = mnuTargets
+        ReadOnly = True
         TabOrder = 1
-        OnClick = tvTargetsClick
         OnChange = tvTargetsChange
+        OnClick = tvTargetsClick
         OnContextPopup = tvTargetsContextPopup
       end
     end
@@ -133,14 +132,13 @@ object MainForm: TMainForm
       Left = 0
       Top = 280
       Width = 320
-      Height = 551
+      Height = 522
       Align = alClient
       Caption = 'IT-Grundschutz Bausteine'
       TabOrder = 1
-      ExplicitHeight = 142
       DesignSize = (
         320
-        551)
+        522)
       object edtBausteinSearch: TEdit
         Left = 8
         Top = 20
@@ -167,7 +165,8 @@ object MainForm: TMainForm
         Height = 17
         Caption = 'Empfehlungen hervorheben'
         Checked = True
-        TabOrder = 2
+        State = cbChecked
+        TabOrder = 3
         OnClick = chkHighlightRecommendationsClick
       end
       object tvBausteine: TTreeView
@@ -178,22 +177,22 @@ object MainForm: TMainForm
         Anchors = [akLeft, akTop, akRight, akBottom]
         HideSelection = False
         Indent = 19
+        PopupMenu = mnuBaustein
         ReadOnly = True
         TabOrder = 2
         OnChange = tvBausteineChange
         OnClick = tvBausteineClick
-        OnDblClick = tvBausteineDblClick
-        OnCustomDrawItem = tvBausteineCustomDrawItem
         OnContextPopup = tvBausteineContextPopup
-        PopupMenu = mnuBaustein
+        OnCustomDrawItem = tvBausteineCustomDrawItem
+        OnDblClick = tvBausteineDblClick
       end
     end
   end
   object pnlCenter: TPanel
     Left = 324
-    Top = 0
+    Top = 29
     Width = 1076
-    Height = 831
+    Height = 802
     Align = alClient
     BevelOuter = bvNone
     TabOrder = 1
@@ -225,6 +224,13 @@ object MainForm: TMainForm
         AutoSize = False
         WordWrap = True
       end
+      object lblBaustein: TLabel
+        Left = 8
+        Top = 80
+        Width = 45
+        Height = 15
+        Caption = 'Baustein'
+      end
       object pbTargetProgress: TProgressBar
         Left = 8
         Top = 52
@@ -234,20 +240,13 @@ object MainForm: TMainForm
         TabOrder = 0
         Visible = False
       end
-      object lblBaustein: TLabel
-        Left = 8
-        Top = 80
-        Width = 48
-        Height = 15
-        Caption = 'Baustein'
-      end
       object cboAssignedBausteine: TComboBox
         Left = 62
         Top = 76
         Width = 1006
         Height = 23
-        Anchors = [akLeft, akTop, akRight]
         Style = csDropDownList
+        Anchors = [akLeft, akTop, akRight]
         TabOrder = 1
         OnChange = cboAssignedBausteineChange
       end
@@ -271,29 +270,19 @@ object MainForm: TMainForm
       Left = 0
       Top = 284
       Width = 1076
-      Height = 547
+      Height = 518
       Align = alClient
       BevelOuter = bvNone
       TabOrder = 1
       DesignSize = (
         1076
-        547)
+        518)
       object lblRequirementText: TLabel
         Left = 8
         Top = 8
-        Width = 90
+        Width = 92
         Height = 15
         Caption = 'Anforderungstext'
-      end
-      object reRequirementText: TRichEdit
-        Left = 8
-        Top = 28
-        Width = 1060
-        Height = 100
-        Anchors = [akLeft, akTop, akRight]
-        ReadOnly = True
-        ScrollBars = ssVertical
-        TabOrder = 0
       end
       object lblStatus: TLabel
         Left = 8
@@ -301,6 +290,36 @@ object MainForm: TMainForm
         Width = 32
         Height = 15
         Caption = 'Status'
+      end
+      object lblResponsible: TLabel
+        Left = 8
+        Top = 168
+        Width = 94
+        Height = 15
+        Caption = 'Umsetzung durch'
+      end
+      object lblAssessmentNote: TLabel
+        Left = 8
+        Top = 248
+        Width = 60
+        Height = 15
+        Caption = 'Umsetzung'
+      end
+      object reRequirementText: TRichEdit
+        Left = 8
+        Top = 28
+        Width = 1060
+        Height = 100
+        Anchors = [akLeft, akTop, akRight]
+        Font.Charset = ANSI_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+        ReadOnly = True
+        ScrollBars = ssVertical
+        TabOrder = 0
       end
       object cboAssessmentStatus: TComboBox
         Left = 56
@@ -310,13 +329,6 @@ object MainForm: TMainForm
         Style = csDropDownList
         TabOrder = 1
         OnChange = cboAssessmentStatusChange
-      end
-      object lblResponsible: TLabel
-        Left = 8
-        Top = 168
-        Width = 88
-        Height = 15
-        Caption = 'Umsetzung durch'
       end
       object edtResponsible: TEdit
         Left = 8
@@ -348,13 +360,6 @@ object MainForm: TMainForm
         TabOrder = 4
         OnChange = dtpDueDateChange
       end
-      object lblAssessmentNote: TLabel
-        Left = 8
-        Top = 248
-        Width = 58
-        Height = 15
-        Caption = 'Umsetzung'
-      end
       object memAssessmentNote: TMemo
         Left = 8
         Top = 268
@@ -370,18 +375,18 @@ object MainForm: TMainForm
         Left = 8
         Top = 356
         Width = 1060
-        Height = 183
+        Height = 154
         Anchors = [akLeft, akTop, akRight, akBottom]
         Caption = 'Ma'#223'nahmen'
         TabOrder = 6
         DesignSize = (
           1060
-          375)
+          154)
         object sgMeasures: TStringGrid
           Left = 8
           Top = 20
           Width = 1044
-          Height = 315
+          Height = 286
           Anchors = [akLeft, akTop, akRight, akBottom]
           ColCount = 4
           DefaultRowHeight = 20
@@ -393,7 +398,7 @@ object MainForm: TMainForm
         end
         object btnAddMeasure: TButton
           Left = 8
-          Top = 343
+          Top = 314
           Width = 85
           Height = 25
           Anchors = [akLeft, akBottom]
@@ -403,7 +408,7 @@ object MainForm: TMainForm
         end
         object btnEditMeasure: TButton
           Left = 100
-          Top = 343
+          Top = 314
           Width = 85
           Height = 25
           Anchors = [akLeft, akBottom]
@@ -413,7 +418,7 @@ object MainForm: TMainForm
         end
         object btnDeleteMeasure: TButton
           Left = 200
-          Top = 343
+          Top = 314
           Width = 75
           Height = 25
           Anchors = [akLeft, akBottom]
@@ -446,17 +451,6 @@ object MainForm: TMainForm
         ShortCut = 49159
         OnClick = DoCloseProject
       end
-      object mnuSepSession: TMenuItem
-        Caption = '-'
-      end
-      object mnuRelogin: TMenuItem
-        Caption = 'Erneut anmelden'#8230
-        OnClick = DoRelogin
-      end
-      object mnuSwitchUser: TMenuItem
-        Caption = 'Abmelden / Benutzer wechseln'#8230
-        OnClick = DoSwitchUser
-      end
       object mnuSep1: TMenuItem
         Caption = '-'
       end
@@ -468,18 +462,26 @@ object MainForm: TMainForm
     object mnuProject: TMenuItem
       Caption = 'Projekt'
       object mnuEditProject: TMenuItem
-        Caption = 'Projekt bearbeiten'#8230
+        Caption = 'Projekteigenschaften'#8230
         OnClick = DoEditProject
-      end
-      object mnuManageMembers: TMenuItem
-        Caption = 'Projektmitglieder'#8230
-        OnClick = DoManageMembers
       end
       object mnuDeleteProject: TMenuItem
         Caption = 'Projekt l'#246'schen'#8230
         OnClick = DoDeleteProject
       end
-      object mnuSep2: TMenuItem
+      object mnuManageMembers: TMenuItem
+        Caption = 'Projektmitglieder'#8230
+        OnClick = DoManageMembers
+      end
+      object mnuSwitchUser: TMenuItem
+        Caption = 'Abmelden / Benutzer wechseln'#8230
+        OnClick = DoSwitchUser
+      end
+      object mnuRelogin: TMenuItem
+        Caption = 'Server-Sitzung erneuern'#8230
+        OnClick = DoRelogin
+      end
+      object mnuSepSession: TMenuItem
         Caption = '-'
       end
       object mnuAddTarget: TMenuItem

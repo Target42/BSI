@@ -7,7 +7,7 @@ uses
   System.Generics.Collections, System.Math, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.Menus, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.Grids,
   IsmsDomain, AppContext, AppPaths, FireDAC.UI.Intf, FireDAC.VCLUI.Wait,
-  FireDAC.Stan.Intf, FireDAC.Comp.UI;
+  FireDAC.Stan.Intf, FireDAC.Comp.UI, Vcl.ToolWin, SearchEditHelper;
 
 type
   TMainForm = class(TForm)
@@ -72,16 +72,15 @@ type
     mnuNewProject: TMenuItem;
     mnuOpenProject: TMenuItem;
     mnuCloseProject: TMenuItem;
-    mnuSepSession: TMenuItem;
-    mnuRelogin: TMenuItem;
-    mnuSwitchUser: TMenuItem;
     mnuSep1: TMenuItem;
     mnuExit: TMenuItem;
     mnuProject: TMenuItem;
     mnuEditProject: TMenuItem;
-    mnuManageMembers: TMenuItem;
     mnuDeleteProject: TMenuItem;
-    mnuSep2: TMenuItem;
+    mnuManageMembers: TMenuItem;
+    mnuSwitchUser: TMenuItem;
+    mnuRelogin: TMenuItem;
+    mnuSepSession: TMenuItem;
     mnuAddTarget: TMenuItem;
     mnuEditTarget: TMenuItem;
     mnuDeleteTarget: TMenuItem;
@@ -169,10 +168,12 @@ type
     FLastConflictNotifiedRequirementId: Integer;
     FContextMenuBausteinId: Integer;
     FBlockTargetSelection: Boolean;
+    FClearBausteinSearch: TSearchClearButton;
 
     procedure SetAppContext(const AContext: TAppContext);
     procedure ActivateWithContext;
     procedure InitializeUi;
+    procedure ClearProjectSession;
     procedure UpdateProjectUi;
     procedure UpdateContextLabel;
     procedure UpdateSessionInfoLabel;
@@ -350,6 +351,35 @@ begin
   cboAssessmentStatus.Items.Add(AssessmentStatusToString(asPartial));
   cboAssessmentStatus.Items.Add(AssessmentStatusToString(asFulfilled));
   cboAssessmentStatus.Items.Add(AssessmentStatusToString(asNotApplicable));
+
+  ShowHint := True;
+  chkFilterApplicable.ShowHint := True;
+  chkFilterApplicable.Hint :=
+    'Blendet Bausteine aus, die f'#252'r das aktuelle Zielobjekt noch nicht per Rechtsklick ' +
+    'als "Ben'#246'tigt" oder "M'#246'glicherweise" markiert wurden.' + sLineBreak + sLineBreak +
+    'Zum Markieren: Haken entfernen, Baustein w'#228'hlen, Rechtsklick '#8594' "Ben'#246'tigt".';
+  chkHighlightRecommendations.ShowHint := True;
+  chkHighlightRecommendations.Hint := #9733' Kern-Empfehlung, '#9675' erg'#228'nzende Empfehlung';
+  edtBausteinSearch.ShowHint := True;
+  edtBausteinSearch.Hint :=
+    'Filtert die Bausteinliste.' + sLineBreak +
+    'F'#252'r eine Volltextsuche '#252'ber alle Anforderungen: Katalog '#8594' Volltextsuche'#8230' (Strg+Umschalt+F)';
+
+  FClearBausteinSearch := TSearchClearButton.Create(Self, edtBausteinSearch);
+  FClearBausteinSearch.OnSearchChange := edtBausteinSearchChange;
+end;
+
+procedure TMainForm.ClearProjectSession;
+begin
+  SaveCurrentAssessment;
+  PersistSessionSelection;
+  FillChar(FActiveProject, SizeOf(FActiveProject), 0);
+  FillChar(FActiveTarget, SizeOf(FActiveTarget), 0);
+  FActiveBausteinId := 0;
+  FActiveRequirementId := 0;
+  tvTargets.Items.Clear;
+  ClearRequirementView;
+  UpdateProjectUi;
 end;
 
 function TMainForm.HasActiveProject: Boolean;
@@ -437,18 +467,19 @@ begin
 end;
 
 procedure TMainForm.CheckRemoteSession(Sender: TObject);
-var
-  Err: string;
 begin
   if not FContext.IsRemote or (FContext.ApiClient = nil) then
     Exit;
-  if FContext.ApiClient.IsTokenExpired or not FContext.ApiClient.ValidateSession(Err) then
+  if not FContext.ApiClient.IsTokenExpired then
+    Exit;
+  if FContext.PromptRelogin then
   begin
-    if not FContext.PromptRelogin then
-      Application.Terminate
-    else
-      ActivateWithContext;
+    ActivateWithContext;
+    ShowTemporaryStatusMessage('Sitzung erneuert', 5000);
+    Exit;
   end;
+  MessageDlg('Die Server-Sitzung ist abgelaufen. Bitte melden Sie sich erneut an, ' +
+    'bevor Sie weiterarbeiten.', mtWarning, [mbOK], 0);
 end;
 
 procedure TMainForm.DoRelogin(Sender: TObject);
@@ -458,19 +489,40 @@ begin
 end;
 
 procedure TMainForm.DoSwitchUser(Sender: TObject);
+var
+  CatalogHint: string;
 begin
-  SaveCurrentAssessment;
-  PersistSessionSelection;
-  if FContext.PromptSwitchUser then
+  if HasActiveProject then
+    MessageDlg('Das aktuell ge'#246'ffnete Projekt wird geschlossen.', mtInformation, [mbOK], 0);
+
+  ClearProjectSession;
+
+  if not FContext.PromptSwitchUser then
   begin
-    FillChar(FActiveProject, SizeOf(FActiveProject), 0);
-    FillChar(FActiveTarget, SizeOf(FActiveTarget), 0);
-    FActiveBausteinId := 0;
-    FActiveRequirementId := 0;
-    tvTargets.Items.Clear;
-    ClearRequirementView;
+    if FContext.LastError <> '' then
+      MessageDlg('Verbindung konnte nicht hergestellt werden:' + sLineBreak + FContext.LastError,
+        mtError, [mbOK], 0);
+    ReloadCatalog;
     ActivateWithContext;
+    Exit;
   end;
+
+  if not FContext.EnsureGrundschutzCatalog(DefaultGrundschutzXml) then
+  begin
+    if FContext.IsRemote then
+      CatalogHint := 'Bitte den Katalog als Admin '#252'ber "Datei '#8594' IT-Grundschutz XML importieren" ' +
+        'auf den Server laden.'
+    else
+      CatalogHint := 'Sie k'#246'nnen den Katalog sp'#228'ter '#252'ber "Datei '#8594' IT-Grundschutz XML importieren" laden.';
+    MessageDlg(FContext.LastError + sLineBreak + sLineBreak + CatalogHint, mtWarning, [mbOK], 0);
+  end;
+
+  ReloadCatalog;
+  ActivateWithContext;
+  if FContext.IsRemote then
+    ShowTemporaryStatusMessage('Server-Verbindung aktiv', 4000)
+  else
+    ShowTemporaryStatusMessage('Lokal-Modus aktiv', 4000);
 end;
 
 procedure TMainForm.UpdateProjectUi;

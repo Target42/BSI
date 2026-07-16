@@ -17,13 +17,13 @@ type
     sgReport: TStringGrid;
     pnlBottom: TPanel;
     btnExportCsv: TButton;
-    btnExportHtml: TButton;
+    btnExportPdf: TButton;
     btnClose: TButton;
     procedure FormCreate(Sender: TObject);
     procedure btnRefreshClick(Sender: TObject);
     procedure cboScopeChange(Sender: TObject);
     procedure btnExportCsvClick(Sender: TObject);
-    procedure btnExportHtmlClick(Sender: TObject);
+    procedure btnExportPdfClick(Sender: TObject);
     procedure btnCloseClick(Sender: TObject);
   private
     FContext: TAppContext;
@@ -192,7 +192,7 @@ begin
   end;
 end;
 
-procedure TReportForm.btnExportHtmlClick(Sender: TObject);
+procedure TReportForm.btnExportPdfClick(Sender: TObject);
 var
   Dlg: TSaveDialog;
   ErrorMsg: string;
@@ -204,14 +204,12 @@ begin
   end;
   Dlg := TSaveDialog.Create(Self);
   try
-    Dlg.Filter := 'HTML-Dateien (*.html)|*.html';
-    Dlg.FileName := 'soll-ist-' + FProject.Name + '.html';
+    Dlg.Filter := 'PDF-Dateien (*.pdf)|*.pdf';
+    Dlg.FileName := 'soll-ist-' + FProject.Name + '.pdf';
     if not Dlg.Execute then
       Exit;
-    if TReportExporter.ExportHtml(Dlg.FileName, FProject, FSummary, FRows, ErrorMsg) then
-      MessageDlg('HTML wurde gespeichert:' + sLineBreak + Dlg.FileName + sLineBreak + sLineBreak +
-        'Zum Erzeugen einer PDF-Datei im Browser öffnen und drucken.',
-        mtInformation, [mbOK], 0)
+    if TReportExporter.ExportPdf(Dlg.FileName, FProject, FSummary, FRows, ErrorMsg) then
+      MessageDlg('PDF wurde gespeichert:' + sLineBreak + Dlg.FileName, mtInformation, [mbOK], 0)
     else
       MessageDlg('Export fehlgeschlagen: ' + ErrorMsg, mtError, [mbOK], 0);
   finally

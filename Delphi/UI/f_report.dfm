@@ -87,14 +87,14 @@ object ReportForm: TReportForm
       TabOrder = 0
       OnClick = btnExportCsvClick
     end
-    object btnExportHtml: TButton
+    object btnExportPdf: TButton
       Left = 160
       Top = 10
       Width = 150
       Height = 28
-      Caption = 'Als HTML exportieren'#8230
+      Caption = 'Als PDF exportieren'#8230
       TabOrder = 1
-      OnClick = btnExportHtmlClick
+      OnClick = btnExportPdfClick
     end
     object btnClose: TButton
       Left = 900

@@ -34,6 +34,7 @@ object CatalogSearchForm: TCatalogSearchForm
     TabOrder = 0
     TextHint = 'Suchbegriff eingeben, z. B. Intrusion, Backup, Firewall'#8230
     OnChange = edtSearchChange
+    OnKeyPress = edtSearchKeyPress
   end
   object sgResults: TStringGrid
     Left = 12

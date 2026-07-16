@@ -151,20 +151,27 @@ var
   Client: TApiClient;
   Err: string;
 begin
-  FSettings := TAppSettings.Load;
-  if not FSettings.HasStoredRemoteSession then
-    Exit(False);
-  Client := TApiClient.Create(FSettings.ServerUrl);
+  Result := False;
   try
-    Client.SetAccessToken(FSettings.AccessToken);
-    Client.SetTokenExpiresAt(FSettings.TokenExpiresAt);
-    Client.SetInsecureSkipTlsVerify(FSettings.InsecureSkipTlsVerify);
-    if not Client.ValidateSession(Err) then
-      Exit(False);
-    FSettings.UseRemote := True;
-    Result := True;
-  finally
-    Client.Free;
+    FSettings := TAppSettings.Load;
+    if not FSettings.HasStoredRemoteSession then
+      Exit;
+    if FSettings.IsTokenExpired then
+      Exit;
+    Client := TApiClient.Create(FSettings.ServerUrl);
+    try
+      Client.SetAccessToken(FSettings.AccessToken);
+      Client.SetTokenExpiresAt(FSettings.TokenExpiresAt);
+      Client.SetInsecureSkipTlsVerify(FSettings.InsecureSkipTlsVerify);
+      if not Client.ValidateSession(Err) then
+        Exit;
+      FSettings.UseRemote := True;
+      Result := True;
+    finally
+      Client.Free;
+    end;
+  except
+    Result := False;
   end;
 end;
 

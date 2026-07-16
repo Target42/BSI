@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Grids, Vcl.ComCtrls,
-  IsmsDomain, RequirementTextFormatter;
+  IsmsDomain, RequirementTextFormatter, SearchEditHelper;
 
 type
   TBausteinViewForm = class(TForm)
@@ -22,6 +22,7 @@ type
     FBaustein: TBaustein;
     FRequirements: TArray<TRequirement>;
     FVisibleRows: TArray<Integer>;
+    FClearSearch: TSearchClearButton;
     procedure SetupGrid;
     procedure ApplySearch;
     procedure ShowRequirementAt(ARow: Integer);
@@ -76,6 +77,8 @@ end;
 procedure TBausteinViewForm.FormCreate(Sender: TObject);
 begin
   SetupGrid;
+  FClearSearch := TSearchClearButton.Create(Self, edtSearch);
+  FClearSearch.OnSearchChange := edtSearchChange;
 end;
 
 procedure TBausteinViewForm.SetupGrid;

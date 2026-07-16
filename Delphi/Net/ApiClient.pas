@@ -71,6 +71,7 @@ begin
   FHttp.HandleRedirects := True;
   FHttp.ReadTimeout := 30000;
   FHttp.ConnectTimeout := 15000;
+  FHttp.HTTPOptions := [hoForceEncodeParams, hoNoProtocolErrorException, hoWantProtocolErrorContent];
   SetBaseUrl(ABaseUrl);
 end;
 
@@ -84,8 +85,14 @@ end;
 procedure TApiClient.SetBaseUrl(const AValue: string);
 var
   S: string;
+  ApiPos: Integer;
 begin
   S := Trim(AValue);
+  while (S <> '') and (Copy(S, Length(S), 1) = '/') do
+    SetLength(S, Length(S) - 1);
+  ApiPos := Pos('/api/v1', LowerCase(S));
+  if ApiPos > 0 then
+    S := Copy(S, 1, ApiPos - 1);
   while (S <> '') and (Copy(S, Length(S), 1) = '/') do
     SetLength(S, Length(S) - 1);
   FBaseUrl := S;
@@ -223,6 +230,12 @@ var
 begin
   Result := nil;
   AStatus := 0;
+
+  if Trim(FBaseUrl) = '' then
+  begin
+    FLastError := 'Keine Server-URL konfiguriert.';
+    Exit;
+  end;
 
   if AAllowRelogin and not IsAuthEndpoint(APath) and (FAccessToken <> '') and IsTokenExpired then
   begin

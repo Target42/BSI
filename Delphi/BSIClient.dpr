@@ -50,6 +50,8 @@ uses
 
   ReportExporter in 'Services\ReportExporter.pas',
 
+  SearchEditHelper in 'UI\SearchEditHelper.pas',
+
   BausteinRecommendationService in 'Services\BausteinRecommendationService.pas',
 
   f_login in 'UI\f_login.pas' {LoginForm},

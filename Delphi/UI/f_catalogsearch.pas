@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   System.Generics.Collections, System.Math, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.StdCtrls, Vcl.Grids, Vcl.ComCtrls, Vcl.ExtCtrls, IsmsDomain, AppContext,
-  RequirementTextFormatter, f_bausteinview;
+  RequirementTextFormatter, f_bausteinview, SearchEditHelper;
 
 type
   TSearchHit = record
@@ -29,6 +29,8 @@ type
     btnClose: TButton;
     procedure FormCreate(Sender: TObject);
     procedure edtSearchChange(Sender: TObject);
+    procedure edtSearchKeyPress(Sender: TObject; var Key: Char);
+    procedure SearchTimerElapsed(Sender: TObject);
     procedure sgResultsSelectCell(Sender: TObject; ACol, ARow: Integer; var CanSelect: Boolean);
     procedure sgResultsDblClick(Sender: TObject);
     procedure btnOpenBausteinClick(Sender: TObject);
@@ -39,6 +41,8 @@ type
     FRequirements: TArray<TRequirement>;
     FBausteinById: TDictionary<Integer, TBaustein>;
     FHits: TArray<TSearchHit>;
+    FSearchTimer: TTimer;
+    FClearSearch: TSearchClearButton;
     procedure SetupGrid;
     procedure RunSearch;
     procedure ShowHitAt(ARow: Integer);
@@ -77,6 +81,28 @@ procedure TCatalogSearchForm.FormCreate(Sender: TObject);
 begin
   FBausteinById := TDictionary<Integer, TBaustein>.Create;
   SetupGrid;
+  FSearchTimer := TTimer.Create(Self);
+  FSearchTimer.Interval := 250;
+  FSearchTimer.Enabled := False;
+  FSearchTimer.OnTimer := SearchTimerElapsed;
+  FClearSearch := TSearchClearButton.Create(Self, edtSearch);
+  FClearSearch.OnSearchChange := edtSearchChange;
+end;
+
+procedure TCatalogSearchForm.SearchTimerElapsed(Sender: TObject);
+begin
+  FSearchTimer.Enabled := False;
+  RunSearch;
+end;
+
+procedure TCatalogSearchForm.edtSearchKeyPress(Sender: TObject; var Key: Char);
+begin
+  if Key = #13 then
+  begin
+    Key := #0;
+    FSearchTimer.Enabled := False;
+    RunSearch;
+  end;
 end;
 
 destructor TCatalogSearchForm.Destroy;
@@ -283,7 +309,8 @@ end;
 
 procedure TCatalogSearchForm.edtSearchChange(Sender: TObject);
 begin
-  RunSearch;
+  FSearchTimer.Enabled := False;
+  FSearchTimer.Enabled := True;
 end;
 
 procedure TCatalogSearchForm.sgResultsSelectCell(Sender: TObject; ACol, ARow: Integer;

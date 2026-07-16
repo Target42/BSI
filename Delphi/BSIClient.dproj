@@ -205,6 +205,7 @@
             <Form>ReportForm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="UI\SearchEditHelper.pas"/>
         <DCCReference Include="UI\f_bausteinview.pas">
             <Form>BausteinViewForm</Form>
             <FormType>dfm</FormType>

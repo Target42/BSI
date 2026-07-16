@@ -80,13 +80,13 @@ begin
   if AccessToken = '' then
     Exit(True);
   if TokenExpiresAt <= 0 then
-    Exit(True);
+    Exit(False);
   Result := Now >= IncSecond(TokenExpiresAt, -60);
 end;
 
 function TAppSettings.HasStoredRemoteSession: Boolean;
 begin
-  Result := UseRemote and (AccessToken <> '') and not IsTokenExpired;
+  Result := UseRemote and (Trim(ServerUrl) <> '') and (AccessToken <> '');
 end;
 
 end.
