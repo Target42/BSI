@@ -64,11 +64,16 @@ void BausteinTreeModel::setHighlightRecommendations(bool highlight)
     endResetModel();
 }
 
-void BausteinTreeModel::setHideNonApplicable(bool hide)
+void BausteinTreeModel::setStatusFilter(bool required, bool possible, bool notApplicable,
+                                        bool undefined)
 {
-    if (m_hideNonApplicable == hide)
+    if (m_filterRequired == required && m_filterPossible == possible
+        && m_filterNotApplicable == notApplicable && m_filterUndefined == undefined)
         return;
-    m_hideNonApplicable = hide;
+    m_filterRequired = required;
+    m_filterPossible = possible;
+    m_filterNotApplicable = notApplicable;
+    m_filterUndefined = undefined;
     rebuildVisibleIndices();
     beginResetModel();
     endResetModel();
@@ -101,10 +106,27 @@ void BausteinTreeModel::updateTargetContext(const QHash<int, ApplicabilityStatus
 
 bool BausteinTreeModel::isBausteinVisible(const Baustein &baustein) const
 {
-    if (m_hideNonApplicable) {
+    const bool statusFilterActive =
+        m_filterRequired || m_filterPossible || m_filterNotApplicable || m_filterUndefined;
+    if (statusFilterActive) {
         const ApplicabilityStatus status =
             m_applicability.value(baustein.id, ApplicabilityStatus::Undefined);
-        if (status != ApplicabilityStatus::Required && status != ApplicabilityStatus::Possible)
+        bool matches = false;
+        switch (status) {
+        case ApplicabilityStatus::Required:
+            matches = m_filterRequired;
+            break;
+        case ApplicabilityStatus::Possible:
+            matches = m_filterPossible;
+            break;
+        case ApplicabilityStatus::NotApplicable:
+            matches = m_filterNotApplicable;
+            break;
+        default:
+            matches = m_filterUndefined;
+            break;
+        }
+        if (!matches)
             return false;
     }
 
@@ -204,7 +226,7 @@ int BausteinTreeModel::rowCount(const QModelIndex &parent) const
     const int groupRow = parent.row();
     int visibleGroupRow = 0;
     for (const GroupNode &group : m_groups) {
-        if (m_hideNonApplicable && group.visibleIndices.isEmpty())
+        if (group.visibleIndices.isEmpty())
             continue;
         if (visibleGroupRow == groupRow)
             return group.visibleIndices.size();

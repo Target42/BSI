@@ -149,37 +149,71 @@ object MainForm: TMainForm
         TextHint = 'Bausteine durchsuchen'#8230
         OnChange = edtBausteinSearchChange
       end
-      object chkFilterApplicable: TCheckBox
+      object lblStatusFilter: TLabel
         Left = 8
+        Top = 49
+        Width = 31
+        Height = 15
+        Caption = 'Status'
+      end
+      object chkFilterRequired: TCheckBox
+        Left = 52
         Top = 48
-        Width = 200
+        Width = 88
         Height = 17
-        Caption = 'Nur anwendbare Bausteine'
+        Caption = 'Ben'#246'tigt'
         TabOrder = 1
-        OnClick = chkFilterApplicableClick
+        OnClick = chkFilterStatusClick
+      end
+      object chkFilterPossible: TCheckBox
+        Left = 144
+        Top = 48
+        Width = 168
+        Height = 17
+        Caption = 'M'#246'glicherweise'
+        TabOrder = 2
+        OnClick = chkFilterStatusClick
+      end
+      object chkFilterNotApplicable: TCheckBox
+        Left = 52
+        Top = 66
+        Width = 100
+        Height = 17
+        Caption = 'Nicht relevant'
+        TabOrder = 3
+        OnClick = chkFilterStatusClick
+      end
+      object chkFilterUndefined: TCheckBox
+        Left = 144
+        Top = 66
+        Width = 168
+        Height = 17
+        Caption = 'Undefiniert'
+        TabOrder = 4
+        OnClick = chkFilterStatusClick
       end
       object chkHighlightRecommendations: TCheckBox
         Left = 8
-        Top = 68
+        Top = 86
         Width = 220
         Height = 17
         Caption = 'Empfehlungen hervorheben'
         Checked = True
         State = cbChecked
-        TabOrder = 3
+        TabOrder = 5
         OnClick = chkHighlightRecommendationsClick
       end
       object tvBausteine: TTreeView
         Left = 8
-        Top = 92
+        Top = 108
         Width = 304
-        Height = 451
+        Height = 435
         Anchors = [akLeft, akTop, akRight, akBottom]
         HideSelection = False
         Indent = 19
         PopupMenu = mnuBaustein
         ReadOnly = True
-        TabOrder = 2
+        TabOrder = 6
         OnChange = tvBausteineChange
         OnClick = tvBausteineClick
         OnContextPopup = tvBausteineContextPopup
@@ -243,12 +277,60 @@ object MainForm: TMainForm
       object cboAssignedBausteine: TComboBox
         Left = 62
         Top = 76
-        Width = 1006
+        Width = 668
         Height = 23
         Style = csDropDownList
         Anchors = [akLeft, akTop, akRight]
         TabOrder = 1
         OnChange = cboAssignedBausteineChange
+      end
+      object lblReqStatusFilter: TLabel
+        Left = 742
+        Top = 80
+        Width = 31
+        Height = 15
+        Anchors = [akTop, akRight]
+        Caption = 'Status'
+      end
+      object chkReqFilterOpen: TCheckBox
+        Left = 784
+        Top = 78
+        Width = 56
+        Height = 17
+        Anchors = [akTop, akRight]
+        Caption = 'Offen'
+        TabOrder = 2
+        OnClick = chkReqFilterStatusClick
+      end
+      object chkReqFilterPartial: TCheckBox
+        Left = 844
+        Top = 78
+        Width = 78
+        Height = 17
+        Anchors = [akTop, akRight]
+        Caption = 'Teilweise'
+        TabOrder = 3
+        OnClick = chkReqFilterStatusClick
+      end
+      object chkReqFilterFulfilled: TCheckBox
+        Left = 926
+        Top = 78
+        Width = 64
+        Height = 17
+        Anchors = [akTop, akRight]
+        Caption = 'Erf'#252'llt'
+        TabOrder = 4
+        OnClick = chkReqFilterStatusClick
+      end
+      object chkReqFilterNotApplicable: TCheckBox
+        Left = 994
+        Top = 78
+        Width = 74
+        Height = 17
+        Anchors = [akTop, akRight]
+        Caption = 'Entf'#228'llt'
+        TabOrder = 5
+        OnClick = chkReqFilterStatusClick
       end
       object sgRequirements: TStringGrid
         Left = 8
@@ -261,7 +343,7 @@ object MainForm: TMainForm
         FixedCols = 0
         RowCount = 2
         Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
-        TabOrder = 2
+        TabOrder = 6
         OnDrawCell = sgRequirementsDrawCell
         OnSelectCell = sgRequirementsSelectCell
       end

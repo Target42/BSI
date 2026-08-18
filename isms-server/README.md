@@ -190,7 +190,14 @@ Voraussetzungen: PostgreSQL läuft, Server gestartet (`go run ./cmd/isms-server`
 - [ ] **Projekt → Server-Sitzung erneuern** → neues Token ohne Neustart
 - [ ] Optional HTTPS: Dev-Zertifikat, `https://localhost:8443`, TLS-Checkbox im Login
 
+## Nativer Betrieb (Dienst)
+
+Kurzanleitung und Install-Skripte: **[INSTALL.md](INSTALL.md)**
+
+- Windows: `.\scripts\install-windows-service.ps1` (NSSM-Dienst oder geplante Aufgabe)
+- Ubuntu: Abschnitt **Ubuntu** in [INSTALL.md](INSTALL.md), Skript `sudo ./scripts/install-systemd.sh`
+
 ## Nächste Schritte
 
-- Deployment-Dokumentation (Reverse Proxy, Let's Encrypt)
+- Reverse Proxy / Let's Encrypt vor dem Server (optional, statt App-TLS)
 - Refresh-Tokens (optional, längere Sessions ohne erneutes Passwort)

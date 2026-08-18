@@ -67,7 +67,8 @@ private slots:
     void showTargetObjectContextMenu(const QPoint &pos);
     void showBausteinContextMenu(const QPoint &pos);
     void setBausteinApplicability(ApplicabilityStatus status);
-    void toggleApplicableFilter(bool enabled);
+    void applyBausteinStatusFilter();
+    void applyRequirementStatusFilter();
     void toggleRecommendationHighlight(bool enabled);
     void applyBausteinRecommendations();
     void showSollIstReport();
@@ -97,6 +98,11 @@ private:
     void restoreTargetSelection(int targetObjectId);
     bool isBausteinApplicableForActiveTarget(int bausteinDbId) const;
     bool hasApplicableBausteineForActiveTarget() const;
+    bool statusFilterActive() const;
+    bool anyBausteinMatchesStatusFilter() const;
+    void clearStatusFilter();
+    bool assessmentStatusFilterActive() const;
+    bool requirementPassesStatusFilter(AssessmentStatus status) const;
     void ensureApplicableFilterFeasible();
     void showBausteinNotApplicableMessage(int bausteinDbId, ApplicabilityStatus status);
     void refreshAssessmentColumn();
@@ -144,8 +150,10 @@ private:
     int m_preferredRequirementId = 0;
     int m_lastConflictNotifiedRequirementId = 0;
     bool m_suppressAssessmentSave = false;
+    bool m_loadingRequirements = false;
     bool m_blockBausteinSelectionHandler = false;
     bool m_blockAssignedBausteinBoxHandler = false;
+    bool m_blockRequirementSelectionHandler = false;
     QHash<int, int> m_lastBausteinByTarget;
     QHash<int, int> m_lastRequirementByTarget;
     QHash<int, SessionSelection> m_sessionByProject;
@@ -168,7 +176,14 @@ private:
     QDateEdit *m_dueDateEdit = nullptr;
     QComboBox *m_statusBox = nullptr;
     QComboBox *m_assignedBausteinBox = nullptr;
-    QCheckBox *m_filterApplicableBox = nullptr;
+    QCheckBox *m_reqFilterOpenBox = nullptr;
+    QCheckBox *m_reqFilterPartialBox = nullptr;
+    QCheckBox *m_reqFilterFulfilledBox = nullptr;
+    QCheckBox *m_reqFilterNotApplicableBox = nullptr;
+    QCheckBox *m_filterRequiredBox = nullptr;
+    QCheckBox *m_filterPossibleBox = nullptr;
+    QCheckBox *m_filterNotApplicableBox = nullptr;
+    QCheckBox *m_filterUndefinedBox = nullptr;
     QCheckBox *m_highlightRecommendationsBox = nullptr;
     QLineEdit *m_bausteinSearchEdit = nullptr;
     QCheckBox *m_hasDueDateBox = nullptr;

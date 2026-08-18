@@ -30,7 +30,7 @@ public:
     void setRecommendedBausteinIds(const QSet<int> &ids);
     void setRecommendationTiers(const QHash<int, BausteinRecommendationTier> &tiers);
     void setHighlightRecommendations(bool highlight);
-    void setHideNonApplicable(bool hide);
+    void setStatusFilter(bool required, bool possible, bool notApplicable, bool undefined);
     void setSearchFilter(const QString &query, const QSet<int> &matchingBausteinIds);
     void updateTargetContext(const QHash<int, ApplicabilityStatus> &applicability,
                              const QSet<int> &recommendedIds,
@@ -61,7 +61,10 @@ private:
     QSet<int> m_recommendedIds;
     QHash<int, BausteinRecommendationTier> m_recommendationTiers;
     bool m_highlightRecommendations = true;
-    bool m_hideNonApplicable = false;
+    bool m_filterRequired = false;
+    bool m_filterPossible = false;
+    bool m_filterNotApplicable = false;
+    bool m_filterUndefined = false;
     QString m_searchQuery;
     QSet<int> m_searchMatchingIds;
 };

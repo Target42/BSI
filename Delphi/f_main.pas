@@ -24,7 +24,11 @@ type
     tvTargets: TTreeView;
     grpBausteine: TGroupBox;
     edtBausteinSearch: TEdit;
-    chkFilterApplicable: TCheckBox;
+    lblStatusFilter: TLabel;
+    chkFilterRequired: TCheckBox;
+    chkFilterPossible: TCheckBox;
+    chkFilterNotApplicable: TCheckBox;
+    chkFilterUndefined: TCheckBox;
     chkHighlightRecommendations: TCheckBox;
     tvBausteine: TTreeView;
     mnuBaustein: TPopupMenu;
@@ -48,6 +52,11 @@ type
     pbTargetProgress: TProgressBar;
     lblBaustein: TLabel;
     cboAssignedBausteine: TComboBox;
+    lblReqStatusFilter: TLabel;
+    chkReqFilterOpen: TCheckBox;
+    chkReqFilterPartial: TCheckBox;
+    chkReqFilterFulfilled: TCheckBox;
+    chkReqFilterNotApplicable: TCheckBox;
     sgRequirements: TStringGrid;
     splCenter: TSplitter;
     pnlDetail: TPanel;
@@ -122,7 +131,8 @@ type
     procedure chkHasDueDateClick(Sender: TObject);
     procedure dtpDueDateChange(Sender: TObject);
     procedure edtBausteinSearchChange(Sender: TObject);
-    procedure chkFilterApplicableClick(Sender: TObject);
+    procedure chkFilterStatusClick(Sender: TObject);
+    procedure chkReqFilterStatusClick(Sender: TObject);
     procedure DoAddMeasure(Sender: TObject);
     procedure DoEditMeasure(Sender: TObject);
     procedure DoDeleteMeasure(Sender: TObject);
@@ -160,6 +170,7 @@ type
     FLastBausteinByTarget: TDictionary<Integer, Integer>;
     FLastRequirementByTarget: TDictionary<Integer, Integer>;
     FSuppressAssessmentSave: Boolean;
+    FLoadingRequirements: Boolean;
     FSuppressAssignedBausteinChange: Boolean;
     FCurrentAssessmentVersion: Integer;
     FSessionTimer: TTimer;
@@ -168,6 +179,7 @@ type
     FLastConflictNotifiedRequirementId: Integer;
     FContextMenuBausteinId: Integer;
     FBlockTargetSelection: Boolean;
+    FSuppressStatusFilterChange: Boolean;
     FClearBausteinSearch: TSearchClearButton;
 
     procedure SetAppContext(const AContext: TAppContext);
@@ -202,6 +214,12 @@ type
       AParentId: Integer): Integer;
     function BuildBausteinCaption(const B: TBaustein): string;
     function MatchingBausteinIdsForSearch(const ANeedle: string): TDictionary<Integer, Byte>;
+    function StatusFilterActive: Boolean;
+    function BausteinPassesStatusFilter(AStatus: TApplicabilityStatus): Boolean;
+    function AnyBausteinMatchesStatusFilter: Boolean;
+    procedure ClearStatusFilter;
+    function AssessmentStatusFilterActive: Boolean;
+    function RequirementPassesStatusFilter(AStatus: TAssessmentStatus): Boolean;
     procedure EnsureApplicableFilterFeasible;
     procedure ShowBausteinNotApplicableMessage(ABausteinDbId: Integer; AStatus: TApplicabilityStatus);
     procedure OpenBausteinView(const B: TBaustein; const AInitialSearch: string);
@@ -353,11 +371,30 @@ begin
   cboAssessmentStatus.Items.Add(AssessmentStatusToString(asNotApplicable));
 
   ShowHint := True;
-  chkFilterApplicable.ShowHint := True;
-  chkFilterApplicable.Hint :=
-    'Blendet Bausteine aus, die f'#252'r das aktuelle Zielobjekt noch nicht per Rechtsklick ' +
-    'als "Ben'#246'tigt" oder "M'#246'glicherweise" markiert wurden.' + sLineBreak + sLineBreak +
-    'Zum Markieren: Haken entfernen, Baustein w'#228'hlen, Rechtsklick '#8594' "Ben'#246'tigt".';
+  chkFilterRequired.ShowHint := True;
+  chkFilterPossible.ShowHint := True;
+  chkFilterNotApplicable.ShowHint := True;
+  chkFilterUndefined.ShowHint := True;
+  chkFilterRequired.Hint :=
+    'Begrenzt die Bausteinliste auf die gew'#228'hlten Stati. Ohne Haken werden alle ' +
+    'Bausteine angezeigt. Mehrere Stati k'#246'nnen kombiniert werden.';
+  chkFilterPossible.Hint := chkFilterRequired.Hint;
+  chkFilterNotApplicable.Hint := chkFilterRequired.Hint;
+  chkFilterUndefined.Hint := chkFilterRequired.Hint;
+  lblStatusFilter.ShowHint := True;
+  lblStatusFilter.Hint := chkFilterRequired.Hint;
+  chkReqFilterOpen.ShowHint := True;
+  chkReqFilterPartial.ShowHint := True;
+  chkReqFilterFulfilled.ShowHint := True;
+  chkReqFilterNotApplicable.ShowHint := True;
+  chkReqFilterOpen.Hint :=
+    'Begrenzt die Anforderungstabelle auf die gew'#228'hlten Stati. Ohne Haken werden alle ' +
+    'Anforderungen angezeigt. Mehrere Stati k'#246'nnen kombiniert werden.';
+  chkReqFilterPartial.Hint := chkReqFilterOpen.Hint;
+  chkReqFilterFulfilled.Hint := chkReqFilterOpen.Hint;
+  chkReqFilterNotApplicable.Hint := chkReqFilterOpen.Hint;
+  lblReqStatusFilter.ShowHint := True;
+  lblReqStatusFilter.Hint := chkReqFilterOpen.Hint;
   chkHighlightRecommendations.ShowHint := True;
   chkHighlightRecommendations.Hint := #9733' Kern-Empfehlung, '#9675' erg'#228'nzende Empfehlung';
   edtBausteinSearch.ShowHint := True;
@@ -546,7 +583,15 @@ begin
   mnuSwitchUser.Enabled := True;
   mnuViewBaustein.Enabled := True;
   mnuCatalogSearch.Enabled := True;
+  chkFilterRequired.Enabled := HasProject and (FActiveTarget.Id > 0);
+  chkFilterPossible.Enabled := HasProject and (FActiveTarget.Id > 0);
+  chkFilterNotApplicable.Enabled := HasProject and (FActiveTarget.Id > 0);
+  chkFilterUndefined.Enabled := HasProject and (FActiveTarget.Id > 0);
   chkHighlightRecommendations.Enabled := HasProject and (FActiveTarget.Id > 0);
+  chkReqFilterOpen.Enabled := HasProject and (FActiveTarget.Id > 0);
+  chkReqFilterPartial.Enabled := HasProject and (FActiveTarget.Id > 0);
+  chkReqFilterFulfilled.Enabled := HasProject and (FActiveTarget.Id > 0);
+  chkReqFilterNotApplicable.Enabled := HasProject and (FActiveTarget.Id > 0);
   cboAssignedBausteine.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0) and
     (cboAssignedBausteine.ItemIndex >= 0) and
     (Integer(cboAssignedBausteine.Items.Objects[cboAssignedBausteine.ItemIndex]) > 0);
@@ -984,6 +1029,7 @@ var
   Caption: string;
   MatchingIds: TDictionary<Integer, Byte>;
   HasSearch: Boolean;
+  Status: TApplicabilityStatus;
 begin
   tvBausteine.Items.BeginUpdate;
   try
@@ -999,9 +1045,13 @@ begin
       try
         for B in FCatalogBausteine do
         begin
-          if chkFilterApplicable.Checked and HasActiveProject and (FActiveTarget.Id > 0) then
-            if not IsBausteinApplicable(B.Id) then
+          if StatusFilterActive then
+          begin
+            if not FApplicabilityMap.TryGetValue(B.Id, Status) then
+              Status := apUndefined;
+            if not BausteinPassesStatusFilter(Status) then
               Continue;
+          end;
           if HasSearch then
           begin
             if (MatchingIds = nil) or not MatchingIds.ContainsKey(B.Id) then
@@ -1060,15 +1110,20 @@ end;
 
 procedure TMainForm.EnsureApplicableFilterFeasible;
 begin
-  if not chkFilterApplicable.Checked or not HasActiveProject or (FActiveTarget.Id = 0) then
+  if not StatusFilterActive or not HasActiveProject or (FActiveTarget.Id = 0) then
     Exit;
-  if TargetHasAssignedBausteine(FActiveTarget.Id) then
+  if AnyBausteinMatchesStatusFilter then
     Exit;
-  chkFilterApplicable.Checked := False;
+  FSuppressStatusFilterChange := True;
+  try
+    ClearStatusFilter;
+  finally
+    FSuppressStatusFilterChange := False;
+  end;
   ReloadBausteinTree;
   ShowTemporaryStatusMessage(
-    Format('Filter deaktiviert: Für "%s – %s" sind noch keine Bausteine markiert. ' +
-      'Baustein wählen → Rechtsklick → "Benötigt" oder "Möglicherweise".',
+    Format('Statusfilter deaktiviert: F'#252'r "%s '#$2013' %s" gibt es keine Bausteine mit den ' +
+      'gew'#228'hlten Stati. Ohne Haken werden alle Bausteine angezeigt.',
       [TargetObjectTypeToString(FActiveTarget.ObjType), FActiveTarget.Name]), 8000);
 end;
 
@@ -1161,12 +1216,22 @@ var
   Assessment: TRequirementAssessment;
   Row: Integer;
   MeasureCnt: Integer;
+  PreferredId: Integer;
+  Found: Boolean;
+  PreviousSuppress: Boolean;
 begin
+  if FLoadingRequirements then
+    Exit;
   if not HasActiveProject or (FActiveTarget.Id = 0) or (ABausteinDbId = 0) then
   begin
     ClearRequirementView;
     Exit;
   end;
+  FLoadingRequirements := True;
+  PreviousSuppress := FSuppressAssessmentSave;
+  FSuppressAssessmentSave := True;
+  try
+  PreferredId := FActiveRequirementId;
   FCurrentRequirements := FContext.CatalogRepository.LoadRequirements(ABausteinDbId);
   sgRequirements.RowCount := 1;
   Row := 1;
@@ -1176,10 +1241,12 @@ begin
       Continue;
     if not RequirementLevelApplies(R.Level, FActiveTarget.ProtectionNeed) then
       Continue;
-    Inc(Row);
-    sgRequirements.RowCount := Row + 1;
     Assessment := FContext.ProjectRepository.LoadAssessment(
       FActiveProject.Id, FActiveTarget.Id, R.Id);
+    if AssessmentStatusFilterActive and not RequirementPassesStatusFilter(Assessment.Status) then
+      Continue;
+    Inc(Row);
+    sgRequirements.RowCount := Row + 1;
     if FMeasureCounts.TryGetValue(R.Id, MeasureCnt) then
     else
       MeasureCnt := 0;
@@ -1205,11 +1272,30 @@ begin
   end;
   if sgRequirements.RowCount > 1 then
   begin
-    sgRequirements.Row := 1;
-    LoadRequirementDetails(1);
+    Found := False;
+    if PreferredId > 0 then
+    begin
+      for Row := 1 to sgRequirements.RowCount - 1 do
+        if Integer(sgRequirements.Objects[0, Row]) = PreferredId then
+        begin
+          sgRequirements.Row := Row;
+          LoadRequirementDetails(Row);
+          Found := True;
+          Break;
+        end;
+    end;
+    if not Found then
+    begin
+      sgRequirements.Row := 1;
+      LoadRequirementDetails(1);
+    end;
   end
   else
     ClearRequirementView;
+  finally
+    FSuppressAssessmentSave := PreviousSuppress;
+    FLoadingRequirements := False;
+  end;
 end;
 
 procedure TMainForm.LoadRequirementDetails(ARow: Integer);
@@ -2022,14 +2108,85 @@ begin
   SaveCurrentAssessment(False);
 end;
 
+function TMainForm.StatusFilterActive: Boolean;
+begin
+  Result := chkFilterRequired.Checked or chkFilterPossible.Checked or
+    chkFilterNotApplicable.Checked or chkFilterUndefined.Checked;
+end;
+
+function TMainForm.BausteinPassesStatusFilter(AStatus: TApplicabilityStatus): Boolean;
+begin
+  if not StatusFilterActive then
+    Exit(True);
+  case AStatus of
+    apRequired: Result := chkFilterRequired.Checked;
+    apPossible: Result := chkFilterPossible.Checked;
+    apNotApplicable: Result := chkFilterNotApplicable.Checked;
+  else
+    Result := chkFilterUndefined.Checked;
+  end;
+end;
+
+function TMainForm.AnyBausteinMatchesStatusFilter: Boolean;
+var
+  B: TBaustein;
+  Status: TApplicabilityStatus;
+begin
+  Result := False;
+  if not StatusFilterActive then
+    Exit(True);
+  for B in FCatalogBausteine do
+  begin
+    if not FApplicabilityMap.TryGetValue(B.Id, Status) then
+      Status := apUndefined;
+    if BausteinPassesStatusFilter(Status) then
+      Exit(True);
+  end;
+end;
+
+procedure TMainForm.ClearStatusFilter;
+begin
+  chkFilterRequired.Checked := False;
+  chkFilterPossible.Checked := False;
+  chkFilterNotApplicable.Checked := False;
+  chkFilterUndefined.Checked := False;
+end;
+
+function TMainForm.AssessmentStatusFilterActive: Boolean;
+begin
+  Result := chkReqFilterOpen.Checked or chkReqFilterPartial.Checked or
+    chkReqFilterFulfilled.Checked or chkReqFilterNotApplicable.Checked;
+end;
+
+function TMainForm.RequirementPassesStatusFilter(AStatus: TAssessmentStatus): Boolean;
+begin
+  if not AssessmentStatusFilterActive then
+    Exit(True);
+  case AStatus of
+    asOpen: Result := chkReqFilterOpen.Checked;
+    asPartial: Result := chkReqFilterPartial.Checked;
+    asFulfilled: Result := chkReqFilterFulfilled.Checked;
+  else
+    Result := chkReqFilterNotApplicable.Checked;
+  end;
+end;
+
 procedure TMainForm.edtBausteinSearchChange(Sender: TObject);
 begin
   ReloadBausteinTree;
 end;
 
-procedure TMainForm.chkFilterApplicableClick(Sender: TObject);
+procedure TMainForm.chkFilterStatusClick(Sender: TObject);
 begin
+  if FSuppressStatusFilterChange then
+    Exit;
   ReloadBausteinTree;
+end;
+
+procedure TMainForm.chkReqFilterStatusClick(Sender: TObject);
+begin
+  if FActiveBausteinId > 0 then
+    LoadRequirementsForBaustein(FActiveBausteinId);
 end;
 
 procedure TMainForm.chkHighlightRecommendationsClick(Sender: TObject);

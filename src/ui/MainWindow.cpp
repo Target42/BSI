@@ -4,6 +4,7 @@
 #include "catalog/GrundschutzImporter.h"
 #include "catalog/RequirementTextFormatter.h"
 #include "domain/AssessmentStatus.h"
+#include "domain/Baustein.h"
 #include "domain/Measure.h"
 #include "domain/SaveResult.h"
 #include "domain/ProtectionNeed.h"
@@ -31,6 +32,7 @@
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QHash>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QItemSelectionModel>
@@ -142,12 +144,36 @@ void MainWindow::buildUi()
     targetDock->setWidget(targetPanel);
     addDockWidget(Qt::LeftDockWidgetArea, targetDock);
 
-    m_filterApplicableBox = new QCheckBox(tr("Nur anwendbare Bausteine"), this);
-    m_filterApplicableBox->setToolTip(
-        tr("Blendet Bausteine aus, die für das aktuelle Zielobjekt noch nicht per Rechtsklick "
-           "als \"Benötigt\" oder \"Möglicherweise\" markiert wurden.\n\n"
-           "Zum Markieren: Haken entfernen, Baustein wählen, Rechtsklick → \"Benötigt\"."));
-    connect(m_filterApplicableBox, &QCheckBox::toggled, this, &MainWindow::toggleApplicableFilter);
+    m_filterRequiredBox = new QCheckBox(tr("Benötigt"), this);
+    m_filterPossibleBox = new QCheckBox(tr("Möglicherweise"), this);
+    m_filterNotApplicableBox = new QCheckBox(tr("Nicht relevant"), this);
+    m_filterUndefinedBox = new QCheckBox(tr("Undefiniert"), this);
+    const QString statusFilterTip =
+        tr("Begrenzt die Bausteinliste auf die gewählten Stati. Ohne Haken werden alle "
+           "Bausteine angezeigt. Mehrere Stati können kombiniert werden.");
+    m_filterRequiredBox->setToolTip(statusFilterTip);
+    m_filterPossibleBox->setToolTip(statusFilterTip);
+    m_filterNotApplicableBox->setToolTip(statusFilterTip);
+    m_filterUndefinedBox->setToolTip(statusFilterTip);
+    connect(m_filterRequiredBox, &QCheckBox::toggled, this, &MainWindow::applyBausteinStatusFilter);
+    connect(m_filterPossibleBox, &QCheckBox::toggled, this, &MainWindow::applyBausteinStatusFilter);
+    connect(m_filterNotApplicableBox, &QCheckBox::toggled, this,
+            &MainWindow::applyBausteinStatusFilter);
+    connect(m_filterUndefinedBox, &QCheckBox::toggled, this, &MainWindow::applyBausteinStatusFilter);
+
+    auto *statusFilterWidget = new QWidget(this);
+    auto *statusFilterLayout = new QGridLayout(statusFilterWidget);
+    statusFilterLayout->setContentsMargins(0, 0, 0, 0);
+    statusFilterLayout->setHorizontalSpacing(8);
+    statusFilterLayout->setVerticalSpacing(2);
+    auto *statusFilterLabel = new QLabel(tr("Status"), this);
+    statusFilterLabel->setToolTip(statusFilterTip);
+    statusFilterLayout->addWidget(statusFilterLabel, 0, 0);
+    statusFilterLayout->addWidget(m_filterRequiredBox, 0, 1);
+    statusFilterLayout->addWidget(m_filterPossibleBox, 0, 2);
+    statusFilterLayout->addWidget(m_filterNotApplicableBox, 1, 1);
+    statusFilterLayout->addWidget(m_filterUndefinedBox, 1, 2);
+    statusFilterLayout->setColumnStretch(2, 1);
 
     m_highlightRecommendationsBox = new QCheckBox(tr("Empfehlungen hervorheben"), this);
     m_highlightRecommendationsBox->setToolTip(tr("★ Kern-Empfehlung, ○ ergänzende Empfehlung"));
@@ -168,7 +194,7 @@ void MainWindow::buildUi()
     auto *bausteinLayout = new QVBoxLayout(bausteinPanel);
     bausteinLayout->setContentsMargins(0, 0, 0, 0);
     bausteinLayout->addWidget(m_bausteinSearchEdit);
-    bausteinLayout->addWidget(m_filterApplicableBox);
+    bausteinLayout->addWidget(statusFilterWidget);
     bausteinLayout->addWidget(m_highlightRecommendationsBox);
 
     m_bausteinTree = new QTreeView(this);
@@ -202,6 +228,8 @@ void MainWindow::buildUi()
     m_requirementTable->setAlternatingRowColors(true);
     connect(m_requirementTable->selectionModel(), &QItemSelectionModel::currentChanged, this,
             [this](const QModelIndex &current, const QModelIndex &) {
+                if (m_blockRequirementSelectionHandler)
+                    return;
                 onRequirementSelected(current);
             });
 
@@ -300,6 +328,31 @@ void MainWindow::buildUi()
     connect(m_assignedBausteinBox, QOverload<int>::of(&QComboBox::activated), this,
             &MainWindow::onAssignedBausteinActivated);
     bausteinRow->addWidget(m_assignedBausteinBox, 1);
+
+    m_reqFilterOpenBox = new QCheckBox(tr("Offen"), this);
+    m_reqFilterPartialBox = new QCheckBox(tr("Teilweise"), this);
+    m_reqFilterFulfilledBox = new QCheckBox(tr("Erfüllt"), this);
+    m_reqFilterNotApplicableBox = new QCheckBox(tr("Entfällt"), this);
+    const QString reqStatusFilterTip =
+        tr("Begrenzt die Anforderungstabelle auf die gewählten Stati. Ohne Haken werden alle "
+           "Anforderungen angezeigt. Mehrere Stati können kombiniert werden.");
+    m_reqFilterOpenBox->setToolTip(reqStatusFilterTip);
+    m_reqFilterPartialBox->setToolTip(reqStatusFilterTip);
+    m_reqFilterFulfilledBox->setToolTip(reqStatusFilterTip);
+    m_reqFilterNotApplicableBox->setToolTip(reqStatusFilterTip);
+    connect(m_reqFilterOpenBox, &QCheckBox::toggled, this, &MainWindow::applyRequirementStatusFilter);
+    connect(m_reqFilterPartialBox, &QCheckBox::toggled, this, &MainWindow::applyRequirementStatusFilter);
+    connect(m_reqFilterFulfilledBox, &QCheckBox::toggled, this,
+            &MainWindow::applyRequirementStatusFilter);
+    connect(m_reqFilterNotApplicableBox, &QCheckBox::toggled, this,
+            &MainWindow::applyRequirementStatusFilter);
+    auto *reqStatusLabel = new QLabel(tr("Status"), this);
+    reqStatusLabel->setToolTip(reqStatusFilterTip);
+    bausteinRow->addWidget(reqStatusLabel);
+    bausteinRow->addWidget(m_reqFilterOpenBox);
+    bausteinRow->addWidget(m_reqFilterPartialBox);
+    bausteinRow->addWidget(m_reqFilterFulfilledBox);
+    bausteinRow->addWidget(m_reqFilterNotApplicableBox);
 
     auto *requirementPanel = new QWidget(this);
     auto *requirementLayout = new QVBoxLayout(requirementPanel);
@@ -427,8 +480,15 @@ void MainWindow::updateProjectUiEnabled()
     m_sollIstAction->setEnabled(hasProject);
 
     m_targetObjectTree->setEnabled(hasProject);
-    m_filterApplicableBox->setEnabled(hasTargetObject);
+    m_filterRequiredBox->setEnabled(hasTargetObject);
+    m_filterPossibleBox->setEnabled(hasTargetObject);
+    m_filterNotApplicableBox->setEnabled(hasTargetObject);
+    m_filterUndefinedBox->setEnabled(hasTargetObject);
     m_highlightRecommendationsBox->setEnabled(hasTargetObject);
+    m_reqFilterOpenBox->setEnabled(hasTargetObject);
+    m_reqFilterPartialBox->setEnabled(hasTargetObject);
+    m_reqFilterFulfilledBox->setEnabled(hasTargetObject);
+    m_reqFilterNotApplicableBox->setEnabled(hasTargetObject);
     m_assignedBausteinBox->setEnabled(hasTargetObject && canEdit
                                       && m_assignedBausteinBox->count() > 0
                                       && m_assignedBausteinBox->currentData().toInt() != 0);
@@ -1064,22 +1124,94 @@ bool MainWindow::hasApplicableBausteineForActiveTarget() const
     return false;
 }
 
+bool MainWindow::statusFilterActive() const
+{
+    return m_filterRequiredBox->isChecked() || m_filterPossibleBox->isChecked()
+        || m_filterNotApplicableBox->isChecked() || m_filterUndefinedBox->isChecked();
+}
+
+void MainWindow::clearStatusFilter()
+{
+    const QSignalBlocker requiredBlocker(m_filterRequiredBox);
+    const QSignalBlocker possibleBlocker(m_filterPossibleBox);
+    const QSignalBlocker notApplicableBlocker(m_filterNotApplicableBox);
+    const QSignalBlocker undefinedBlocker(m_filterUndefinedBox);
+    m_filterRequiredBox->setChecked(false);
+    m_filterPossibleBox->setChecked(false);
+    m_filterNotApplicableBox->setChecked(false);
+    m_filterUndefinedBox->setChecked(false);
+}
+
+bool MainWindow::anyBausteinMatchesStatusFilter() const
+{
+    if (!statusFilterActive())
+        return true;
+
+    const QHash<int, ApplicabilityStatus> map =
+        m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
+                                                                m_activeTargetObject.id);
+    for (const Baustein &baustein : m_catalogBausteine) {
+        const ApplicabilityStatus status =
+            map.value(baustein.id, ApplicabilityStatus::Undefined);
+        bool matches = false;
+        switch (status) {
+        case ApplicabilityStatus::Required:
+            matches = m_filterRequiredBox->isChecked();
+            break;
+        case ApplicabilityStatus::Possible:
+            matches = m_filterPossibleBox->isChecked();
+            break;
+        case ApplicabilityStatus::NotApplicable:
+            matches = m_filterNotApplicableBox->isChecked();
+            break;
+        default:
+            matches = m_filterUndefinedBox->isChecked();
+            break;
+        }
+        if (matches)
+            return true;
+    }
+    return false;
+}
+
+bool MainWindow::assessmentStatusFilterActive() const
+{
+    return m_reqFilterOpenBox->isChecked() || m_reqFilterPartialBox->isChecked()
+        || m_reqFilterFulfilledBox->isChecked() || m_reqFilterNotApplicableBox->isChecked();
+}
+
+bool MainWindow::requirementPassesStatusFilter(AssessmentStatus status) const
+{
+    if (!assessmentStatusFilterActive())
+        return true;
+    switch (status) {
+    case AssessmentStatus::Open:
+        return m_reqFilterOpenBox->isChecked();
+    case AssessmentStatus::Partial:
+        return m_reqFilterPartialBox->isChecked();
+    case AssessmentStatus::Fulfilled:
+        return m_reqFilterFulfilledBox->isChecked();
+    case AssessmentStatus::NotApplicable:
+        return m_reqFilterNotApplicableBox->isChecked();
+    }
+    return m_reqFilterOpenBox->isChecked();
+}
+
 void MainWindow::ensureApplicableFilterFeasible()
 {
-    if (!m_filterApplicableBox->isChecked() || !hasActiveProjectContext())
+    if (!statusFilterActive() || !hasActiveProjectContext())
         return;
 
-    if (hasApplicableBausteineForActiveTarget())
+    if (anyBausteinMatchesStatusFilter())
         return;
 
-    QSignalBlocker blocker(m_filterApplicableBox);
-    m_filterApplicableBox->setChecked(false);
-    m_bausteinModel->setHideNonApplicable(false);
+    clearStatusFilter();
+    m_bausteinModel->setStatusFilter(false, false, false, false);
     m_bausteinTree->expandAll();
 
     showTemporaryStatusMessage(
-        tr("Filter deaktiviert: Für \"%1 – %2\" sind noch keine Bausteine markiert. "
-           "Baustein wählen → Rechtsklick → \"Benötigt\" oder \"Möglicherweise\".")
+        tr("Statusfilter deaktiviert: Für \"%1 – %2\" gibt es keine Bausteine mit den "
+           "gewählten Stati. Ohne Haken werden alle Bausteine angezeigt.")
             .arg(targetObjectTypeToString(m_activeTargetObject.type), m_activeTargetObject.name),
         8000);
 }
@@ -1603,13 +1735,47 @@ void MainWindow::onBausteinSelected(const QModelIndex &index)
 
 void MainWindow::loadRequirementsForBaustein(int bausteinDbId)
 {
+    if (m_loadingRequirements)
+        return;
+
+    struct LoadGuard {
+        bool &loading;
+        bool &suppressSave;
+        bool &blockSelection;
+        bool previousSuppress;
+        LoadGuard(bool &loadingRef, bool &suppressRef, bool &blockRef)
+            : loading(loadingRef)
+            , suppressSave(suppressRef)
+            , blockSelection(blockRef)
+            , previousSuppress(suppressRef)
+        {
+            loading = true;
+            suppressSave = true;
+            blockSelection = true;
+        }
+        ~LoadGuard()
+        {
+            blockSelection = false;
+            suppressSave = previousSuppress;
+            loading = false;
+        }
+    } guard(m_loadingRequirements, m_suppressAssessmentSave, m_blockRequirementSelectionHandler);
+    QSignalBlocker selectionBlocker(m_requirementTable->selectionModel());
+
     QList<Requirement> requirements = m_context.catalogRepository().loadRequirements(bausteinDbId);
 
     if (hasActiveProjectContext()) {
         QList<Requirement> filtered;
         for (const Requirement &requirement : requirements) {
-            if (requirementLevelApplies(requirement.level, m_activeTargetObject.protectionNeed))
-                filtered.append(requirement);
+            if (!requirementLevelApplies(requirement.level, m_activeTargetObject.protectionNeed))
+                continue;
+            if (assessmentStatusFilterActive()) {
+                const RequirementAssessment assessment = m_context.projectRepository().loadAssessment(
+                    m_activeProject.id, m_activeTargetObject.id, requirement.id);
+                if (!requirementPassesStatusFilter(assessment.status))
+                    continue;
+            }
+            filtered.append(requirement);
         }
         requirements = filtered;
     }
@@ -1786,7 +1952,7 @@ bool MainWindow::saveCurrentAssessment(bool notifyConflictDialog)
 
 void MainWindow::onRequirementSelected(const QModelIndex &index)
 {
-    if (!index.isValid())
+    if (m_blockRequirementSelectionHandler || !index.isValid())
         return;
 
     loadRequirementDetails(index.row(), false);
@@ -1833,10 +1999,15 @@ void MainWindow::setAssessmentStatus(int index)
 {
     Q_UNUSED(index)
 
-    if (saveCurrentAssessment(true))
+    if (!saveCurrentAssessment(true)) {
+        notifySaveFailure(m_context.projectRepository().lastError(), true);
         return;
+    }
 
-    notifySaveFailure(m_context.projectRepository().lastError(), true);
+    if (assessmentStatusFilterActive() && m_activeBausteinId != 0) {
+        m_restoreRequirementId = m_activeRequirementId;
+        loadRequirementsForBaustein(m_activeBausteinId);
+    }
 }
 
 void MainWindow::saveAssessmentFields()
@@ -2186,30 +2357,24 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
     }
 }
 
-void MainWindow::toggleApplicableFilter(bool enabled)
+void MainWindow::applyBausteinStatusFilter()
 {
     const int previousBausteinId = m_activeBausteinId;
-
-    if (enabled && hasActiveProjectContext() && !hasApplicableBausteineForActiveTarget()) {
-        QSignalBlocker blocker(m_filterApplicableBox);
-        m_filterApplicableBox->setChecked(false);
-        QMessageBox::information(
-            this,
-            tr("Nur anwendbare Bausteine"),
-            tr("Für \"%1 – %2\" sind noch keine Bausteine als anwendbar markiert.\n\n"
-               "So geht's:\n"
-               "1. Haken bei \"Nur anwendbare Bausteine\" entfernt lassen\n"
-               "2. Baustein in der Liste auswählen\n"
-               "3. Rechtsklick → \"Benötigt\" oder \"Möglicherweise\"\n"
-               "4. Danach kann der Filter aktiviert werden")
-                .arg(targetObjectTypeToString(m_activeTargetObject.type), m_activeTargetObject.name));
-        return;
-    }
-
-    m_bausteinModel->setHideNonApplicable(enabled);
+    m_bausteinModel->setStatusFilter(m_filterRequiredBox->isChecked(),
+                                     m_filterPossibleBox->isChecked(),
+                                     m_filterNotApplicableBox->isChecked(),
+                                     m_filterUndefinedBox->isChecked());
     m_bausteinTree->expandAll();
     restoreBausteinSelection(previousBausteinId);
     reloadActiveTargetContent();
+}
+
+void MainWindow::applyRequirementStatusFilter()
+{
+    if (m_activeBausteinId == 0)
+        return;
+    m_restoreRequirementId = m_activeRequirementId;
+    loadRequirementsForBaustein(m_activeBausteinId);
 }
 
 void MainWindow::toggleRecommendationHighlight(bool enabled)

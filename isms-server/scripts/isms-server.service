@@ -1,0 +1,18 @@
+[Unit]
+Description=ISMS Server (IT-Grundschutz API)
+After=network.target postgresql.service postgresql@16-main.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=isms
+Group=isms
+WorkingDirectory=/opt/isms
+ExecStart=/opt/isms/isms-server
+EnvironmentFile=-/etc/isms/isms.env
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
