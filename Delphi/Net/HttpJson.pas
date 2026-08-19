@@ -14,6 +14,8 @@ function MeasureFromJson(AObj: TJSONObject): TMeasure;
 function ServerUserFromJson(AObj: TJSONObject): TServerUser;
 function ProjectMemberFromJson(AObj: TJSONObject): TProjectMember;
 function RepairUtf8Mojibake(const S: string): string;
+function JsonStringValue(AObj: TJSONObject; const AName: string;
+  const ADefault: string = ''): string;
 
 implementation
 

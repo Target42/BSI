@@ -21,6 +21,9 @@ type
     function LoadApplicabilityMap(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, TApplicabilityStatus>; override;
     function Applicability(AProjectId, ATargetObjectId, ABausteinDbId: Integer): TApplicabilityStatus; override;
     function SaveApplicability(const AApplicability: TBausteinApplicability): Boolean; override;
+    function LoadDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer): string; override;
+    function SaveDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer;
+      const ANote: string): Boolean; override;
     function GetLastError: string; override;
   end;
 
@@ -146,6 +149,9 @@ begin
     Q.SQL.Text := 'DELETE FROM baustein_applicability WHERE target_object_id = :id';
     Q.ParamByName('id').AsInteger := ATargetObjectId;
     Q.ExecSQL;
+    Q.SQL.Text := 'DELETE FROM baustein_deviations WHERE target_object_id = :id';
+    Q.ParamByName('id').AsInteger := ATargetObjectId;
+    Q.ExecSQL;
     Q.SQL.Text := 'DELETE FROM requirement_assessments WHERE target_object_id = :id';
     Q.ParamByName('id').AsInteger := ATargetObjectId;
     Q.ExecSQL;
@@ -268,6 +274,66 @@ begin
     Q.ParamByName('tid').AsInteger := AApplicability.TargetObjectId;
     Q.ParamByName('bid').AsInteger := AApplicability.BausteinDbId;
     Q.ParamByName('status').AsString := ApplicabilityStatusToString(AApplicability.Status);
+    Q.ExecSQL;
+    Result := True;
+  except
+    on E: Exception do
+      FLastError := E.Message;
+  end;
+  Q.Free;
+end;
+
+function TTargetObjectRepository.LoadDeviation(AProjectId, ATargetObjectId,
+  ABausteinDbId: Integer): string;
+var
+  Q: TFDQuery;
+begin
+  Result := '';
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConnection;
+    Q.SQL.Text :=
+      'SELECT note FROM baustein_deviations ' +
+      'WHERE project_id = :pid AND target_object_id = :tid AND baustein_id = :bid';
+    Q.ParamByName('pid').AsInteger := AProjectId;
+    Q.ParamByName('tid').AsInteger := ATargetObjectId;
+    Q.ParamByName('bid').AsInteger := ABausteinDbId;
+    Q.Open;
+    if not Q.IsEmpty then
+      Result := Q.FieldByName('note').AsString;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TTargetObjectRepository.SaveDeviation(AProjectId, ATargetObjectId,
+  ABausteinDbId: Integer; const ANote: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result := False;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConnection;
+    if Trim(ANote) = '' then
+    begin
+      Q.SQL.Text :=
+        'DELETE FROM baustein_deviations ' +
+        'WHERE project_id = :pid AND target_object_id = :tid AND baustein_id = :bid';
+      Q.ParamByName('pid').AsInteger := AProjectId;
+      Q.ParamByName('tid').AsInteger := ATargetObjectId;
+      Q.ParamByName('bid').AsInteger := ABausteinDbId;
+      Q.ExecSQL;
+      Exit(True);
+    end;
+    Q.SQL.Text :=
+      'INSERT INTO baustein_deviations (project_id, target_object_id, baustein_id, note) ' +
+      'VALUES (:pid, :tid, :bid, :note) ' +
+      'ON CONFLICT(project_id, target_object_id, baustein_id) DO UPDATE SET note = excluded.note';
+    Q.ParamByName('pid').AsInteger := AProjectId;
+    Q.ParamByName('tid').AsInteger := ATargetObjectId;
+    Q.ParamByName('bid').AsInteger := ABausteinDbId;
+    Q.ParamByName('note').AsString := ANote;
     Q.ExecSQL;
     Result := True;
   except

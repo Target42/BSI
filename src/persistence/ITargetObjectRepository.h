@@ -24,6 +24,10 @@ public:
     virtual ApplicabilityStatus applicability(int projectId, int targetObjectId, int bausteinDbId) const = 0;
     virtual bool saveApplicability(const BausteinApplicability &applicability) = 0;
 
+    virtual QString loadDeviation(int projectId, int targetObjectId, int bausteinDbId) const = 0;
+    virtual bool saveDeviation(int projectId, int targetObjectId, int bausteinDbId,
+                               const QString &note) = 0;
+
     virtual QString lastError() const = 0;
 };
 

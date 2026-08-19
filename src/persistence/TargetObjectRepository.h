@@ -21,6 +21,10 @@ public:
     ApplicabilityStatus applicability(int projectId, int targetObjectId, int bausteinDbId) const override;
     bool saveApplicability(const BausteinApplicability &applicability) override;
 
+    QString loadDeviation(int projectId, int targetObjectId, int bausteinDbId) const override;
+    bool saveDeviation(int projectId, int targetObjectId, int bausteinDbId,
+                       const QString &note) override;
+
     QString lastError() const override;
 
 private:

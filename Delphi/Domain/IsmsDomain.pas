@@ -89,6 +89,13 @@ type
     Status: TApplicabilityStatus;
   end;
 
+  TInheritedBaustein = record
+    BausteinDbId: Integer;
+    Status: TApplicabilityStatus;
+    SourceTargetId: Integer;
+    SourceCaption: string;
+  end;
+
   TGrundschutzImportResult = record
     CatalogVersion: string;
     Bausteine: TArray<TBaustein>;
@@ -182,6 +189,15 @@ function ProtectionNeedToString(AValue: TProtectionNeed): string;
 function ProtectionNeedFromString(const AValue: string): TProtectionNeed;
 function TargetObjectTypeToString(AValue: TTargetObjectType): string;
 function TargetObjectTypeFromString(const AValue: string): TTargetObjectType;
+function TargetObjectCaption(const ATarget: TTargetObject): string;
+function AllowedChildTargetTypes(AParentType: TTargetObjectType): TArray<TTargetObjectType>;
+function DefaultChildTargetType(AParentType: TTargetObjectType): TTargetObjectType;
+function CanHaveChildTargetObjects(AParentType: TTargetObjectType): Boolean;
+function IsAllowedChildTargetType(AParentType, AChildType: TTargetObjectType): Boolean;
+function IsRootScopeTarget(const ATarget: TTargetObject): Boolean;
+function ScopeLayerTypes: TArray<TTargetObjectType>;
+function TargetObjectLayerGroupTitle(AType: TTargetObjectType): string;
+function CanInheritAssessments(AParentType, AChildType: TTargetObjectType): Boolean;
 function RequirementLevelToString(AValue: TRequirementLevel): string;
 function RequirementLevelFromString(const AValue: string): TRequirementLevel;
 function RequirementLevelFromSectionTitle(const ATitle: string): TRequirementLevel;
@@ -219,6 +235,8 @@ const
   S_Erhoeht = 'Erh'#$00F6'ht';
   S_ErhoehtFull = 'Erh'#$00F6'ht (Basis + Standard + Erh'#$00F6'ht)';
   S_Geschaefstsprozess = 'Gesch'#$00E4'ftsprozess';
+  S_Geltungsbereich = 'Geltungsbereich';
+  EnDash = #$2013;
   S_Ergaenzend = 'Erg'#$00E4'nzend';
   S_ErhoehtemSchutzbedarf = 'Anforderungen bei erh'#$00F6'htem Schutzbedarf';
 
@@ -322,7 +340,7 @@ begin
     totProcess: Result := S_Geschaefstsprozess;
     totApplication: Result := 'Anwendung';
     totITSystem: Result := 'IT-System';
-    totNetwork: Result := 'Kommunikationsverbindung';
+    totNetwork: Result := 'Netz';
     totInfrastructure: Result := 'Infrastruktur';
   else
     Result := 'Unbekannt';
@@ -334,13 +352,107 @@ var
   Normalized: string;
 begin
   Normalized := Trim(AValue);
-  if SameText(Normalized, 'Informationsverbund') then Exit(totScope);
+  if SameText(Normalized, 'Informationsverbund') or SameText(Normalized, S_Geltungsbereich) then
+    Exit(totScope);
   if SameText(Normalized, S_Geschaefstsprozess) then Exit(totProcess);
   if SameText(Normalized, 'Anwendung') then Exit(totApplication);
   if SameText(Normalized, 'IT-System') then Exit(totITSystem);
-  if SameText(Normalized, 'Kommunikationsverbindung') then Exit(totNetwork);
+  if SameText(Normalized, 'Kommunikationsverbindung') or SameText(Normalized, 'Netz')
+    or SameText(Normalized, 'Netze') then
+    Exit(totNetwork);
   if SameText(Normalized, 'Infrastruktur') then Exit(totInfrastructure);
   Result := totScope;
+end;
+
+function TargetObjectCaption(const ATarget: TTargetObject): string;
+begin
+  Result := Format('%s ' + EnDash + ' %s [%s]',
+    [TargetObjectTypeToString(ATarget.ObjType), ATarget.Name,
+     ProtectionNeedToString(ATarget.ProtectionNeed)]);
+end;
+
+function AllowedChildTargetTypes(AParentType: TTargetObjectType): TArray<TTargetObjectType>;
+begin
+  case AParentType of
+    totScope:
+      Result := TArray<TTargetObjectType>.Create(
+        totProcess, totApplication, totITSystem, totNetwork, totInfrastructure);
+    totProcess:
+      Result := TArray<TTargetObjectType>.Create(totProcess, totApplication);
+    totITSystem:
+      Result := TArray<TTargetObjectType>.Create(totApplication, totITSystem, totNetwork);
+    totInfrastructure:
+      Result := TArray<TTargetObjectType>.Create(totITSystem, totInfrastructure, totNetwork);
+  else
+    SetLength(Result, 0);
+  end;
+end;
+
+function DefaultChildTargetType(AParentType: TTargetObjectType): TTargetObjectType;
+begin
+  case AParentType of
+    totScope: Result := totProcess;
+    totProcess: Result := totApplication;
+    totITSystem: Result := totApplication;
+    totInfrastructure: Result := totITSystem;
+  else
+    Result := totProcess;
+  end;
+end;
+
+function CanHaveChildTargetObjects(AParentType: TTargetObjectType): Boolean;
+begin
+  Result := Length(AllowedChildTargetTypes(AParentType)) > 0;
+end;
+
+function IsAllowedChildTargetType(AParentType, AChildType: TTargetObjectType): Boolean;
+var
+  Allowed: TArray<TTargetObjectType>;
+  T: TTargetObjectType;
+begin
+  Allowed := AllowedChildTargetTypes(AParentType);
+  for T in Allowed do
+    if T = AChildType then
+      Exit(True);
+  Result := False;
+end;
+
+function IsRootScopeTarget(const ATarget: TTargetObject): Boolean;
+begin
+  Result := (ATarget.ParentId = 0) and (ATarget.ObjType = totScope);
+end;
+
+function ScopeLayerTypes: TArray<TTargetObjectType>;
+begin
+  Result := TArray<TTargetObjectType>.Create(
+    totProcess, totApplication, totITSystem, totNetwork, totInfrastructure);
+end;
+
+function TargetObjectLayerGroupTitle(AType: TTargetObjectType): string;
+begin
+  case AType of
+    totProcess: Result := 'Gesch'#$00E4'ftsprozesse';
+    totApplication: Result := 'Anwendungen';
+    totITSystem: Result := 'IT-Systeme';
+    totNetwork: Result := 'Netze';
+    totInfrastructure: Result := 'Infrastruktur';
+  else
+    Result := TargetObjectTypeToString(AType);
+  end;
+end;
+
+function CanInheritAssessments(AParentType, AChildType: TTargetObjectType): Boolean;
+begin
+  case AParentType of
+    totITSystem:
+      Result := AChildType in [totITSystem, totApplication, totNetwork];
+    totProcess:
+      Result := AChildType in [totProcess, totApplication];
+    totInfrastructure:
+      Result := AChildType in [totInfrastructure, totITSystem, totNetwork];
+  else
+    Result := False;
+  end;
 end;
 
 function RequirementLevelToString(AValue: TRequirementLevel): string;

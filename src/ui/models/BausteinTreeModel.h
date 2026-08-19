@@ -27,6 +27,7 @@ public:
 
     void setBausteine(const QList<Baustein> &bausteine);
     void setApplicabilityMap(const QHash<int, ApplicabilityStatus> &map);
+    void setInheritedBausteinIds(const QSet<int> &ids);
     void setRecommendedBausteinIds(const QSet<int> &ids);
     void setRecommendationTiers(const QHash<int, BausteinRecommendationTier> &tiers);
     void setHighlightRecommendations(bool highlight);
@@ -58,6 +59,7 @@ private:
 
     QList<GroupNode> m_groups;
     QHash<int, ApplicabilityStatus> m_applicability;
+    QSet<int> m_inheritedIds;
     QSet<int> m_recommendedIds;
     QHash<int, BausteinRecommendationTier> m_recommendationTiers;
     bool m_highlightRecommendations = true;

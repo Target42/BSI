@@ -19,6 +19,7 @@ type
     function MigrateAssessmentTargetObjectColumn: Boolean;
     function MigrateAssessmentDueDateColumn: Boolean;
     function MigrateTargetObjectProtectionNeedColumn: Boolean;
+    function MigrateBausteinDeviationsTable: Boolean;
   public
     constructor Create(const AFilePath: string);
     destructor Destroy; override;
@@ -263,22 +264,47 @@ begin
   end;
 end;
 
+function TIsmsDatabase.MigrateBausteinDeviationsTable: Boolean;
+begin
+  Result := True;
+  if TableExists('baustein_deviations') then
+    Exit;
+  try
+    FConnection.ExecSQL(
+      'CREATE TABLE baustein_deviations (' +
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ' +
+      'target_object_id INTEGER NOT NULL, baustein_id INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '''', ' +
+      'FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE, ' +
+      'FOREIGN KEY(target_object_id) REFERENCES target_objects(id) ON DELETE CASCADE, ' +
+      'FOREIGN KEY(baustein_id) REFERENCES bausteine(id) ON DELETE CASCADE, ' +
+      'UNIQUE(project_id, target_object_id, baustein_id))');
+  except
+    on E: Exception do
+    begin
+      FLastError := 'Migration (Abweichungen): ' + E.Message;
+      Result := False;
+    end;
+  end;
+end;
+
 function TIsmsDatabase.MigrateSchema: Boolean;
 begin
   Result := MigrateAssessmentTargetObjectColumn and
             MigrateAssessmentDueDateColumn and
-            MigrateTargetObjectProtectionNeedColumn;
+            MigrateTargetObjectProtectionNeedColumn and
+            MigrateBausteinDeviationsTable;
 end;
 
 function TIsmsDatabase.EnsureIndexes: Boolean;
 const
-  Statements: array[0..5] of string = (
+  Statements: array[0..6] of string = (
     'CREATE INDEX IF NOT EXISTS idx_requirements_baustein ON requirements(baustein_id)',
     'CREATE INDEX IF NOT EXISTS idx_assessments_project ON requirement_assessments(project_id)',
     'CREATE INDEX IF NOT EXISTS idx_assessments_target ON requirement_assessments(project_id, target_object_id)',
     'CREATE INDEX IF NOT EXISTS idx_target_objects_project ON target_objects(project_id)',
     'CREATE INDEX IF NOT EXISTS idx_applicability_target ON baustein_applicability(project_id, target_object_id)',
-    'CREATE INDEX IF NOT EXISTS idx_measures_requirement ON measures(project_id, target_object_id, requirement_id)'
+    'CREATE INDEX IF NOT EXISTS idx_measures_requirement ON measures(project_id, target_object_id, requirement_id)',
+    'CREATE INDEX IF NOT EXISTS idx_baustein_deviations_target ON baustein_deviations(project_id, target_object_id)'
   );
 var
   I: Integer;

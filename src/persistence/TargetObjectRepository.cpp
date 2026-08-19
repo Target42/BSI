@@ -95,6 +95,11 @@ void TargetObjectRepository::deleteTargetObjectSubtree(int targetObjectId)
     deleteApplicability.addBindValue(targetObjectId);
     deleteApplicability.exec();
 
+    QSqlQuery deleteDeviations(m_db);
+    deleteDeviations.prepare(QStringLiteral("DELETE FROM baustein_deviations WHERE target_object_id = ?"));
+    deleteDeviations.addBindValue(targetObjectId);
+    deleteDeviations.exec();
+
     QSqlQuery deleteAssessments(m_db);
     deleteAssessments.prepare(
         QStringLiteral("DELETE FROM requirement_assessments WHERE target_object_id = ?"));
@@ -205,6 +210,55 @@ bool TargetObjectRepository::saveApplicability(const BausteinApplicability &appl
     query.addBindValue(applicability.bausteinDbId);
     query.addBindValue(applicabilityStatusToString(applicability.status));
 
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+QString TargetObjectRepository::loadDeviation(int projectId, int targetObjectId, int bausteinDbId) const
+{
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral(
+        "SELECT note FROM baustein_deviations "
+        "WHERE project_id = ? AND target_object_id = ? AND baustein_id = ?"));
+    query.addBindValue(projectId);
+    query.addBindValue(targetObjectId);
+    query.addBindValue(bausteinDbId);
+    if (!query.exec() || !query.next())
+        return {};
+    return query.value(0).toString();
+}
+
+bool TargetObjectRepository::saveDeviation(int projectId, int targetObjectId, int bausteinDbId,
+                                           const QString &note)
+{
+    if (note.trimmed().isEmpty()) {
+        QSqlQuery remove(m_db);
+        remove.prepare(QStringLiteral(
+            "DELETE FROM baustein_deviations "
+            "WHERE project_id = ? AND target_object_id = ? AND baustein_id = ?"));
+        remove.addBindValue(projectId);
+        remove.addBindValue(targetObjectId);
+        remove.addBindValue(bausteinDbId);
+        if (!remove.exec()) {
+            m_lastError = remove.lastError().text();
+            return false;
+        }
+        return true;
+    }
+
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral(
+        "INSERT INTO baustein_deviations (project_id, target_object_id, baustein_id, note) "
+        "VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(project_id, target_object_id, baustein_id) DO UPDATE SET "
+        "note = excluded.note"));
+    query.addBindValue(projectId);
+    query.addBindValue(targetObjectId);
+    query.addBindValue(bausteinDbId);
+    query.addBindValue(note);
     if (!query.exec()) {
         m_lastError = query.lastError().text();
         return false;

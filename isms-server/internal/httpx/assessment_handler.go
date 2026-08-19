@@ -243,6 +243,76 @@ func (h *AssessmentHandler) DeleteApplicability(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type saveDeviationRequest struct {
+	Note string `json:"note"`
+}
+
+func (h *AssessmentHandler) GetDeviation(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	projectID, targetObjectID, err := parseProjectTarget(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	bausteinID, err := strconv.ParseInt(chi.URLParam(r, "bausteinID"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid baustein id")
+		return
+	}
+	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "viewer"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	note, err := h.store.GetDeviation(r.Context(), projectID, targetObjectID, bausteinID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "get deviation failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"note": note})
+}
+
+func (h *AssessmentHandler) SaveDeviation(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	projectID, targetObjectID, err := parseProjectTarget(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	bausteinID, err := strconv.ParseInt(chi.URLParam(r, "bausteinID"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid baustein id")
+		return
+	}
+	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	var req saveDeviationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if err := h.store.SaveDeviation(r.Context(), projectID, targetObjectID, bausteinID, req.Note); err != nil {
+		writeError(w, http.StatusInternalServerError, "save deviation failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"note": req.Note})
+}
+
 func parseProjectTarget(r *http.Request) (int64, int64, error) {
 	projectID, err := strconv.ParseInt(chi.URLParam(r, "projectID"), 10, 64)
 	if err != nil {

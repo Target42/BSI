@@ -160,8 +160,12 @@ bool AppContext::ensureGrundschutzCatalog(const QString &xmlPath)
     if (m_catalogRepository->hasGrundschutzCatalog(m_catalogVersion))
         return true;
 
-    if (m_remote)
-        return importCatalogFile(xmlPath);
+    if (m_remote) {
+        m_lastError = QStringLiteral(
+            "Kein IT-Grundschutz-Katalog auf dem Server. Starten Sie den Server mit "
+            "CATALOG_XML_PATH oder importieren Sie die XML-Datei als Admin.");
+        return false;
+    }
 
     const QString sourcePath = QFile::exists(xmlPath) ? xmlPath : AppPaths::defaultGrundschutzXml();
     if (!QFile::exists(sourcePath)) {

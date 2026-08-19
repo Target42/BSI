@@ -39,6 +39,15 @@ void BausteinTreeModel::setApplicabilityMap(const QHash<int, ApplicabilityStatus
     endResetModel();
 }
 
+void BausteinTreeModel::setInheritedBausteinIds(const QSet<int> &ids)
+{
+    if (m_inheritedIds == ids)
+        return;
+    m_inheritedIds = ids;
+    beginResetModel();
+    endResetModel();
+}
+
 void BausteinTreeModel::setRecommendedBausteinIds(const QSet<int> &ids)
 {
     m_recommendedIds = ids;
@@ -275,6 +284,8 @@ QVariant BausteinTreeModel::data(const QModelIndex &index, int role) const
     switch (role) {
     case Qt::DisplayRole: {
         QString label = QStringLiteral("%1 %2").arg(baustein.externalId, baustein.title);
+        if (m_inheritedIds.contains(baustein.id))
+            label = QStringLiteral("↓ ") + label;
         if (m_highlightRecommendations
             && m_recommendedIds.contains(baustein.id)
             && m_applicability.value(baustein.id, ApplicabilityStatus::Undefined)

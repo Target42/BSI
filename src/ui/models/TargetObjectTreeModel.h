@@ -33,11 +33,14 @@ public:
 
     TargetObject targetObjectForIndex(const QModelIndex &index) const;
     QModelIndex indexForTargetObjectId(int targetObjectId) const;
+    bool isLayerGroup(const QModelIndex &index) const;
 
 private:
     QModelIndex indexForNode(int nodeIndex) const;
+    void insertLayerGroups(int scopeIndex);
     struct Node {
         TargetObject object;
+        bool isLayerGroup = false;
         int parentNodeIndex = -1;
         QList<int> childNodeIndices;
     };

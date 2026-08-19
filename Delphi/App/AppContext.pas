@@ -537,7 +537,15 @@ begin
 
   if FRemote then
 
-    Exit(ImportCatalogFile(AXmlPath));
+  begin
+
+    FLastError := 'Kein IT-Grundschutz-Katalog auf dem Server. ' +
+
+      'Starten Sie den Server mit CATALOG_XML_PATH oder importieren Sie die XML-Datei als Admin.';
+
+    Exit(False);
+
+  end;
 
   if not FileExists(AXmlPath) then
 

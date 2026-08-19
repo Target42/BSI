@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/domain"
@@ -151,7 +152,7 @@ func (s *Store) CreateProject(ctx context.Context, userID int64, name, descripti
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO target_objects (project_id, parent_id, type, name, description)
-		VALUES ($1, 0, 'Geltungsbereich', $2, $3)`,
+		VALUES ($1, 0, 'Informationsverbund', $2, $3)`,
 		project.ID, name, description)
 	if err != nil {
 		return domain.Project{}, err
@@ -221,6 +222,18 @@ func (s *Store) ListTargetObjects(ctx context.Context, projectID int64) ([]domai
 		items = append(items, t)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) GetTargetObject(ctx context.Context, id int64) (domain.TargetObject, error) {
+	var t domain.TargetObject
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, project_id, parent_id, type, protection_need, name, description, created_at, updated_at
+		FROM target_objects WHERE id = $1`, id).Scan(
+		&t.ID, &t.ProjectID, &t.ParentID, &t.Type, &t.ProtectionNeed, &t.Name, &t.Description, &t.CreatedAt, &t.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.TargetObject{}, ErrNotFound
+	}
+	return t, err
 }
 
 func (s *Store) CreateTargetObject(ctx context.Context, t domain.TargetObject) (domain.TargetObject, error) {
@@ -436,6 +449,38 @@ func (s *Store) SaveApplicability(ctx context.Context, item domain.BausteinAppli
 func (s *Store) DeleteApplicability(ctx context.Context, projectID, targetObjectID, bausteinID int64) error {
 	_, err := s.pool.Exec(ctx, `
 		DELETE FROM baustein_applicability
+		WHERE project_id = $1 AND target_object_id = $2 AND baustein_id = $3`,
+		projectID, targetObjectID, bausteinID)
+	return err
+}
+
+func (s *Store) GetDeviation(ctx context.Context, projectID, targetObjectID, bausteinID int64) (string, error) {
+	var note string
+	err := s.pool.QueryRow(ctx, `
+		SELECT note FROM baustein_deviations
+		WHERE project_id = $1 AND target_object_id = $2 AND baustein_id = $3`,
+		projectID, targetObjectID, bausteinID).Scan(&note)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return note, err
+}
+
+func (s *Store) SaveDeviation(ctx context.Context, projectID, targetObjectID, bausteinID int64, note string) error {
+	if strings.TrimSpace(note) == "" {
+		return s.DeleteDeviation(ctx, projectID, targetObjectID, bausteinID)
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO baustein_deviations (project_id, target_object_id, baustein_id, note)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (project_id, target_object_id, baustein_id) DO UPDATE SET note = EXCLUDED.note`,
+		projectID, targetObjectID, bausteinID, note)
+	return err
+}
+
+func (s *Store) DeleteDeviation(ctx context.Context, projectID, targetObjectID, bausteinID int64) error {
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM baustein_deviations
 		WHERE project_id = $1 AND target_object_id = $2 AND baustein_id = $3`,
 		projectID, targetObjectID, bausteinID)
 	return err

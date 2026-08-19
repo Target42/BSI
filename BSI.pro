@@ -89,6 +89,7 @@ HEADERS += \
     src/persistence/ProjectRepository.h \
     src/persistence/TargetObjectRepository.h \
     src/services/BausteinRecommendationService.h \
+    src/services/Inheritance.h \
     src/services/ReportExporter.h \
     src/services/ReportService.h \
     src/ui/MainWindow.h \

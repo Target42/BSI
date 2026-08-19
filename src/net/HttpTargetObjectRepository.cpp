@@ -6,6 +6,7 @@
 #include "net/HttpJson.h"
 #include "qjsonarray.h"
 
+#include <QJsonDocument>
 #include <QJsonObject>
 
 HttpTargetObjectRepository::HttpTargetObjectRepository(ApiClient &client)
@@ -143,6 +144,41 @@ bool HttpTargetObjectRepository::saveApplicability(const BausteinApplicability &
     body.insert(QStringLiteral("status"), applicabilityStatusToString(applicability.status));
 
     m_client.put(path, body, &status);
+    if (status != 200) {
+        m_lastError = m_client.lastError();
+        return false;
+    }
+    return true;
+}
+
+QString HttpTargetObjectRepository::loadDeviation(int projectId, int targetObjectId,
+                                                 int bausteinDbId) const
+{
+    int status = 0;
+    const QJsonDocument doc = m_client.get(
+        QStringLiteral("/api/v1/projects/%1/target-objects/%2/bausteine/%3/deviation")
+            .arg(projectId)
+            .arg(targetObjectId)
+            .arg(bausteinDbId),
+        &status);
+    if (status != 200 || !doc.isObject()) {
+        m_lastError = m_client.lastError();
+        return {};
+    }
+    return doc.object().value(QStringLiteral("note")).toString();
+}
+
+bool HttpTargetObjectRepository::saveDeviation(int projectId, int targetObjectId, int bausteinDbId,
+                                               const QString &note)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("note"), note);
+    int status = 0;
+    m_client.put(QStringLiteral("/api/v1/projects/%1/target-objects/%2/bausteine/%3/deviation")
+                     .arg(projectId)
+                     .arg(targetObjectId)
+                     .arg(bausteinDbId),
+                 body, &status);
     if (status != 200) {
         m_lastError = m_client.lastError();
         return false;

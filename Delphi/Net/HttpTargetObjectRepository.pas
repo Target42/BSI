@@ -21,6 +21,9 @@ type
     function LoadApplicabilityMap(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, TApplicabilityStatus>; override;
     function Applicability(AProjectId, ATargetObjectId, ABausteinDbId: Integer): TApplicabilityStatus; override;
     function SaveApplicability(const AApplicability: TBausteinApplicability): Boolean; override;
+    function LoadDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer): string; override;
+    function SaveDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer;
+      const ANote: string): Boolean; override;
     function GetLastError: string; override;
   end;
 
@@ -238,6 +241,53 @@ begin
   try
     Body.AddPair('status', ApplicabilityStatusToString(AApplicability.Status));
     Doc := FClient.PutJson(Path, Body, Status);
+    try
+      if Status <> 200 then
+        FLastError := FClient.LastError
+      else
+        Result := True;
+    finally
+      Doc.Free;
+    end;
+  finally
+    Body.Free;
+  end;
+end;
+
+function THttpTargetObjectRepository.LoadDeviation(AProjectId, ATargetObjectId,
+  ABausteinDbId: Integer): string;
+var
+  Doc: TJSONValue;
+  Status: Integer;
+begin
+  Result := '';
+  Doc := FClient.Get(Format('/api/v1/projects/%d/target-objects/%d/bausteine/%d/deviation',
+    [AProjectId, ATargetObjectId, ABausteinDbId]), Status);
+  try
+    if (Status <> 200) or not (Doc is TJSONObject) then
+    begin
+      FLastError := FClient.LastError;
+      Exit;
+    end;
+    Result := JsonStringValue(TJSONObject(Doc), 'note');
+  finally
+    Doc.Free;
+  end;
+end;
+
+function THttpTargetObjectRepository.SaveDeviation(AProjectId, ATargetObjectId,
+  ABausteinDbId: Integer; const ANote: string): Boolean;
+var
+  Body: TJSONObject;
+  Doc: TJSONValue;
+  Status: Integer;
+begin
+  Result := False;
+  Body := TJSONObject.Create;
+  try
+    Body.AddPair('note', ANote);
+    Doc := FClient.PutJson(Format('/api/v1/projects/%d/target-objects/%d/bausteine/%d/deviation',
+      [AProjectId, ATargetObjectId, ABausteinDbId]), Body, Status);
     try
       if Status <> 200 then
         FLastError := FClient.LastError

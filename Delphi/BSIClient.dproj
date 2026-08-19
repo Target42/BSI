@@ -181,6 +181,7 @@
         <DCCReference Include="Services\ReportService.pas"/>
         <DCCReference Include="Services\ReportExporter.pas"/>
         <DCCReference Include="Services\BausteinRecommendationService.pas"/>
+        <DCCReference Include="Services\InheritanceService.pas"/>
         <DCCReference Include="UI\f_login.pas">
             <Form>LoginForm</Form>
             <FormType>dfm</FormType>

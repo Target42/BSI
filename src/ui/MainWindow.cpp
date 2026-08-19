@@ -15,6 +15,7 @@
 #include "ui/dialogs/BausteinViewDialog.h"
 #include "ui/dialogs/CatalogSearchDialog.h"
 #include "services/BausteinRecommendationService.h"
+#include "services/Inheritance.h"
 #include "services/ReportService.h"
 #include "ui/dialogs/MeasureDialog.h"
 #include "ui/dialogs/ProjectOpenDialog.h"
@@ -24,6 +25,7 @@
 #include "ui/dialogs/TargetObjectDialog.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QCheckBox>
 #include <QComboBox>
@@ -249,7 +251,10 @@ void MainWindow::buildUi()
     m_dueDateEdit->setCalendarPopup(true);
     m_dueDateEdit->setDisplayFormat(QStringLiteral("dd.MM.yyyy"));
     m_dueDateEdit->setEnabled(false);
-    connect(m_hasDueDateBox, &QCheckBox::toggled, m_dueDateEdit, &QDateEdit::setEnabled);
+    connect(m_hasDueDateBox, &QCheckBox::toggled, this, [this](bool checked) {
+        m_dueDateEdit->setEnabled(checked && canEditActiveProject()
+                                  && !isInheritedBaustein(m_activeBausteinId));
+    });
     connect(m_hasDueDateBox, &QCheckBox::toggled, this, &MainWindow::saveAssessmentFields);
     connect(m_dueDateEdit, &QDateEdit::dateChanged, this, &MainWindow::saveAssessmentFields);
 
@@ -300,7 +305,8 @@ void MainWindow::buildUi()
     dueDateRow->addWidget(m_dueDateEdit, 1);
     detailLayout->addLayout(dueDateRow);
 
-    detailLayout->addWidget(new QLabel(tr("Umsetzung"), detailPanel));
+    m_assessmentNoteLabel = new QLabel(tr("Umsetzung"), detailPanel);
+    detailLayout->addWidget(m_assessmentNoteLabel);
     detailLayout->addWidget(m_assessmentNote, 1);
 
     detailLayout->addWidget(new QLabel(tr("Maßnahmen"), detailPanel));
@@ -474,8 +480,8 @@ void MainWindow::updateProjectUiEnabled()
     m_switchUserAction->setEnabled(true);
     m_reloginAction->setEnabled(m_context.isRemote());
     m_addTargetAction->setEnabled(hasProject && canEdit);
-    m_editTargetAction->setEnabled(hasProject && canEdit);
-    m_deleteTargetAction->setEnabled(hasProject && canEdit);
+    m_editTargetAction->setEnabled(hasProject && canEdit && hasTargetObject);
+    m_deleteTargetAction->setEnabled(canDeleteActiveTarget());
     m_applyRecommendationsAction->setEnabled(hasTargetObject && canEdit);
     m_sollIstAction->setEnabled(hasProject);
 
@@ -492,18 +498,7 @@ void MainWindow::updateProjectUiEnabled()
     m_assignedBausteinBox->setEnabled(hasTargetObject && canEdit
                                       && m_assignedBausteinBox->count() > 0
                                       && m_assignedBausteinBox->currentData().toInt() != 0);
-    m_statusBox->setEnabled(hasTargetObject && canEdit);
-    m_assessmentNote->setEnabled(hasTargetObject && canEdit);
-    m_assessmentNote->setReadOnly(hasTargetObject && !canEdit);
-    m_responsibleEdit->setEnabled(hasTargetObject && canEdit);
-    m_responsibleEdit->setReadOnly(hasTargetObject && !canEdit);
-    m_hasDueDateBox->setEnabled(hasTargetObject && canEdit);
-    m_dueDateEdit->setEnabled(hasTargetObject && canEdit && m_hasDueDateBox->isChecked());
-    m_measureTable->setEnabled(hasTargetObject);
-    m_addMeasureButton->setEnabled(hasTargetObject && canEdit);
-    m_editMeasureButton->setEnabled(hasTargetObject);
-    m_editMeasureButton->setText(canEdit ? tr("Bearbeiten") : tr("Anzeigen"));
-    m_deleteMeasureButton->setEnabled(hasTargetObject && canEdit);
+    applyInheritedUiState();
 
     if (!hasProject) {
         m_contextLabel->setText(tr("Kein Projekt geöffnet"));
@@ -615,14 +610,15 @@ void MainWindow::reloadRecommendationMarkers()
 void MainWindow::reloadBausteinMarkers()
 {
     if (!hasActiveProjectContext()) {
+        m_inheritedBausteine.clear();
+        m_applicabilityMap.clear();
         m_bausteinModel->updateTargetContext({}, {}, {});
+        m_bausteinModel->setInheritedBausteinIds({});
         reloadAssignedBausteinBox();
         return;
     }
 
-    const QHash<int, ApplicabilityStatus> applicability =
-        m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
-                                                                m_activeTargetObject.id);
+    reloadMergedApplicability();
 
     const QList<Baustein> bausteine = m_context.catalogRepository().loadBausteine(
         StandardType::ITGrundschutz, m_context.catalogVersion());
@@ -636,7 +632,11 @@ void MainWindow::reloadBausteinMarkers()
         recommendationTiers.insert(recommendation.bausteinDbId, recommendation.tier);
     }
 
-    m_bausteinModel->updateTargetContext(applicability, recommendedIds, recommendationTiers);
+    m_bausteinModel->updateTargetContext(m_applicabilityMap, recommendedIds, recommendationTiers);
+    QSet<int> inheritedIds;
+    for (auto it = m_inheritedBausteine.constBegin(); it != m_inheritedBausteine.constEnd(); ++it)
+        inheritedIds.insert(it.key());
+    m_bausteinModel->setInheritedBausteinIds(inheritedIds);
     reloadAssignedBausteinBox();
 }
 
@@ -653,9 +653,7 @@ void MainWindow::reloadAssignedBausteinBox()
         return;
     }
 
-    const QHash<int, ApplicabilityStatus> applicability =
-        m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
-                                                                m_activeTargetObject.id);
+    const QHash<int, ApplicabilityStatus> &applicability = m_applicabilityMap;
     const QList<Baustein> bausteine = m_context.catalogRepository().loadBausteine(
         StandardType::ITGrundschutz, m_context.catalogVersion());
     QHash<int, Baustein> bausteinById;
@@ -681,11 +679,14 @@ void MainWindow::reloadAssignedBausteinBox()
 
     for (int bausteinId : assignedIds) {
         const Baustein baustein = bausteinById.value(bausteinId);
+        const QString inheritedMark = m_inheritedBausteine.contains(bausteinId)
+                                         ? QStringLiteral("↓ ")
+                                         : QString();
         const QString label =
-            QStringLiteral("%1 %2 (%3)")
-                .arg(baustein.externalId,
-                     baustein.title,
-                     applicabilityStatusToString(applicability.value(bausteinId)));
+            inheritedMark + QStringLiteral("%1 %2 (%3)")
+                                .arg(baustein.externalId,
+                                     baustein.title,
+                                     applicabilityStatusToString(applicability.value(bausteinId)));
         m_assignedBausteinBox->addItem(label, bausteinId);
     }
 
@@ -1103,9 +1104,74 @@ bool MainWindow::isBausteinApplicableForActiveTarget(int bausteinDbId) const
     if (!hasActiveProjectContext())
         return true;
 
-    const ApplicabilityStatus status = m_context.targetObjectRepository().applicability(
-        m_activeProject.id, m_activeTargetObject.id, bausteinDbId);
+    const ApplicabilityStatus status =
+        m_applicabilityMap.value(bausteinDbId, ApplicabilityStatus::Undefined);
     return status == ApplicabilityStatus::Required || status == ApplicabilityStatus::Possible;
+}
+
+bool MainWindow::isInheritedBaustein(int bausteinDbId) const
+{
+    return bausteinDbId > 0 && m_inheritedBausteine.contains(bausteinDbId);
+}
+
+int MainWindow::assessmentTargetId(int bausteinDbId) const
+{
+    const InheritedBaustein inherited = m_inheritedBausteine.value(bausteinDbId);
+    if (inherited.sourceTargetId > 0)
+        return inherited.sourceTargetId;
+    return m_activeTargetObject.id;
+}
+
+void MainWindow::applyInheritedUiState()
+{
+    const bool hasTargetObject = hasActiveProjectContext();
+    const bool canEdit = hasTargetObject && canEditActiveProject();
+    const bool inherited = isInheritedBaustein(m_activeBausteinId);
+    if (m_assessmentNoteLabel != nullptr) {
+        m_assessmentNoteLabel->setText(inherited ? tr("Abweichungstext") : tr("Umsetzung"));
+    }
+    if (m_assessmentNote != nullptr) {
+        m_assessmentNote->setPlaceholderText(
+            inherited ? tr("Nur ausfüllen, wenn die Bewertung vom übergeordneten Zielobjekt abweicht.")
+                      : tr("Umsetzungsnotiz für die ausgewählte Anforderung"));
+        m_assessmentNote->setEnabled(hasTargetObject && canEdit);
+        m_assessmentNote->setReadOnly(!canEdit);
+    }
+    if (m_statusBox != nullptr)
+        m_statusBox->setEnabled(canEdit && !inherited);
+    if (m_responsibleEdit != nullptr) {
+        m_responsibleEdit->setEnabled(canEdit && !inherited);
+        m_responsibleEdit->setReadOnly(!canEdit || inherited);
+    }
+    if (m_hasDueDateBox != nullptr)
+        m_hasDueDateBox->setEnabled(canEdit && !inherited);
+    if (m_dueDateEdit != nullptr)
+        m_dueDateEdit->setEnabled(canEdit && !inherited && m_hasDueDateBox->isChecked());
+    if (m_measureTable != nullptr)
+        m_measureTable->setEnabled(hasTargetObject);
+    if (m_addMeasureButton != nullptr)
+        m_addMeasureButton->setEnabled(canEdit && !inherited);
+    if (m_deleteMeasureButton != nullptr)
+        m_deleteMeasureButton->setEnabled(canEdit && !inherited);
+    if (m_editMeasureButton != nullptr) {
+        m_editMeasureButton->setEnabled(hasTargetObject);
+        m_editMeasureButton->setText((canEdit && !inherited) ? tr("Bearbeiten") : tr("Anzeigen"));
+    }
+}
+
+bool MainWindow::saveDeviationNote()
+{
+    if (!hasActiveProjectContext() || m_activeBausteinId == 0)
+        return true;
+    if (!canEditActiveProject())
+        return true;
+    if (!m_context.targetObjectRepository().saveDeviation(
+            m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId,
+            m_assessmentNote->toPlainText())) {
+        m_statusLabel->setText(m_context.targetObjectRepository().lastError());
+        return false;
+    }
+    return true;
 }
 
 bool MainWindow::hasApplicableBausteineForActiveTarget() const
@@ -1113,10 +1179,7 @@ bool MainWindow::hasApplicableBausteineForActiveTarget() const
     if (!hasActiveProjectContext())
         return true;
 
-    const QHash<int, ApplicabilityStatus> map =
-        m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
-                                                                m_activeTargetObject.id);
-    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+    for (auto it = m_applicabilityMap.cbegin(); it != m_applicabilityMap.cend(); ++it) {
         if (it.value() == ApplicabilityStatus::Required
             || it.value() == ApplicabilityStatus::Possible)
             return true;
@@ -1147,12 +1210,9 @@ bool MainWindow::anyBausteinMatchesStatusFilter() const
     if (!statusFilterActive())
         return true;
 
-    const QHash<int, ApplicabilityStatus> map =
-        m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
-                                                                m_activeTargetObject.id);
     for (const Baustein &baustein : m_catalogBausteine) {
         const ApplicabilityStatus status =
-            map.value(baustein.id, ApplicabilityStatus::Undefined);
+            m_applicabilityMap.value(baustein.id, ApplicabilityStatus::Undefined);
         bool matches = false;
         switch (status) {
         case ApplicabilityStatus::Required:
@@ -1297,8 +1357,8 @@ void MainWindow::reloadActiveTargetContent()
         return;
     }
 
-    const ApplicabilityStatus applicability = m_context.targetObjectRepository().applicability(
-        m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId);
+    const ApplicabilityStatus applicability =
+        m_applicabilityMap.value(m_activeBausteinId, ApplicabilityStatus::Undefined);
     if (!isBausteinApplicableForActiveTarget(m_activeBausteinId)) {
         showBausteinNotApplicableMessage(m_activeBausteinId, applicability);
         return;
@@ -1316,8 +1376,11 @@ void MainWindow::clearProjectSession()
     m_activeTargetObject = {};
     m_lastBausteinByTarget.clear();
     m_lastRequirementByTarget.clear();
+    m_inheritedBausteine.clear();
+    m_applicabilityMap.clear();
     clearRequirementView();
     m_bausteinModel->setApplicabilityMap({});
+    m_bausteinModel->setInheritedBausteinIds({});
     m_bausteinModel->setRecommendedBausteinIds({});
     m_bausteinTree->setCurrentIndex({});
     reloadTargetObjects();
@@ -1327,14 +1390,43 @@ void MainWindow::clearProjectSession()
 void MainWindow::reloadApplicabilityMarkers()
 {
     if (!hasActiveProjectContext()) {
+        m_inheritedBausteine.clear();
+        m_applicabilityMap.clear();
         m_bausteinModel->setApplicabilityMap({});
+        m_bausteinModel->setInheritedBausteinIds({});
         return;
     }
 
-    const QHash<int, ApplicabilityStatus> map =
+    reloadMergedApplicability();
+    m_bausteinModel->setApplicabilityMap(m_applicabilityMap);
+    QSet<int> inheritedIds;
+    for (auto it = m_inheritedBausteine.constBegin(); it != m_inheritedBausteine.constEnd(); ++it)
+        inheritedIds.insert(it.key());
+    m_bausteinModel->setInheritedBausteinIds(inheritedIds);
+}
+
+void MainWindow::reloadMergedApplicability()
+{
+    m_inheritedBausteine.clear();
+    m_applicabilityMap.clear();
+    if (!hasActiveProjectContext())
+        return;
+
+    const QHash<int, ApplicabilityStatus> ownMap =
         m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
                                                                 m_activeTargetObject.id);
-    m_bausteinModel->setApplicabilityMap(map);
+    const QList<TargetObject> objects =
+        m_context.targetObjectRepository().loadTargetObjects(m_activeProject.id);
+    QHash<int, QHash<int, ApplicabilityStatus>> parentMaps;
+    const QList<TargetObject> ancestors = Inheritance::ancestorChain(objects, m_activeTargetObject);
+    for (const TargetObject &parent : ancestors) {
+        parentMaps.insert(parent.id,
+                          m_context.targetObjectRepository().loadApplicabilityMap(
+                              m_activeProject.id, parent.id));
+    }
+    m_inheritedBausteine =
+        Inheritance::collectInherited(objects, m_activeTargetObject, ownMap, parentMaps);
+    m_applicabilityMap = Inheritance::mergeApplicability(ownMap, m_inheritedBausteine);
 }
 
 void MainWindow::checkRemoteSession()
@@ -1425,23 +1517,25 @@ void MainWindow::importCatalog()
     if (filePath.isEmpty())
         return;
 
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    bool ok = false;
+    QString error;
     if (m_context.isRemote()) {
-        if (!m_context.importCatalogFile(filePath)) {
-            QMessageBox::critical(this, tr("Import fehlgeschlagen"), m_context.lastError());
-            return;
-        }
+        ok = m_context.importCatalogFile(filePath);
+        if (!ok)
+            error = m_context.lastError();
     } else {
         GrundschutzImporter importer;
         const GrundschutzImportResult importResult = importer.importFromFile(filePath);
-        if (!importResult.success) {
-            QMessageBox::critical(this, tr("Import fehlgeschlagen"), importResult.errorMessage);
-            return;
-        }
-
-        if (!m_context.catalogRepository().replaceGrundschutzCatalog(importResult)) {
-            QMessageBox::critical(this, tr("Import fehlgeschlagen"), m_context.catalogRepository().lastError());
-            return;
-        }
+        if (importResult.success)
+            ok = m_context.catalogRepository().replaceGrundschutzCatalog(importResult);
+        error = importResult.success ? m_context.catalogRepository().lastError()
+                                     : importResult.errorMessage;
+    }
+    QApplication::restoreOverrideCursor();
+    if (!ok) {
+        QMessageBox::critical(this, tr("Import fehlgeschlagen"), error);
+        return;
     }
 
     reloadCatalog();
@@ -1618,6 +1712,9 @@ void MainWindow::createProject()
 
 void MainWindow::onTargetObjectSelected(const QModelIndex &index)
 {
+    if (m_targetObjectModel->isLayerGroup(index))
+        return;
+
     m_blockBausteinSelectionHandler = true;
     struct HandlerGuard {
         MainWindow *window = nullptr;
@@ -1711,8 +1808,7 @@ void MainWindow::onBausteinSelected(const QModelIndex &index)
     } saveGuard{this};
 
     const ApplicabilityStatus applicability = hasActiveProjectContext()
-        ? m_context.targetObjectRepository().applicability(
-              m_activeProject.id, m_activeTargetObject.id, baustein.id)
+        ? m_applicabilityMap.value(baustein.id, ApplicabilityStatus::Undefined)
         : ApplicabilityStatus::Undefined;
     if (!isBausteinApplicableForActiveTarget(baustein.id)) {
         showBausteinNotApplicableMessage(baustein.id, applicability);
@@ -1771,7 +1867,7 @@ void MainWindow::loadRequirementsForBaustein(int bausteinDbId)
                 continue;
             if (assessmentStatusFilterActive()) {
                 const RequirementAssessment assessment = m_context.projectRepository().loadAssessment(
-                    m_activeProject.id, m_activeTargetObject.id, requirement.id);
+                    m_activeProject.id, assessmentTargetId(bausteinDbId), requirement.id);
                 if (!requirementPassesStatusFilter(assessment.status))
                     continue;
             }
@@ -1813,13 +1909,14 @@ void MainWindow::refreshAssessmentColumn()
     if (!hasActiveProjectContext())
         return;
 
+    const int assessId = assessmentTargetId(m_activeBausteinId);
     const QHash<int, int> measureCounts = m_context.measureRepository().measureCounts(
-        m_activeProject.id, m_activeTargetObject.id);
+        m_activeProject.id, assessId);
 
     for (int row = 0; row < m_requirementModel->rowCount(); ++row) {
         const Requirement requirement = m_requirementModel->requirementAt(row);
         RequirementAssessment assessment = m_context.projectRepository().loadAssessment(
-            m_activeProject.id, m_activeTargetObject.id, requirement.id);
+            m_activeProject.id, assessId, requirement.id);
         assessment.measureCount = measureCounts.value(requirement.id, 0);
         m_requirementModel->setAssessment(requirement.id, assessment);
     }
@@ -1868,7 +1965,7 @@ void MainWindow::loadMeasuresForCurrentRequirement()
     }
 
     const QList<Measure> measures = m_context.measureRepository().loadMeasures(
-        m_activeProject.id, m_activeTargetObject.id, requirement.id);
+        m_activeProject.id, assessmentTargetId(m_activeBausteinId), requirement.id);
     m_measureModel->setMeasures(measures);
 }
 
@@ -1876,6 +1973,8 @@ bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId, bool
 {
     if (m_suppressAssessmentSave || m_activeProject.id == 0)
         return false;
+    if (isInheritedBaustein(m_activeBausteinId))
+        return saveDeviationNote();
     if (!canEditActiveProject())
         return true;
     if (targetObjectId == 0 || requirementDbId == 0)
@@ -1930,8 +2029,10 @@ bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId, bool
 
 bool MainWindow::saveCurrentAssessment(bool notifyConflictDialog)
 {
-    if (!hasActiveProjectContext())
+    if (m_suppressAssessmentSave || !hasActiveProjectContext())
         return false;
+    if (isInheritedBaustein(m_activeBausteinId))
+        return saveDeviationNote();
 
     const int targetObjectId = m_displayedAssessmentTargetId != 0
                                    ? m_displayedAssessmentTargetId
@@ -1965,14 +2066,14 @@ void MainWindow::loadRequirementDetails(int row, bool forceReload)
 
     const Requirement requirement = m_requirementModel->requirementAt(row);
     if (!forceReload && requirement.id == m_activeRequirementId
-        && m_activeTargetObject.id == m_displayedAssessmentTargetId)
+        && assessmentTargetId(m_activeBausteinId) == m_displayedAssessmentTargetId)
         return;
 
     if (!forceReload && m_activeRequirementId != 0 && m_displayedAssessmentTargetId != 0)
         saveAssessmentFor(m_displayedAssessmentTargetId, m_activeRequirementId);
 
     m_activeRequirementId = requirement.id;
-    m_displayedAssessmentTargetId = m_activeTargetObject.id;
+    m_displayedAssessmentTargetId = assessmentTargetId(m_activeBausteinId);
     if (hasActiveProjectContext())
         persistTargetSelection(m_activeTargetObject.id);
 
@@ -1987,12 +2088,19 @@ void MainWindow::loadRequirementDetails(int row, bool forceReload)
     }
 
     RequirementAssessment assessment = m_context.projectRepository().loadAssessment(
-        m_activeProject.id, m_activeTargetObject.id, requirement.id);
+        m_activeProject.id, m_displayedAssessmentTargetId, requirement.id);
     assessment.measureCount = m_context.measureRepository()
-                                  .loadMeasures(m_activeProject.id, m_activeTargetObject.id, requirement.id)
+                                  .loadMeasures(m_activeProject.id, m_displayedAssessmentTargetId,
+                                                requirement.id)
                                   .size();
     syncAssessmentUi(assessment);
+    if (isInheritedBaustein(m_activeBausteinId)) {
+        QSignalBlocker noteBlocker(m_assessmentNote);
+        m_assessmentNote->setPlainText(m_context.targetObjectRepository().loadDeviation(
+            m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId));
+    }
     loadMeasuresForCurrentRequirement();
+    applyInheritedUiState();
 }
 
 void MainWindow::setAssessmentStatus(int index)
@@ -2024,6 +2132,8 @@ void MainWindow::saveAssessmentFields()
 void MainWindow::addMeasure()
 {
     if (!hasActiveProjectContext() || !canEditActiveProject())
+        return;
+    if (isInheritedBaustein(m_activeBausteinId))
         return;
 
     const Requirement requirement = currentRequirement();
@@ -2061,7 +2171,7 @@ void MainWindow::editMeasure()
     if (!index.isValid() || !hasActiveProjectContext())
         return;
 
-    const bool canEdit = canEditActiveProject();
+    const bool canEdit = canEditActiveProject() && !isInheritedBaustein(m_activeBausteinId);
     Measure measure = m_measureModel->measureAt(index.row());
     MeasureDialog dialog(this);
     dialog.setMeasure(measure);
@@ -2096,7 +2206,7 @@ void MainWindow::editMeasure()
 
 void MainWindow::deleteMeasure()
 {
-    if (!canEditActiveProject())
+    if (!canEditActiveProject() || isInheritedBaustein(m_activeBausteinId))
         return;
 
     const QModelIndex index = m_measureTable->currentIndex();
@@ -2119,6 +2229,52 @@ void MainWindow::deleteMeasure()
     reloadProgress();
 }
 
+TargetObject MainWindow::findTargetById(const QList<TargetObject> &objects, int id) const
+{
+    if (id <= 0)
+        return {};
+    for (const TargetObject &object : objects) {
+        if (object.id == id)
+            return object;
+    }
+    return {};
+}
+
+TargetObject MainWindow::findRootScope(const QList<TargetObject> &objects) const
+{
+    for (const TargetObject &object : objects) {
+        if (isRootScopeTarget(object))
+            return object;
+    }
+    for (const TargetObject &object : objects) {
+        if (object.parentId == 0)
+            return object;
+    }
+    return {};
+}
+
+TargetObject MainWindow::resolveParentForNewTarget(const QList<TargetObject> &objects) const
+{
+    TargetObject selected = m_activeTargetObject;
+    const QModelIndex currentIndex = m_targetObjectTree->currentIndex();
+    if (currentIndex.isValid())
+        selected = m_targetObjectModel->targetObjectForIndex(currentIndex);
+
+    if (selected.id > 0) {
+        if (canHaveChildTargetObjects(selected.type))
+            return selected;
+        const TargetObject parent = findTargetById(objects, selected.parentId);
+        if (parent.id > 0)
+            return parent;
+    }
+    return findRootScope(objects);
+}
+
+bool MainWindow::canDeleteActiveTarget() const
+{
+    return canEditActiveProject() && m_activeTargetObject.id > 0 && !isRootScopeTarget(m_activeTargetObject);
+}
+
 void MainWindow::addTargetObject()
 {
     if (m_activeProject.id == 0) {
@@ -2128,19 +2284,33 @@ void MainWindow::addTargetObject()
     if (!canEditActiveProject())
         return;
 
-    TargetObject parentObject = m_activeTargetObject;
+    const QList<TargetObject> objects =
+        m_context.targetObjectRepository().loadTargetObjects(m_activeProject.id);
     const QModelIndex currentIndex = m_targetObjectTree->currentIndex();
-    if (currentIndex.isValid())
-        parentObject = m_targetObjectModel->targetObjectForIndex(currentIndex);
+    const bool fromLayer = m_targetObjectModel->isLayerGroup(currentIndex);
+    const TargetObject parent = fromLayer ? findRootScope(objects) : resolveParentForNewTarget(objects);
+    if (parent.id == 0) {
+        QMessageBox::warning(this, tr("Zielobjekt"),
+                             tr("Kein Informationsverbund vorhanden. Bitte das Projekt neu anlegen."));
+        return;
+    }
+    if (!canHaveChildTargetObjects(parent.type)) {
+        QMessageBox::information(this, tr("Zielobjekt"),
+                                 tr("Unter diesem Zielobjekt können keine Unterobjekte angelegt werden."));
+        return;
+    }
 
-    TargetObjectDialog dialog(this);
     TargetObject draft;
     draft.projectId = m_activeProject.id;
-    draft.parentId = parentObject.id;
-    draft.type = TargetObjectType::Process;
-    draft.name = tr("Neues Zielobjekt");
-    dialog.setTargetObject(draft);
+    draft.parentId = parent.id;
+    if (fromLayer)
+        draft.type = static_cast<TargetObjectType>(currentIndex.data(TargetObjectTreeModel::TargetObjectTypeRole).toInt());
+    else
+        draft.type = defaultChildTargetType(parent.type);
+    draft.protectionNeed = parent.protectionNeed;
 
+    TargetObjectDialog dialog(this);
+    dialog.setTargetObject(draft, parent);
     if (dialog.exec() != QDialog::Accepted)
         return;
 
@@ -2163,9 +2333,16 @@ void MainWindow::editTargetObject()
     if (!index.isValid() || m_activeProject.id == 0)
         return;
 
+    if (m_targetObjectModel->isLayerGroup(index))
+        return;
+
     TargetObject object = m_targetObjectModel->targetObjectForIndex(index);
+    const QList<TargetObject> objects =
+        m_context.targetObjectRepository().loadTargetObjects(m_activeProject.id);
+    const TargetObject parent = findTargetById(objects, object.parentId);
+
     TargetObjectDialog dialog(this);
-    dialog.setTargetObject(object);
+    dialog.setTargetObject(object, parent);
     if (dialog.exec() != QDialog::Accepted)
         return;
 
@@ -2190,7 +2367,16 @@ void MainWindow::deleteTargetObject()
     if (!index.isValid() || m_activeProject.id == 0)
         return;
 
+    if (m_targetObjectModel->isLayerGroup(index))
+        return;
+
     const TargetObject object = m_targetObjectModel->targetObjectForIndex(index);
+    if (isRootScopeTarget(object)) {
+        QMessageBox::information(
+            this, tr("Zielobjekt löschen"),
+            tr("Der Informationsverbund ist die Wurzel der Modellierung und kann nicht gelöscht werden."));
+        return;
+    }
     const QMessageBox::StandardButton answer = QMessageBox::question(
         this,
         tr("Zielobjekt löschen"),
@@ -2237,12 +2423,23 @@ void MainWindow::showTargetObjectContextMenu(const QPoint &pos)
 
     QMenu menu(this);
     if (canEditActiveProject()) {
-        menu.addAction(tr("Zielobjekt hinzufügen..."), this, &MainWindow::addTargetObject);
-        menu.addAction(tr("Bearbeiten..."), this, &MainWindow::editTargetObject);
-        menu.addAction(tr("Löschen"), this, &MainWindow::deleteTargetObject);
-        menu.addSeparator();
-        menu.addAction(tr("Baustein-Empfehlungen übernehmen..."), this,
-                       &MainWindow::applyBausteinRecommendations);
+        const bool onLayer = m_targetObjectModel->isLayerGroup(index);
+        const TargetObject current = index.isValid() ? m_targetObjectModel->targetObjectForIndex(index)
+                                                     : m_activeTargetObject;
+        QString addCaption = tr("Zielobjekt hinzufügen...");
+        if (onLayer)
+            addCaption = tr("%1 hinzufügen...").arg(targetObjectTypeToString(current.type));
+        else if (canHaveChildTargetObjects(current.type))
+            addCaption = tr("Unterobjekt hinzufügen...");
+        menu.addAction(addCaption, this, &MainWindow::addTargetObject);
+        if (!onLayer && current.id != 0) {
+            menu.addAction(tr("Bearbeiten..."), this, &MainWindow::editTargetObject);
+            if (!isRootScopeTarget(current))
+                menu.addAction(tr("Löschen"), this, &MainWindow::deleteTargetObject);
+            menu.addSeparator();
+            menu.addAction(tr("Baustein-Empfehlungen übernehmen..."), this,
+                           &MainWindow::applyBausteinRecommendations);
+        }
     }
     menu.exec(m_targetObjectTree->viewport()->mapToGlobal(pos));
 }
@@ -2257,6 +2454,7 @@ void MainWindow::showBausteinContextMenu(const QPoint &pos)
     QSignalBlocker selectionBlocker(m_bausteinTree->selectionModel());
     m_bausteinTree->setCurrentIndex(index);
 
+    const Baustein menuBaustein = m_bausteinModel->bausteinForIndex(index);
     QMenu menu(this);
     menu.addAction(tr("Baustein anzeigen..."), this, &MainWindow::viewSelectedBaustein);
     if (hasActiveProjectContext() && canEditActiveProject()) {
@@ -2270,10 +2468,12 @@ void MainWindow::showBausteinContextMenu(const QPoint &pos)
         menu.addAction(tr("Nicht relevant"), this, [this]() {
             setBausteinApplicability(ApplicabilityStatus::NotApplicable);
         });
-        menu.addSeparator();
-        menu.addAction(tr("Zurücksetzen"), this, [this]() {
-            setBausteinApplicability(ApplicabilityStatus::Undefined);
-        });
+        if (!isInheritedBaustein(menuBaustein.id)) {
+            menu.addSeparator();
+            menu.addAction(tr("Zurücksetzen"), this, [this]() {
+                setBausteinApplicability(ApplicabilityStatus::Undefined);
+            });
+        }
     }
     if (menu.exec(m_bausteinTree->viewport()->mapToGlobal(pos)) == nullptr)
         revertBausteinTreeSelection(previousBausteinId);
@@ -2291,6 +2491,14 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
     const Baustein baustein = m_bausteinModel->bausteinForIndex(index);
     if (baustein.id == 0)
         return;
+
+    if (isInheritedBaustein(baustein.id) && status == ApplicabilityStatus::Undefined) {
+        QMessageBox::information(
+            this, tr("Vererbung"),
+            tr("Die Zuweisung ist vom übergeordneten Zielobjekt geerbt und kann hier nicht entfernt werden."));
+        revertBausteinTreeSelection(m_activeBausteinId);
+        return;
+    }
 
     if (status == ApplicabilityStatus::Undefined) {
         const QMessageBox::StandardButton answer = QMessageBox::question(
@@ -2333,10 +2541,8 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
         }
 
         int fallbackBausteinId = 0;
-        const QHash<int, ApplicabilityStatus> map =
-            m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
-                                                                    m_activeTargetObject.id);
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        reloadBausteinMarkers();
+        for (auto it = m_applicabilityMap.constBegin(); it != m_applicabilityMap.constEnd(); ++it) {
             if (it.key() == baustein.id)
                 continue;
             if (it.value() == ApplicabilityStatus::Required
@@ -2351,7 +2557,6 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
         else
             m_activeBausteinId = 0;
 
-        reloadBausteinMarkers();
         reloadProgress();
         revertBausteinTreeSelection(fallbackBausteinId);
     }
@@ -2407,9 +2612,7 @@ void MainWindow::applyBausteinRecommendations()
         return;
     }
 
-    const QHash<int, ApplicabilityStatus> applicabilityMap =
-        m_context.targetObjectRepository().loadApplicabilityMap(m_activeProject.id,
-                                                                m_activeTargetObject.id);
+    const QHash<int, ApplicabilityStatus> &applicabilityMap = m_applicabilityMap;
 
     BausteinRecommendationDialog dialog(recommendations, applicabilityMap, m_activeTargetObject, this);
     if (dialog.exec() != QDialog::Accepted)

@@ -40,6 +40,9 @@ type
     function LoadApplicabilityMap(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, TApplicabilityStatus>; virtual; abstract;
     function Applicability(AProjectId, ATargetObjectId, ABausteinDbId: Integer): TApplicabilityStatus; virtual; abstract;
     function SaveApplicability(const AApplicability: TBausteinApplicability): Boolean; virtual; abstract;
+    function LoadDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer): string; virtual; abstract;
+    function SaveDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer;
+      const ANote: string): Boolean; virtual; abstract;
     function GetLastError: string; virtual; abstract;
     property LastError: string read GetLastError;
   end;

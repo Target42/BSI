@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -93,6 +94,14 @@ func (h *TargetObjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.ProtectionNeed == "" {
 		req.ProtectionNeed = "Normal (Basis + Standard)"
 	}
+	req.Type = domain.NormalizeTargetObjectType(req.Type)
+	if err := h.validatePlacement(r, projectID, req.ParentID, req.Type); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	item, err := h.store.CreateTargetObject(r.Context(), domain.TargetObject{
 		ProjectID:      projectID,
 		ParentID:       req.ParentID,
@@ -139,6 +148,7 @@ func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	req.Type = domain.NormalizeTargetObjectType(req.Type)
 	item, err := h.store.UpdateTargetObject(r.Context(), domain.TargetObject{
 		ID:             targetID,
 		ProjectID:      projectID,
@@ -184,6 +194,18 @@ func (h *TargetObjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "access check failed")
 		return
 	}
+	current, err := h.store.GetTargetObject(r.Context(), targetID)
+	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "target lookup failed")
+		return
+	}
+	if domain.IsRootScopeTarget(current.ParentID, current.Type) {
+		writeError(w, http.StatusConflict, "Der Informationsverbund kann nicht gelöscht werden")
+		return
+	}
 	if err := h.store.DeleteTargetObject(r.Context(), targetID); err != nil {
 		if mapRepoError(w, err) {
 			return
@@ -192,4 +214,24 @@ func (h *TargetObjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *TargetObjectHandler) validatePlacement(r *http.Request, projectID, parentID int64, childType string) error {
+	if parentID == 0 {
+		if domain.NormalizeTargetObjectType(childType) != domain.TargetTypeScope {
+			return fmt.Errorf("ein Objekt ohne übergeordnetes Zielobjekt muss ein Informationsverbund sein")
+		}
+		return nil
+	}
+	parent, err := h.store.GetTargetObject(r.Context(), parentID)
+	if err != nil {
+		return err
+	}
+	if parent.ProjectID != projectID {
+		return fmt.Errorf("übergeordnetes Zielobjekt gehört nicht zu diesem Projekt")
+	}
+	if !domain.IsAllowedChildTargetType(parent.Type, childType) {
+		return fmt.Errorf("dieser Zielobjekt-Typ ist unter %s nicht zulässig", parent.Type)
+	}
+	return nil
 }

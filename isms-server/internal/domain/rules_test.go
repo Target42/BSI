@@ -34,3 +34,65 @@ func TestReportProgressPercent(t *testing.T) {
 		t.Fatalf("got %d want 75", got)
 	}
 }
+
+func TestIsAllowedChildTargetType(t *testing.T) {
+	tests := []struct {
+		parent string
+		child  string
+		ok     bool
+	}{
+		{TargetTypeScope, TargetTypeProcess, true},
+		{TargetTypeScope, TargetTypeITSystem, true},
+		{TargetTypeScope, TargetTypeApplication, true},
+		{TargetTypeITSystem, TargetTypeApplication, true},
+		{TargetTypeITSystem, TargetTypeITSystem, true},
+		{TargetTypeProcess, TargetTypeApplication, true},
+		{TargetTypeProcess, TargetTypeITSystem, false},
+		{TargetTypeApplication, TargetTypeITSystem, false},
+		{TargetTypeNetwork, TargetTypeApplication, false},
+		{TargetTypeScope, TargetTypeNetwork, true},
+		{TargetTypeScope, "Kommunikationsverbindung", true},
+		{TargetTypeScope, TargetTypeScope, false},
+		{"Geltungsbereich", TargetTypeProcess, true},
+	}
+	for _, tc := range tests {
+		got := IsAllowedChildTargetType(tc.parent, tc.child)
+		if got != tc.ok {
+			t.Fatalf("parent=%q child=%q: got %v want %v", tc.parent, tc.child, got, tc.ok)
+		}
+	}
+}
+
+func TestIsRootScopeTarget(t *testing.T) {
+	if !IsRootScopeTarget(0, "Geltungsbereich") {
+		t.Fatal("Geltungsbereich at root should be treated as Informationsverbund")
+	}
+	if IsRootScopeTarget(1, TargetTypeScope) {
+		t.Fatal("nested Informationsverbund is not the project root")
+	}
+	if IsRootScopeTarget(0, TargetTypeProcess) {
+		t.Fatal("process at parent 0 is not the root scope")
+	}
+}
+
+func TestCanInheritAssessments(t *testing.T) {
+	tests := []struct {
+		parent string
+		child  string
+		ok     bool
+	}{
+		{TargetTypeITSystem, TargetTypeApplication, true},
+		{TargetTypeITSystem, TargetTypeITSystem, true},
+		{TargetTypeProcess, TargetTypeApplication, true},
+		{TargetTypeInfrastructure, TargetTypeITSystem, true},
+		{TargetTypeScope, TargetTypeITSystem, false},
+		{TargetTypeApplication, TargetTypeITSystem, false},
+		{TargetTypeITSystem, TargetTypeProcess, false},
+	}
+	for _, tc := range tests {
+		got := CanInheritAssessments(tc.parent, tc.child)
+		if got != tc.ok {
+			t.Fatalf("parent=%q child=%q: got %v want %v", tc.parent, tc.child, got, tc.ok)
+		}
+	}
+}

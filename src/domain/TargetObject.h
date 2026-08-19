@@ -16,4 +16,16 @@ struct TargetObject {
     QString description;
 };
 
+inline QString targetObjectCaption(const TargetObject &object)
+{
+    return QStringLiteral("%1 – %2 [%3]")
+        .arg(targetObjectTypeToString(object.type), object.name,
+             protectionNeedToString(object.protectionNeed));
+}
+
+inline bool isRootScopeTarget(const TargetObject &object)
+{
+    return object.parentId == 0 && object.type == TargetObjectType::Scope;
+}
+
 #endif

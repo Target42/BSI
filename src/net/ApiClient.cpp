@@ -214,6 +214,9 @@ QJsonDocument ApiClient::uploadFile(const QString &path, const QString &fieldNam
     QNetworkRequest request(buildUrl(path));
     if (!m_accessToken.isEmpty())
         request.setRawHeader("Authorization", "Bearer " + m_accessToken.toUtf8());
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    request.setTransferTimeout(15 * 60 * 1000);
+#endif
 
     QNetworkReply *reply = manager.post(request, multiPart);
     multiPart->setParent(reply);

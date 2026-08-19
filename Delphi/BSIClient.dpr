@@ -54,6 +54,8 @@ uses
 
   BausteinRecommendationService in 'Services\BausteinRecommendationService.pas',
 
+  InheritanceService in 'Services\InheritanceService.pas',
+
   f_login in 'UI\f_login.pas' {LoginForm},
 
   f_project in 'UI\f_project.pas' {ProjectForm},
@@ -163,12 +165,16 @@ begin
 
 
     if not Context.EnsureGrundschutzCatalog(DefaultGrundschutzXml) then
-
-      MessageDlg(Context.LastError + sLineBreak + sLineBreak +
-
-        'Sie können den Katalog später über "Datei → IT-Grundschutz XML importieren" laden.',
-
-        mtWarning, [mbOK], 0);
+    begin
+      if Context.IsRemote then
+        MessageDlg(Context.LastError + sLineBreak + sLineBreak +
+          'Bitte den Katalog als Admin '#252'ber "Datei '#8594' IT-Grundschutz XML importieren" ' +
+          'auf den Server laden.', mtWarning, [mbOK], 0)
+      else
+        MessageDlg(Context.LastError + sLineBreak + sLineBreak +
+          'Sie k'#246'nnen den Katalog sp'#228'ter '#252'ber "Datei '#8594' IT-Grundschutz XML importieren" laden.',
+          mtWarning, [mbOK], 0);
+    end;
 
 
 

@@ -2,14 +2,50 @@
 
 #include "domain/ProtectionNeed.h"
 #include "domain/ReportRow.h"
+#include "domain/TargetObject.h"
 #include "domain/TargetObjectType.h"
 #include "services/ReportService.h"
 
+#include <QFont>
 #include <QHash>
 
 TargetObjectTreeModel::TargetObjectTreeModel(QObject *parent)
     : QAbstractItemModel(parent)
 {
+}
+
+void TargetObjectTreeModel::insertLayerGroups(int scopeIndex)
+{
+    if (scopeIndex < 0 || scopeIndex >= m_nodes.size())
+        return;
+
+    QHash<int, int> groupIndexByType;
+    for (const TargetObjectType type : scopeLayerTypes()) {
+        Node group;
+        group.isLayerGroup = true;
+        group.object.type = type;
+        group.parentNodeIndex = scopeIndex;
+        groupIndexByType.insert(static_cast<int>(type), m_nodes.size());
+        m_nodes.append(group);
+    }
+
+    const QList<int> previousChildren = m_nodes.at(scopeIndex).childNodeIndices;
+    m_nodes[scopeIndex].childNodeIndices.clear();
+    for (const TargetObjectType type : scopeLayerTypes())
+        m_nodes[scopeIndex].childNodeIndices.append(groupIndexByType.value(static_cast<int>(type)));
+
+    for (int childIndex : previousChildren) {
+        if (childIndex < 0 || childIndex >= m_nodes.size())
+            continue;
+        const int typeKey = static_cast<int>(m_nodes.at(childIndex).object.type);
+        const int groupIndex = groupIndexByType.value(typeKey, -1);
+        if (groupIndex >= 0) {
+            m_nodes[childIndex].parentNodeIndex = groupIndex;
+            m_nodes[groupIndex].childNodeIndices.append(childIndex);
+        } else {
+            m_nodes[scopeIndex].childNodeIndices.append(childIndex);
+        }
+    }
 }
 
 void TargetObjectTreeModel::setTargetObjects(const QList<TargetObject> &objects)
@@ -23,7 +59,8 @@ void TargetObjectTreeModel::setTargetObjects(const QList<TargetObject> &objects)
         Node node;
         node.object = object;
         node.parentNodeIndex = -1;
-        m_idToIndex.insert(object.id, m_nodes.size());
+        if (object.id > 0)
+            m_idToIndex.insert(object.id, m_nodes.size());
         m_nodes.append(node);
     }
 
@@ -39,6 +76,16 @@ void TargetObjectTreeModel::setTargetObjects(const QList<TargetObject> &objects)
         m_nodes[i].parentNodeIndex = parentNodeIndex;
         m_nodes[parentNodeIndex].childNodeIndices.append(i);
     }
+
+    int scopeIndex = -1;
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        if (isRootScopeTarget(m_nodes.at(i).object)) {
+            scopeIndex = i;
+            break;
+        }
+    }
+    if (scopeIndex >= 0)
+        insertLayerGroups(scopeIndex);
 
     endResetModel();
 }
@@ -149,9 +196,12 @@ QVariant TargetObjectTreeModel::data(const QModelIndex &index, int role) const
     if (nodeIndex < 0 || nodeIndex >= m_nodes.size())
         return {};
 
-    const TargetObject &object = m_nodes.at(nodeIndex).object;
+    const Node &node = m_nodes.at(nodeIndex);
+    const TargetObject &object = node.object;
     switch (role) {
     case Qt::DisplayRole: {
+        if (node.isLayerGroup)
+            return targetObjectLayerGroupTitle(object.type);
         QString text = QStringLiteral("%1 – %2  [%3]")
                            .arg(targetObjectTypeToString(object.type),
                                 object.name,
@@ -160,12 +210,19 @@ QVariant TargetObjectTreeModel::data(const QModelIndex &index, int role) const
         text += ReportService::formatTreeProgressSuffix(summary);
         return text;
     }
+    case Qt::FontRole:
+        if (node.isLayerGroup) {
+            QFont font;
+            font.setBold(true);
+            return font;
+        }
+        return {};
     case TargetObjectIdRole:
         return object.id;
     case TargetObjectTypeRole:
         return static_cast<int>(object.type);
     case IsGroupRole:
-        return false;
+        return node.isLayerGroup;
     default:
         return {};
     }
@@ -187,6 +244,16 @@ TargetObject TargetObjectTreeModel::targetObjectForIndex(const QModelIndex &inde
     if (nodeIndex < 0 || nodeIndex >= m_nodes.size())
         return {};
     return m_nodes.at(nodeIndex).object;
+}
+
+bool TargetObjectTreeModel::isLayerGroup(const QModelIndex &index) const
+{
+    if (!index.isValid())
+        return false;
+    const int nodeIndex = int(index.internalId()) - 1;
+    if (nodeIndex < 0 || nodeIndex >= m_nodes.size())
+        return false;
+    return m_nodes.at(nodeIndex).isLayerGroup;
 }
 
 QModelIndex TargetObjectTreeModel::indexForTargetObjectId(int targetObjectId) const

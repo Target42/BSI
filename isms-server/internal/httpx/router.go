@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
@@ -49,7 +50,7 @@ func (s *Server) Router() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(requestTimeout)
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -95,6 +96,8 @@ func (s *Server) Router() http.Handler {
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/applicability", s.assessmentHandler.ListApplicability)
 			protected.Put("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/applicability", s.assessmentHandler.SaveApplicability)
 			protected.Delete("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/applicability", s.assessmentHandler.DeleteApplicability)
+			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/deviation", s.assessmentHandler.GetDeviation)
+			protected.Put("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/deviation", s.assessmentHandler.SaveDeviation)
 
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/measure-counts", s.measureHandler.MeasureCounts)
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/requirements/{requirementID}/measures", s.measureHandler.List)
@@ -105,4 +108,16 @@ func (s *Server) Router() http.Handler {
 	})
 
 	return r
+}
+
+func requestTimeout(next http.Handler) http.Handler {
+	short := middleware.Timeout(60 * time.Second)
+	long := middleware.Timeout(15 * time.Minute)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/admin/catalog/import") {
+			long(next).ServeHTTP(w, r)
+			return
+		}
+		short(next).ServeHTTP(w, r)
+	})
 }

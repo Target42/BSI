@@ -8,12 +8,14 @@
 #include "domain/Requirement.h"
 #include "domain/RequirementAssessment.h"
 #include "domain/TargetObject.h"
+#include "services/Inheritance.h"
 #include "ui/models/BausteinTreeModel.h"
 #include "ui/models/MeasureTableModel.h"
 #include "ui/models/RequirementTableModel.h"
 #include "ui/models/TargetObjectTreeModel.h"
 
 #include <QHash>
+#include <QList>
 #include <QMainWindow>
 #include <QSet>
 
@@ -85,6 +87,7 @@ private:
     void reloadCatalog();
     void reloadTargetObjects();
     void reloadApplicabilityMarkers();
+    void reloadMergedApplicability();
     void reloadRecommendationMarkers();
     void reloadBausteinMarkers();
     void reloadAssignedBausteinBox();
@@ -97,6 +100,10 @@ private:
     void persistTargetSelection(int targetObjectId);
     void restoreTargetSelection(int targetObjectId);
     bool isBausteinApplicableForActiveTarget(int bausteinDbId) const;
+    bool isInheritedBaustein(int bausteinDbId) const;
+    int assessmentTargetId(int bausteinDbId) const;
+    void applyInheritedUiState();
+    bool saveDeviationNote();
     bool hasApplicableBausteineForActiveTarget() const;
     bool statusFilterActive() const;
     bool anyBausteinMatchesStatusFilter() const;
@@ -131,6 +138,10 @@ private:
     void loadStoredTargetSelections(int projectId);
     SessionSelection loadStoredSession(int projectId) const;
     void selectActiveTargetObjectInTree();
+    TargetObject findTargetById(const QList<TargetObject> &objects, int id) const;
+    TargetObject findRootScope(const QList<TargetObject> &objects) const;
+    TargetObject resolveParentForNewTarget(const QList<TargetObject> &objects) const;
+    bool canDeleteActiveTarget() const;
     void showTemporaryStatusMessage(const QString &message, int timeoutMs = 5000);
     void configureRemoteSessionWatcher();
     int activeTargetObjectId() const;
@@ -158,6 +169,9 @@ private:
     QHash<int, int> m_lastRequirementByTarget;
     QHash<int, SessionSelection> m_sessionByProject;
 
+    QHash<int, ApplicabilityStatus> m_applicabilityMap;
+    QHash<int, InheritedBaustein> m_inheritedBausteine;
+
     QList<Baustein> m_catalogBausteine;
     QList<Requirement> m_catalogRequirements;
 
@@ -172,6 +186,7 @@ private:
     QTableView *m_measureTable = nullptr;
     QTextEdit *m_requirementText = nullptr;
     QTextEdit *m_assessmentNote = nullptr;
+    QLabel *m_assessmentNoteLabel = nullptr;
     QLineEdit *m_responsibleEdit = nullptr;
     QDateEdit *m_dueDateEdit = nullptr;
     QComboBox *m_statusBox = nullptr;

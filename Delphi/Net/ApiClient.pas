@@ -62,6 +62,8 @@ implementation
 
 const
   kExpirySkewSeconds = 60;
+  kDefaultReadTimeoutMs = 30000;
+  kUploadReadTimeoutMs = 15 * 60 * 1000;
 
 constructor TApiClient.Create(const ABaseUrl: string);
 begin
@@ -69,7 +71,7 @@ begin
   GIdDefaultTextEncoding := encUTF8;
   FHttp := TIdHTTP.Create(nil);
   FHttp.HandleRedirects := True;
-  FHttp.ReadTimeout := 30000;
+  FHttp.ReadTimeout := kDefaultReadTimeoutMs;
   FHttp.ConnectTimeout := 15000;
   FHttp.HTTPOptions := [hoForceEncodeParams, hoNoProtocolErrorException, hoWantProtocolErrorContent];
   SetBaseUrl(ABaseUrl);
@@ -455,6 +457,7 @@ var
   Doc: TJSONValue;
   ResponseBytes: TBytes;
   ResponseStream: TMemoryStream;
+  PreviousTimeout: Integer;
 begin
   Result := nil;
   AStatus := 0;
@@ -469,6 +472,8 @@ begin
   if FAccessToken <> '' then
     FHttp.Request.CustomHeaders.AddValue('Authorization', 'Bearer ' + FAccessToken);
 
+  PreviousTimeout := FHttp.ReadTimeout;
+  FHttp.ReadTimeout := kUploadReadTimeoutMs;
   Form := TIdMultipartFormDataStream.Create;
   ResponseStream := TMemoryStream.Create;
   try
@@ -498,10 +503,15 @@ begin
       on E: Exception do
       begin
         FLastError := E.Message;
-        AStatus := FHttp.ResponseCode;
+        AStatus := 0;
+        try
+          FHttp.Disconnect;
+        except
+        end;
       end;
     end;
   finally
+    FHttp.ReadTimeout := PreviousTimeout;
     ResponseStream.Free;
     Form.Free;
   end;

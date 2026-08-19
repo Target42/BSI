@@ -163,6 +163,7 @@ type
     FCurrentRequirements: TArray<TRequirement>;
     FCurrentMeasures: TArray<TMeasure>;
     FApplicabilityMap: TDictionary<Integer, TApplicabilityStatus>;
+    FInheritedBausteine: TDictionary<Integer, TInheritedBaustein>;
     FMeasureCounts: TDictionary<Integer, Integer>;
     FSummariesByTarget: TDictionary<Integer, TReportSummary>;
     FRecommendedIds: TDictionary<Integer, Byte>;
@@ -212,6 +213,11 @@ type
       AExcludeId: Integer): Integer;
     function FindDescendantTargetWithAssignments(const Objects: TArray<TTargetObject>;
       AParentId: Integer): Integer;
+    function FindTargetById(const Objects: TArray<TTargetObject>; AId: Integer): TTargetObject;
+    function FindRootScope(const Objects: TArray<TTargetObject>): TTargetObject;
+    function ResolveParentForNewTarget(const Objects: TArray<TTargetObject>): TTargetObject;
+    function CanDeleteActiveTarget: Boolean;
+    function IsLayerGroupNode(Node: TTreeNode; out AType: TTargetObjectType): Boolean;
     function BuildBausteinCaption(const B: TBaustein): string;
     function MatchingBausteinIdsForSearch(const ANeedle: string): TDictionary<Integer, Byte>;
     function StatusFilterActive: Boolean;
@@ -240,6 +246,10 @@ type
     function HasActiveProject: Boolean;
     function SelectedBausteinId: Integer;
     function IsBausteinApplicable(ABausteinDbId: Integer): Boolean;
+    function IsInheritedBaustein(ABausteinDbId: Integer): Boolean;
+    function AssessmentTargetId(ABausteinDbId: Integer): Integer;
+    procedure ApplyInheritedUiState;
+    function SaveDeviationNote: Boolean;
     function IsAssessmentDueDateOverdue(const AAssessment: TRequirementAssessment): Boolean;
     procedure SetBausteinApplicability(AStatus: TApplicabilityStatus; ABausteinId: Integer = 0);
   public
@@ -254,7 +264,8 @@ implementation
 uses
   f_project, f_projectopen, f_targetobject, f_measure, f_report, ReportService,
   RequirementTextFormatter, BausteinRecommendationService, AppSession,
-  f_bausteinview, f_catalogsearch, f_bausteinrecommendation, f_projectmembers;
+  f_bausteinview, f_catalogsearch, f_bausteinrecommendation, f_projectmembers,
+  InheritanceService;
 
 {$R *.dfm}
 
@@ -265,6 +276,7 @@ begin
   FActiveBausteinId := 0;
   FActiveRequirementId := 0;
   FApplicabilityMap := TDictionary<Integer, TApplicabilityStatus>.Create;
+  FInheritedBausteine := TDictionary<Integer, TInheritedBaustein>.Create;
   FMeasureCounts := TDictionary<Integer, Integer>.Create;
   FSummariesByTarget := TDictionary<Integer, TReportSummary>.Create;
   FRecommendedIds := TDictionary<Integer, Byte>.Create;
@@ -319,6 +331,7 @@ begin
   SaveCurrentAssessment;
   PersistSessionSelection;
   FApplicabilityMap.Free;
+  FInheritedBausteine.Free;
   FMeasureCounts.Free;
   FSummariesByTarget.Free;
   FRecommendedIds.Free;
@@ -576,7 +589,7 @@ begin
   mnuDeleteProject.Enabled := HasProject and CanDelete;
   mnuAddTarget.Enabled := HasProject and CanEdit;
   mnuEditTarget.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
-  mnuDeleteTarget.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
+  mnuDeleteTarget.Enabled := CanDeleteActiveTarget;
   mnuSollIst.Enabled := HasProject;
   mnuApplyRecommendations.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
   mnuRelogin.Enabled := FContext.IsRemote;
@@ -595,22 +608,11 @@ begin
   cboAssignedBausteine.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0) and
     (cboAssignedBausteine.ItemIndex >= 0) and
     (Integer(cboAssignedBausteine.Items.Objects[cboAssignedBausteine.ItemIndex]) > 0);
-  btnAddMeasure.Enabled := HasProject and CanEdit and (FActiveRequirementId > 0);
-  btnEditMeasure.Enabled := HasProject and (FActiveRequirementId > 0);
-  btnDeleteMeasure.Enabled := HasProject and CanEdit and (FActiveRequirementId > 0);
-  if CanEdit then
-    btnEditMeasure.Caption := 'Bearbeiten'
-  else
-    btnEditMeasure.Caption := 'Anzeigen';
+  ApplyInheritedUiState;
   btnToolNewProject.Enabled := True;
   btnToolOpenProject.Enabled := True;
   btnToolAddTarget.Enabled := HasProject and CanEdit;
   btnToolImportCatalog.Enabled := True;
-  cboAssessmentStatus.Enabled := HasProject and (FActiveTarget.Id > 0) and CanEdit;
-  edtResponsible.Enabled := HasProject and (FActiveTarget.Id > 0) and CanEdit;
-  chkHasDueDate.Enabled := HasProject and (FActiveTarget.Id > 0) and CanEdit;
-  dtpDueDate.Enabled := HasProject and (FActiveTarget.Id > 0) and CanEdit and chkHasDueDate.Checked;
-  memAssessmentNote.ReadOnly := HasProject and (FActiveTarget.Id > 0) and not CanEdit;
   if HasActiveProject then
   begin
     if FContext.IsRemote then
@@ -784,8 +786,7 @@ function TMainForm.BuildTargetTreeCaption(const Obj: TTargetObject): string;
 var
   Summary: TReportSummary;
 begin
-  Result := Format('%s – %s [%s]',
-    [TargetObjectTypeToString(Obj.ObjType), Obj.Name, ProtectionNeedToString(Obj.ProtectionNeed)]);
+  Result := TargetObjectCaption(Obj);
   if FSummariesByTarget.TryGetValue(Obj.Id, Summary) then
     Result := Result + TReportService.FormatTreeProgressSuffix(Summary);
 end;
@@ -867,10 +868,75 @@ begin
     Result := FindAnyTargetWithAssignments(Objects, ACurrent.Id);
 end;
 
+function TMainForm.FindTargetById(const Objects: TArray<TTargetObject>; AId: Integer): TTargetObject;
+var
+  O: TTargetObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  if AId <= 0 then
+    Exit;
+  for O in Objects do
+    if O.Id = AId then
+      Exit(O);
+end;
+
+function TMainForm.FindRootScope(const Objects: TArray<TTargetObject>): TTargetObject;
+var
+  O: TTargetObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  for O in Objects do
+    if IsRootScopeTarget(O) then
+      Exit(O);
+  for O in Objects do
+    if O.ParentId = 0 then
+      Exit(O);
+end;
+
+function TMainForm.ResolveParentForNewTarget(const Objects: TArray<TTargetObject>): TTargetObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  if FActiveTarget.Id > 0 then
+  begin
+    if CanHaveChildTargetObjects(FActiveTarget.ObjType) then
+      Exit(FActiveTarget);
+    Result := FindTargetById(Objects, FActiveTarget.ParentId);
+    if Result.Id > 0 then
+      Exit;
+  end;
+  Result := FindRootScope(Objects);
+end;
+
+function TMainForm.CanDeleteActiveTarget: Boolean;
+begin
+  Result := CanEditActiveProject and (FActiveTarget.Id > 0) and
+    not IsRootScopeTarget(FActiveTarget);
+end;
+
+function TMainForm.IsLayerGroupNode(Node: TTreeNode; out AType: TTargetObjectType): Boolean;
+const
+  LayerGroupDataBase = -1000;
+var
+  Value: Integer;
+begin
+  Result := False;
+  AType := totScope;
+  if Node = nil then
+    Exit;
+  Value := Integer(Node.Data);
+  if (Value <= LayerGroupDataBase) and
+     (Value >= LayerGroupDataBase - Ord(High(TTargetObjectType))) then
+  begin
+    AType := TTargetObjectType(LayerGroupDataBase - Value);
+    Exit(True);
+  end;
+end;
+
 function TMainForm.BuildBausteinCaption(const B: TBaustein): string;
 var
   Status: TApplicabilityStatus;
   Tier: TBausteinRecommendationTier;
+  InheritedItem: TInheritedBaustein;
 begin
   Result := B.ExternalId + ' ' + B.Title;
   if HasActiveProject and (FActiveTarget.Id > 0) then
@@ -878,9 +944,11 @@ begin
     if not FApplicabilityMap.TryGetValue(B.Id, Status) then
       Status := apUndefined;
     if Status = apRequired then
-      Result := '✓ ' + Result
+      Result := #$2713' ' + Result
     else if Status = apPossible then
-      Result := '◐ ' + Result;
+      Result := #$25D0' ' + Result;
+    if FInheritedBausteine.TryGetValue(B.Id, InheritedItem) then
+      Result := #$2193' ' + Result + ' (von ' + InheritedItem.SourceCaption + ')';
   end;
   if chkHighlightRecommendations.Checked and HasActiveProject and (FActiveTarget.Id > 0) then
   begin
@@ -897,15 +965,37 @@ begin
 end;
 
 procedure TMainForm.ReloadTargetObjects(APreferredTargetId: Integer);
+const
+  LayerGroupDataBase = -1000;
 var
   Objects: TArray<TTargetObject>;
   O: TTargetObject;
   NodeMap: TDictionary<Integer, TTreeNode>;
+  GroupMap: TDictionary<Integer, TTreeNode>;
   Changed: Boolean;
   Pass: Integer;
   TargetId: Integer;
   Found: Boolean;
   AlternateId: Integer;
+  ScopeId: Integer;
+
+  function LayerGroupNodeData(AType: TTargetObjectType): Pointer;
+  begin
+    Result := Pointer(LayerGroupDataBase - Ord(AType));
+  end;
+
+  procedure EnsureScopeGroups(ScopeNode: TTreeNode);
+  var
+    GroupNode: TTreeNode;
+    GroupLayer: TTargetObjectType;
+  begin
+    for GroupLayer in ScopeLayerTypes do
+    begin
+      GroupNode := tvTargets.Items.AddChild(ScopeNode, TargetObjectLayerGroupTitle(GroupLayer));
+      GroupNode.Data := LayerGroupNodeData(GroupLayer);
+      GroupMap.AddOrSetValue(Ord(GroupLayer), GroupNode);
+    end;
+  end;
 
   function AddOrphanObject(const Obj: TTargetObject): TTreeNode;
   var
@@ -928,16 +1018,22 @@ var
     Caption: string;
   begin
     Caption := BuildTargetTreeCaption(Obj);
-    if Obj.ParentId > 0 then
+    ParentNode := nil;
+    if (ScopeId > 0) and (Obj.ParentId = ScopeId) and GroupMap.ContainsKey(Ord(Obj.ObjType)) then
+      ParentNode := GroupMap[Ord(Obj.ObjType)]
+    else if Obj.ParentId > 0 then
     begin
       if not NodeMap.TryGetValue(Obj.ParentId, ParentNode) then
         ParentNode := nil;
-      Result := tvTargets.Items.AddChild(ParentNode, Caption);
-    end
-    else
-      Result := tvTargets.Items.AddChild(nil, Caption);
+    end;
+    Result := tvTargets.Items.AddChild(ParentNode, Caption);
     Result.Data := Pointer(Obj.Id);
     NodeMap.Add(Obj.Id, Result);
+    if IsRootScopeTarget(Obj) then
+    begin
+      ScopeId := Obj.Id;
+      EnsureScopeGroups(Result);
+    end;
   end;
 
 begin
@@ -947,7 +1043,9 @@ begin
     if not HasActiveProject then
       Exit;
     ReloadProgress;
+    ScopeId := 0;
     NodeMap := TDictionary<Integer, TTreeNode>.Create;
+    GroupMap := TDictionary<Integer, TTreeNode>.Create;
     try
       Objects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
       Changed := True;
@@ -1000,10 +1098,13 @@ begin
             end;
         if TargetId <= 0 then
           TargetId := Integer(tvTargets.Items[0].Data);
+        if TargetId <= 0 then
+          TargetId := ScopeId;
         tvTargets.FullExpand;
         ApplyTargetSelection(TargetId, True);
       end;
     finally
+      GroupMap.Free;
       NodeMap.Free;
     end;
   finally
@@ -1018,6 +1119,61 @@ begin
   if not FApplicabilityMap.TryGetValue(ABausteinDbId, Status) then
     Exit(False);
   Result := (Status = apRequired) or (Status = apPossible);
+end;
+
+function TMainForm.IsInheritedBaustein(ABausteinDbId: Integer): Boolean;
+begin
+  Result := (ABausteinDbId > 0) and FInheritedBausteine.ContainsKey(ABausteinDbId);
+end;
+
+function TMainForm.AssessmentTargetId(ABausteinDbId: Integer): Integer;
+var
+  Item: TInheritedBaustein;
+begin
+  if FInheritedBausteine.TryGetValue(ABausteinDbId, Item) then
+    Result := Item.SourceTargetId
+  else
+    Result := FActiveTarget.Id;
+end;
+
+procedure TMainForm.ApplyInheritedUiState;
+var
+  FromParent: Boolean;
+  CanEdit: Boolean;
+  HasTarget: Boolean;
+begin
+  HasTarget := HasActiveProject and (FActiveTarget.Id > 0);
+  CanEdit := HasTarget and CanEditActiveProject;
+  FromParent := IsInheritedBaustein(FActiveBausteinId);
+  if FromParent then
+    lblAssessmentNote.Caption := 'Abweichungstext'
+  else
+    lblAssessmentNote.Caption := 'Umsetzung';
+  cboAssessmentStatus.Enabled := CanEdit and not FromParent;
+  edtResponsible.Enabled := CanEdit and not FromParent;
+  chkHasDueDate.Enabled := CanEdit and not FromParent;
+  dtpDueDate.Enabled := CanEdit and chkHasDueDate.Checked and not FromParent;
+  memAssessmentNote.ReadOnly := not CanEdit;
+  btnAddMeasure.Enabled := CanEdit and (FActiveRequirementId > 0) and not FromParent;
+  btnDeleteMeasure.Enabled := CanEdit and (FActiveRequirementId > 0) and not FromParent;
+  btnEditMeasure.Enabled := HasTarget and (FActiveRequirementId > 0);
+  if CanEdit and not FromParent then
+    btnEditMeasure.Caption := 'Bearbeiten'
+  else
+    btnEditMeasure.Caption := 'Anzeigen';
+end;
+
+function TMainForm.SaveDeviationNote: Boolean;
+begin
+  Result := True;
+  if not HasActiveProject or (FActiveTarget.Id = 0) or (FActiveBausteinId = 0) then
+    Exit;
+  if not CanEditActiveProject then
+    Exit;
+  Result := FContext.TargetObjectRepository.SaveDeviation(
+    FActiveProject.Id, FActiveTarget.Id, FActiveBausteinId, memAssessmentNote.Text);
+  if not Result then
+    StatusBar.Panels[1].Text := FContext.TargetObjectRepository.LastError;
 end;
 
 procedure TMainForm.ReloadBausteinTree;
@@ -1219,6 +1375,7 @@ var
   PreferredId: Integer;
   Found: Boolean;
   PreviousSuppress: Boolean;
+  AssessId: Integer;
 begin
   if FLoadingRequirements then
     Exit;
@@ -1232,6 +1389,9 @@ begin
   FSuppressAssessmentSave := True;
   try
   PreferredId := FActiveRequirementId;
+  AssessId := AssessmentTargetId(ABausteinDbId);
+  FMeasureCounts.Free;
+  FMeasureCounts := FContext.MeasureRepository.MeasureCounts(FActiveProject.Id, AssessId);
   FCurrentRequirements := FContext.CatalogRepository.LoadRequirements(ABausteinDbId);
   sgRequirements.RowCount := 1;
   Row := 1;
@@ -1242,7 +1402,7 @@ begin
     if not RequirementLevelApplies(R.Level, FActiveTarget.ProtectionNeed) then
       Continue;
     Assessment := FContext.ProjectRepository.LoadAssessment(
-      FActiveProject.Id, FActiveTarget.Id, R.Id);
+      FActiveProject.Id, AssessId, R.Id);
     if AssessmentStatusFilterActive and not RequirementPassesStatusFilter(Assessment.Status) then
       Continue;
     Inc(Row);
@@ -1295,6 +1455,7 @@ begin
   finally
     FSuppressAssessmentSave := PreviousSuppress;
     FLoadingRequirements := False;
+    ApplyInheritedUiState;
   end;
 end;
 
@@ -1324,9 +1485,17 @@ begin
     Exit;
   TRequirementTextFormatter.ApplyToRichEdit(reRequirementText, R.Text);
   Assessment := FContext.ProjectRepository.LoadAssessment(
-    FActiveProject.Id, FActiveTarget.Id, ReqId);
+    FActiveProject.Id, AssessmentTargetId(FActiveBausteinId), ReqId);
   SyncAssessmentUi(Assessment);
+  if IsInheritedBaustein(FActiveBausteinId) then
+  begin
+    FSuppressAssessmentSave := True;
+    memAssessmentNote.Text := FContext.TargetObjectRepository.LoadDeviation(
+      FActiveProject.Id, FActiveTarget.Id, FActiveBausteinId);
+    FSuppressAssessmentSave := False;
+  end;
   LoadMeasuresForCurrentRequirement;
+  ApplyInheritedUiState;
 end;
 
 procedure TMainForm.LoadMeasuresForCurrentRequirement;
@@ -1338,7 +1507,7 @@ begin
   if not HasActiveProject or (FActiveTarget.Id = 0) or (FActiveRequirementId = 0) then
     Exit;
   FCurrentMeasures := FContext.MeasureRepository.LoadMeasures(
-    FActiveProject.Id, FActiveTarget.Id, FActiveRequirementId);
+    FActiveProject.Id, AssessmentTargetId(FActiveBausteinId), FActiveRequirementId);
   Row := 1;
   for M in FCurrentMeasures do
   begin
@@ -1361,7 +1530,8 @@ begin
   cboAssessmentStatus.ItemIndex := Ord(AAssessment.Status);
   edtResponsible.Text := AAssessment.Responsible;
   chkHasDueDate.Checked := IsValidDate(AAssessment.DueDate);
-  dtpDueDate.Enabled := chkHasDueDate.Checked and CanEditActiveProject;
+  dtpDueDate.Enabled := chkHasDueDate.Checked and CanEditActiveProject
+    and not IsInheritedBaustein(FActiveBausteinId);
   if chkHasDueDate.Checked then
     dtpDueDate.Date := AAssessment.DueDate;
   memAssessmentNote.Text := AAssessment.Note;
@@ -1405,7 +1575,11 @@ var
   SaveResult: TAssessmentSaveResult;
 begin
   if FSuppressAssessmentSave or not HasActiveProject or
-     (FActiveTarget.Id = 0) or (FActiveRequirementId = 0) or not CanEditActiveProject then
+     (FActiveTarget.Id = 0) or not CanEditActiveProject then
+    Exit(True);
+  if IsInheritedBaustein(FActiveBausteinId) then
+    Exit(SaveDeviationNote);
+  if FActiveRequirementId = 0 then
     Exit(True);
   FillChar(Assessment, SizeOf(Assessment), 0);
   Assessment.ProjectId := FActiveProject.Id;
@@ -1478,13 +1652,18 @@ begin
     Dlg.FileName := DefaultGrundschutzXml;
     if not Dlg.Execute then
       Exit;
-    if FContext.ImportCatalogFile(Dlg.FileName) then
-    begin
-      ReloadCatalog;
-      MessageDlg('Katalog erfolgreich importiert.', mtInformation, [mbOK], 0);
-    end
-    else
-      MessageDlg('Import fehlgeschlagen: ' + FContext.LastError, mtError, [mbOK], 0);
+    Screen.Cursor := crHourGlass;
+    try
+      if FContext.ImportCatalogFile(Dlg.FileName) then
+      begin
+        ReloadCatalog;
+        MessageDlg('Katalog erfolgreich importiert.', mtInformation, [mbOK], 0);
+      end
+      else
+        MessageDlg('Import fehlgeschlagen: ' + FContext.LastError, mtError, [mbOK], 0);
+    finally
+      Screen.Cursor := crDefault;
+    end;
   finally
     Dlg.Free;
   end;
@@ -1612,8 +1791,10 @@ end;
 
 procedure TMainForm.DoAddTarget(Sender: TObject);
 var
-  O: TTargetObject;
-  ParentId: Integer;
+  O, Parent: TTargetObject;
+  Objects: TArray<TTargetObject>;
+  Layer: TTargetObjectType;
+  FromLayer: Boolean;
 begin
   if not HasActiveProject then
   begin
@@ -1625,17 +1806,33 @@ begin
     MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
     Exit;
   end;
+  Objects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
+  FromLayer := IsLayerGroupNode(tvTargets.Selected, Layer);
+  if FromLayer then
+    Parent := FindRootScope(Objects)
+  else
+    Parent := ResolveParentForNewTarget(Objects);
+  if Parent.Id = 0 then
+  begin
+    MessageDlg('Kein Informationsverbund vorhanden. Bitte das Projekt neu anlegen.',
+      mtWarning, [mbOK], 0);
+    Exit;
+  end;
+  if not CanHaveChildTargetObjects(Parent.ObjType) then
+  begin
+    MessageDlg('Unter diesem Zielobjekt können keine Unterobjekte angelegt werden.',
+      mtInformation, [mbOK], 0);
+    Exit;
+  end;
   FillChar(O, SizeOf(O), 0);
   O.ProjectId := FActiveProject.Id;
-  if FActiveTarget.Id > 0 then
-    ParentId := FActiveTarget.Id
+  O.ParentId := Parent.Id;
+  if FromLayer then
+    O.ObjType := Layer
   else
-    ParentId := 0;
-  O.ParentId := ParentId;
-  O.ObjType := totProcess;
-  O.ProtectionNeed := pnNormal;
-  O.Name := 'Neues Zielobjekt';
-  if not TTargetObjectForm.ExecuteCreate(O) then
+    O.ObjType := DefaultChildTargetType(Parent.ObjType);
+  O.ProtectionNeed := Parent.ProtectionNeed;
+  if not TTargetObjectForm.ExecuteCreate(O, Parent) then
     Exit;
   O := FContext.TargetObjectRepository.CreateTargetObject(O);
   if O.Id = 0 then
@@ -1649,7 +1846,8 @@ end;
 
 procedure TMainForm.DoEditTarget(Sender: TObject);
 var
-  O: TTargetObject;
+  O, Parent: TTargetObject;
+  Objects: TArray<TTargetObject>;
 begin
   if not HasActiveProject then
     Exit;
@@ -1663,8 +1861,10 @@ begin
     MessageDlg('Bitte zuerst ein Zielobjekt auswählen.', mtInformation, [mbOK], 0);
     Exit;
   end;
+  Objects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
   O := FActiveTarget;
-  if not TTargetObjectForm.ExecuteEdit(O) then
+  Parent := FindTargetById(Objects, O.ParentId);
+  if not TTargetObjectForm.ExecuteEdit(O, Parent) then
     Exit;
   if not FContext.TargetObjectRepository.UpdateTargetObject(O) then
   begin
@@ -1687,6 +1887,12 @@ begin
   if FActiveTarget.Id = 0 then
   begin
     MessageDlg('Bitte zuerst ein Zielobjekt auswählen.', mtInformation, [mbOK], 0);
+    Exit;
+  end;
+  if IsRootScopeTarget(FActiveTarget) then
+  begin
+    MessageDlg('Der Informationsverbund ist die Wurzel der Modellierung und kann nicht gelöscht werden.',
+      mtInformation, [mbOK], 0);
     Exit;
   end;
   if MessageDlg(Format('Das Zielobjekt "%s" und alle untergeordneten Objekte wirklich löschen?',
@@ -1887,12 +2093,23 @@ var
   Node: TTreeNode;
   P: TPoint;
   TargetId: Integer;
+  Layer: TTargetObjectType;
 begin
   P := tvTargets.ScreenToClient(Mouse.CursorPos);
   Node := tvTargets.GetNodeAt(P.X, P.Y);
-  if (Node = nil) or (Node.Data = nil) then
+  if Node = nil then
+    Exit;
+  if IsLayerGroupNode(Node, Layer) then
+  begin
+    if Node <> tvTargets.Selected then
+      Node.Selected := True;
+    Exit;
+  end;
+  if Node.Data = nil then
     Exit;
   TargetId := Integer(Node.Data);
+  if TargetId <= 0 then
+    Exit;
   if Node <> tvTargets.Selected then
     Node.Selected := True
   else
@@ -1910,10 +2127,18 @@ end;
 procedure TMainForm.tvTargetsChange(Sender: TObject; Node: TTreeNode);
 var
   TargetId: Integer;
+  Layer: TTargetObjectType;
 begin
   if FBlockTargetSelection then
     Exit;
-  if (Node = nil) or (Node.Data = nil) then
+  if Node = nil then
+    Exit;
+  if IsLayerGroupNode(Node, Layer) then
+    Exit;
+  if Node.Data = nil then
+    Exit;
+  TargetId := Integer(Node.Data);
+  if TargetId <= 0 then
     Exit;
   if FActiveTarget.Id > 0 then
   begin
@@ -1921,7 +2146,6 @@ begin
     FLastRequirementByTarget.AddOrSetValue(FActiveTarget.Id, FActiveRequirementId);
   end;
   SaveCurrentAssessment;
-  TargetId := Integer(Node.Data);
   ApplyTargetSelection(TargetId);
 end;
 
@@ -1977,6 +2201,12 @@ begin
     MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
     Exit;
   end;
+  if IsInheritedBaustein(BausteinId) and (AStatus = apUndefined) then
+  begin
+    MessageDlg('Die Zuweisung ist vom '#252'bergeordneten Zielobjekt geerbt und kann hier nicht entfernt werden.',
+      mtInformation, [mbOK], 0);
+    Exit;
+  end;
 
   if AStatus = apUndefined then
   begin
@@ -2005,10 +2235,7 @@ begin
   else
     StatusBar.Panels[1].Text := Format('%s %s als %s für %s gespeichert (lokal)',
       [B.ExternalId, B.Title, ApplicabilityStatusToString(AStatus), FActiveTarget.Name]);
-  if AStatus = apUndefined then
-    FApplicabilityMap.Remove(BausteinId)
-  else
-    FApplicabilityMap.AddOrSetValue(BausteinId, AStatus);
+  ReloadApplicabilityFromServer;
   if (AStatus = apRequired) or (AStatus = apPossible) then
   begin
     FActiveBausteinId := BausteinId;
@@ -2047,9 +2274,9 @@ begin
   mniBausteinRequired.Visible := CanEditActiveProject;
   mniBausteinPossible.Visible := CanEditActiveProject;
   mniBausteinNotApplicable.Visible := CanEditActiveProject;
-  mniBausteinReset.Visible := CanEditActiveProject;
+  mniBausteinReset.Visible := CanEditActiveProject and not IsInheritedBaustein(FContextMenuBausteinId);
   mniBausteinSep1.Visible := CanEditActiveProject;
-  mniBausteinSep2.Visible := CanEditActiveProject;
+  mniBausteinSep2.Visible := CanEditActiveProject and not IsInheritedBaustein(FContextMenuBausteinId);
 end;
 
 procedure TMainForm.sgRequirementsSelectCell(Sender: TObject; ACol, ARow: Integer;
@@ -2099,7 +2326,8 @@ end;
 
 procedure TMainForm.chkHasDueDateClick(Sender: TObject);
 begin
-  dtpDueDate.Enabled := chkHasDueDate.Checked and CanEditActiveProject;
+  dtpDueDate.Enabled := chkHasDueDate.Checked and CanEditActiveProject
+    and not IsInheritedBaustein(FActiveBausteinId);
   SaveCurrentAssessment(True);
 end;
 
@@ -2197,13 +2425,34 @@ end;
 procedure TMainForm.ReloadApplicabilityFromServer;
 var
   Map: TDictionary<Integer, TApplicabilityStatus>;
+  Objects: TArray<TTargetObject>;
+  ParentMaps: TObjectDictionary<Integer, TDictionary<Integer, TApplicabilityStatus>>;
+  Ancestors: TArray<TTargetObject>;
+  Parent: TTargetObject;
+  Pair: TPair<Integer, TInheritedBaustein>;
 begin
+  FInheritedBausteine.Clear;
   if not HasActiveProject or (FActiveTarget.Id = 0) then
     Exit;
   Map := FContext.TargetObjectRepository.LoadApplicabilityMap(
     FActiveProject.Id, FActiveTarget.Id);
   FApplicabilityMap.Free;
   FApplicabilityMap := Map;
+  Objects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
+  ParentMaps := TObjectDictionary<Integer, TDictionary<Integer, TApplicabilityStatus>>.Create([doOwnsValues]);
+  try
+    Ancestors := TInheritanceService.AncestorChain(Objects, FActiveTarget);
+    for Parent in Ancestors do
+      ParentMaps.Add(Parent.Id,
+        FContext.TargetObjectRepository.LoadApplicabilityMap(FActiveProject.Id, Parent.Id));
+    TInheritanceService.CollectInherited(Objects, FActiveTarget, FApplicabilityMap,
+      ParentMaps, FInheritedBausteine);
+  finally
+    ParentMaps.Free;
+  end;
+  for Pair in FInheritedBausteine do
+    if not FApplicabilityMap.ContainsKey(Pair.Key) then
+      FApplicabilityMap.Add(Pair.Key, Pair.Value.Status);
 end;
 
 procedure TMainForm.PopulateAssignedBausteinBox;
@@ -2252,6 +2501,8 @@ begin
         B := FindBausteinById(BausteinId);
         LabelText := Format('%s %s (%s)', [B.ExternalId, B.Title,
           ApplicabilityStatusToString(FApplicabilityMap[BausteinId])]);
+        if FInheritedBausteine.ContainsKey(BausteinId) then
+          LabelText := #$2193' ' + LabelText;
         cboAssignedBausteine.Items.AddObject(LabelText, TObject(BausteinId));
       end;
 
@@ -2423,6 +2674,8 @@ procedure TMainForm.tvTargetsContextPopup(Sender: TObject; MousePos: TPoint; var
 var
   Node: TTreeNode;
   HasTarget: Boolean;
+  Layer: TTargetObjectType;
+  OnLayer: Boolean;
 begin
   if not HasActiveProject or not CanEditActiveProject then
   begin
@@ -2437,16 +2690,23 @@ begin
     tvTargets.SetFocus;
   end;
 
+  OnLayer := IsLayerGroupNode(tvTargets.Selected, Layer);
   HasTarget := FActiveTarget.Id > 0;
   mniTargetAdd.Visible := True;
   mniTargetAdd.Enabled := True;
-  mniTargetEdit.Visible := HasTarget;
-  mniTargetEdit.Enabled := HasTarget;
-  mniTargetDelete.Visible := HasTarget;
-  mniTargetDelete.Enabled := HasTarget;
-  mniTargetSep.Visible := HasTarget;
-  mniTargetRecommendations.Visible := HasTarget;
-  mniTargetRecommendations.Enabled := HasTarget;
+  if OnLayer then
+    mniTargetAdd.Caption := TargetObjectTypeToString(Layer) + ' hinzuf'#$00FC'gen'#$2026
+  else if HasTarget and CanHaveChildTargetObjects(FActiveTarget.ObjType) then
+    mniTargetAdd.Caption := 'Unterobjekt hinzuf'#$00FC'gen'#$2026
+  else
+    mniTargetAdd.Caption := 'Zielobjekt hinzuf'#$00FC'gen'#$2026;
+  mniTargetEdit.Visible := HasTarget and not OnLayer;
+  mniTargetEdit.Enabled := HasTarget and not OnLayer;
+  mniTargetDelete.Visible := HasTarget and not OnLayer;
+  mniTargetDelete.Enabled := CanDeleteActiveTarget and not OnLayer;
+  mniTargetSep.Visible := HasTarget and not OnLayer;
+  mniTargetRecommendations.Visible := HasTarget and not OnLayer;
+  mniTargetRecommendations.Enabled := HasTarget and not OnLayer;
 end;
 
 procedure TMainForm.BausteinViewMenuClick(Sender: TObject);
@@ -2464,6 +2724,8 @@ var
   M: TMeasure;
 begin
   if FActiveRequirementId = 0 then
+    Exit;
+  if IsInheritedBaustein(FActiveBausteinId) then
     Exit;
   FillChar(M, SizeOf(M), 0);
   M.ProjectId := FActiveProject.Id;
@@ -2508,6 +2770,11 @@ begin
     end;
   if M.Id = 0 then
     Exit;
+  if IsInheritedBaustein(FActiveBausteinId) or not CanEditActiveProject then
+  begin
+    TMeasureForm.ExecuteView(M);
+    Exit;
+  end;
   if CanEditActiveProject then
   begin
     if not TMeasureForm.ExecuteEdit(M) then
@@ -2540,7 +2807,7 @@ var
   MeasureId: Integer;
 begin
   Row := sgMeasures.Row;
-  if Row < 1 then
+  if (Row < 1) or IsInheritedBaustein(FActiveBausteinId) then
     Exit;
   MeasureId := Integer(sgMeasures.Objects[0, Row]);
   if MessageDlg('Maßnahme wirklich löschen?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
