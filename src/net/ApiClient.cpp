@@ -2,10 +2,9 @@
 
 #include <QEventLoop>
 #include <QFile>
-#include <QFileInfo>
-#include <QHttpMultiPart>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSslError>
@@ -14,6 +13,19 @@
 namespace {
 
 constexpr int kExpirySkewSeconds = 60;
+
+QString networkFailureMessage(const QString &errorString)
+{
+    if (errorString.contains(QLatin1String("Unable to write"), Qt::CaseInsensitive)
+        || errorString.contains(QLatin1String("Connection closed"), Qt::CaseInsensitive)
+        || errorString.contains(QLatin1String("Connection reset"), Qt::CaseInsensitive)) {
+        return QStringLiteral(
+            "Upload abgebrochen. Der Server hat die Verbindung geschlossen "
+            "(häufig ein veralteter Prozess ohne Katalog-API). "
+            "Bitte den ISMS-Server neu starten und den Import erneut versuchen.");
+    }
+    return QStringLiteral("Netzwerkfehler: %1").arg(errorString);
+}
 
 } // namespace
 
@@ -193,6 +205,7 @@ bool ApiClient::del(const QString &path, int *statusCode) const
 QJsonDocument ApiClient::uploadFile(const QString &path, const QString &fieldName,
                                     const QString &filePath, int *statusCode) const
 {
+    Q_UNUSED(fieldName)
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         m_lastError = QStringLiteral("Datei konnte nicht geöffnet werden: %1").arg(filePath);
@@ -200,58 +213,16 @@ QJsonDocument ApiClient::uploadFile(const QString &path, const QString &fieldNam
             *statusCode = 0;
         return {};
     }
-
-    QHttpMultiPart *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
-    QHttpPart filePart;
-    filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
-                       QStringLiteral("form-data; name=\"%1\"; filename=\"%2\"")
-                           .arg(fieldName, QFileInfo(filePath).fileName()));
-    filePart.setBodyDevice(&file);
-    file.setParent(multiPart);
-    multiPart->append(filePart);
-
-    QNetworkAccessManager manager;
-    QNetworkRequest request(buildUrl(path));
-    if (!m_accessToken.isEmpty())
-        request.setRawHeader("Authorization", "Bearer " + m_accessToken.toUtf8());
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-    request.setTransferTimeout(15 * 60 * 1000);
-#endif
-
-    QNetworkReply *reply = manager.post(request, multiPart);
-    multiPart->setParent(reply);
-    configureTls(reply);
-
-    QEventLoop loop;
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-
-    int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    if (statusCode)
-        *statusCode = status;
-
-    QJsonDocument doc;
-    const QByteArray payload = reply->readAll();
-    if (!payload.isEmpty())
-        doc = QJsonDocument::fromJson(payload);
-
-    if (reply->error() && status == 0) {
-        m_lastError = reply->errorString();
-    } else if (status >= 400) {
-        m_lastError = readApiError(doc, QStringLiteral("HTTP %1").arg(status));
-        m_lastAuthFailure = status == 401;
-    } else {
-        m_lastAuthFailure = false;
+    const QByteArray xml = file.readAll();
+    file.close();
+    if (xml.isEmpty()) {
+        m_lastError = QStringLiteral("Datei ist leer oder konnte nicht gelesen werden: %1").arg(filePath);
+        if (statusCode)
+            *statusCode = 0;
+        return {};
     }
-
-    reply->deleteLater();
-
-    if (status == 401 && !isAuthEndpoint(path) && m_reloginHandler) {
-        if (m_reloginHandler())
-            return uploadFile(path, fieldName, filePath, statusCode);
-    }
-
-    return doc;
+    return sendRequest(QByteArrayLiteral("POST"), path, xml, QStringLiteral("application/xml"),
+                       statusCode, true);
 }
 
 QJsonDocument ApiClient::sendRequest(const QByteArray &method, const QString &path,
@@ -274,6 +245,9 @@ QJsonDocument ApiClient::sendRequest(const QByteArray &method, const QString &pa
         request.setHeader(QNetworkRequest::ContentTypeHeader, contentType);
     if (!m_accessToken.isEmpty())
         request.setRawHeader("Authorization", "Bearer " + m_accessToken.toUtf8());
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    request.setTransferTimeout(15 * 60 * 1000);
+#endif
 
     QNetworkReply *reply = nullptr;
     if (method == "GET")
@@ -310,7 +284,13 @@ QJsonDocument ApiClient::sendRequest(const QByteArray &method, const QString &pa
         doc = QJsonDocument::fromJson(payload);
 
     if (reply->error() && status == 0) {
-        m_lastError = reply->errorString();
+        m_lastError = networkFailureMessage(reply->errorString());
+        m_lastAuthFailure = false;
+    } else if (status == 404) {
+        m_lastError = path.contains(QStringLiteral("/catalog"))
+                          ? QStringLiteral("Katalog-API nicht gefunden (HTTP 404). "
+                                           "Bitte den ISMS-Server neu bauen und neu starten.")
+                          : readApiError(doc, QStringLiteral("HTTP 404"));
         m_lastAuthFailure = false;
     } else if (status >= 400) {
         m_lastError = readApiError(doc, QStringLiteral("HTTP %1").arg(status));
@@ -319,7 +299,7 @@ QJsonDocument ApiClient::sendRequest(const QByteArray &method, const QString &pa
         m_lastAuthFailure = false;
     }
 
-    reply->deleteLater();
+    delete reply;
 
     if (allowRelogin && status == 401 && !isAuthEndpoint(path) && m_reloginHandler) {
         if (m_reloginHandler())

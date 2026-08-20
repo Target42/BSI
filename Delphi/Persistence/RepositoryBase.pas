@@ -50,6 +50,7 @@ type
   TMeasureRepositoryBase = class
   public
     function LoadMeasures(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TArray<TMeasure>; virtual; abstract;
+    function LoadProjectMeasures(AProjectId: Integer): TArray<TMeasure>; virtual; abstract;
     function MeasureCounts(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, Integer>; virtual; abstract;
     function CreateMeasure(const AMeasure: TMeasure): TMeasure; virtual; abstract;
     function UpdateMeasure(const AMeasure: TMeasure): TMeasureSaveResult; virtual; abstract;

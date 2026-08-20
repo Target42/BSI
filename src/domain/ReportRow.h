@@ -11,8 +11,10 @@
 struct ReportRow {
     int targetObjectId = 0;
     QString targetObjectName;
+    int bausteinDbId = 0;
     QString bausteinExternalId;
     QString bausteinTitle;
+    int requirementDbId = 0;
     QString requirementExternalId;
     QString requirementTitle;
     QString level;

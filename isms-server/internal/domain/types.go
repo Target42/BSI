@@ -21,28 +21,33 @@ type Project struct {
 }
 
 type TargetObject struct {
-	ID              int64     `json:"id"`
-	ProjectID       int64     `json:"projectId"`
-	ParentID        int64     `json:"parentId"`
-	Type            string    `json:"type"`
-	ProtectionNeed  string    `json:"protectionNeed"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	ID                    int64     `json:"id"`
+	ProjectID             int64     `json:"projectId"`
+	ParentID              int64     `json:"parentId"`
+	Type                  string    `json:"type"`
+	ProtectionNeed        string    `json:"protectionNeed"`
+	Confidentiality       string    `json:"confidentiality"`
+	Integrity             string    `json:"integrity"`
+	Availability          string    `json:"availability"`
+	InheritProtectionNeed bool      `json:"inheritProtectionNeed"`
+	ProtectionNeedNote    string    `json:"protectionNeedNote"`
+	Name                  string    `json:"name"`
+	Description           string    `json:"description"`
+	CreatedAt             time.Time `json:"createdAt"`
+	UpdatedAt             time.Time `json:"updatedAt"`
 }
 
 type RequirementAssessment struct {
-	ID               int64   `json:"id"`
-	ProjectID        int64   `json:"projectId"`
-	TargetObjectID   int64   `json:"targetObjectId"`
-	RequirementID    int64   `json:"requirementId"`
-	Status           string  `json:"status"`
-	Note             string  `json:"note"`
-	Responsible      string  `json:"responsible"`
-	DueDate          *string `json:"dueDate,omitempty"`
-	Version          int     `json:"version"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID             int64     `json:"id"`
+	ProjectID      int64     `json:"projectId"`
+	TargetObjectID int64     `json:"targetObjectId"`
+	RequirementID  int64     `json:"requirementId"`
+	Status         string    `json:"status"`
+	Note           string    `json:"note"`
+	Responsible    string    `json:"responsible"`
+	DueDate        *string   `json:"dueDate,omitempty"`
+	Version        int       `json:"version"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 type BausteinApplicability struct {
@@ -54,16 +59,16 @@ type BausteinApplicability struct {
 }
 
 type Measure struct {
-	ID             int64   `json:"id"`
-	ProjectID      int64   `json:"projectId"`
-	TargetObjectID int64   `json:"targetObjectId"`
-	RequirementID  int64   `json:"requirementId"`
-	Title          string  `json:"title"`
-	Description    string  `json:"description"`
-	Responsible    string  `json:"responsible"`
-	DueDate        *string `json:"dueDate,omitempty"`
-	Status         string  `json:"status"`
-	Version        int     `json:"version"`
+	ID             int64     `json:"id"`
+	ProjectID      int64     `json:"projectId"`
+	TargetObjectID int64     `json:"targetObjectId"`
+	RequirementID  int64     `json:"requirementId"`
+	Title          string    `json:"title"`
+	Description    string    `json:"description"`
+	Responsible    string    `json:"responsible"`
+	DueDate        *string   `json:"dueDate,omitempty"`
+	Status         string    `json:"status"`
+	Version        int       `json:"version"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 

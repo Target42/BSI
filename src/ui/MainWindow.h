@@ -4,6 +4,7 @@
 #include "app/AppContext.h"
 #include "domain/ApplicabilityStatus.h"
 #include "domain/AssessmentStatus.h"
+#include "domain/CockpitItem.h"
 #include "domain/Project.h"
 #include "domain/Requirement.h"
 #include "domain/RequirementAssessment.h"
@@ -74,6 +75,7 @@ private slots:
     void toggleRecommendationHighlight(bool enabled);
     void applyBausteinRecommendations();
     void showSollIstReport();
+    void showCockpit();
     void showProjectMembers();
     void switchUserOrLogout();
     void checkRemoteSession();
@@ -111,6 +113,8 @@ private:
     bool assessmentStatusFilterActive() const;
     bool requirementPassesStatusFilter(AssessmentStatus status) const;
     void ensureApplicableFilterFeasible();
+    void ensureRequirementFilterAllows(AssessmentStatus status);
+    void jumpToCockpitItem(const CockpitItem &item);
     void showBausteinNotApplicableMessage(int bausteinDbId, ApplicabilityStatus status);
     void refreshAssessmentColumn();
     void syncAssessmentUi(const RequirementAssessment &assessment);
@@ -224,6 +228,7 @@ private:
     QAction *m_switchUserAction = nullptr;
     QAction *m_reloginAction = nullptr;
     QAction *m_sollIstAction = nullptr;
+    QAction *m_cockpitAction = nullptr;
     QTimer *m_sessionTimer = nullptr;
 };
 

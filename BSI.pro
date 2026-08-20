@@ -27,12 +27,14 @@ SOURCES += \
     src/persistence/ProjectRepository.cpp \
     src/persistence/TargetObjectRepository.cpp \
     src/services/BausteinRecommendationService.cpp \
+    src/services/CockpitService.cpp \
     src/services/ReportExporter.cpp \
     src/services/ReportService.cpp \
     src/ui/MainWindow.cpp \
     src/ui/dialogs/BausteinRecommendationDialog.cpp \
     src/ui/dialogs/BausteinViewDialog.cpp \
     src/ui/dialogs/CatalogSearchDialog.cpp \
+    src/ui/dialogs/CockpitDialog.cpp \
     src/ui/dialogs/CreateUserDialog.cpp \
     src/ui/dialogs/LoginDialog.cpp \
     src/ui/dialogs/MeasureDialog.cpp \
@@ -42,6 +44,7 @@ SOURCES += \
     src/ui/dialogs/ReportDialog.cpp \
     src/ui/dialogs/TargetObjectDialog.cpp \
     src/ui/models/BausteinTreeModel.cpp \
+    src/ui/models/CockpitTableModel.cpp \
     src/ui/models/MeasureTableModel.cpp \
     src/ui/models/ReportTableModel.cpp \
     src/ui/models/RequirementTableModel.cpp \
@@ -66,6 +69,7 @@ HEADERS += \
     src/domain/BausteinApplicability.h \
     src/domain/BausteinRecommendation.h \
     src/domain/Baustein.h \
+    src/domain/CockpitItem.h \
     src/domain/Measure.h \
     src/domain/MeasureStatus.h \
     src/domain/Project.h \
@@ -89,6 +93,7 @@ HEADERS += \
     src/persistence/ProjectRepository.h \
     src/persistence/TargetObjectRepository.h \
     src/services/BausteinRecommendationService.h \
+    src/services/CockpitService.h \
     src/services/Inheritance.h \
     src/services/ReportExporter.h \
     src/services/ReportService.h \
@@ -96,6 +101,7 @@ HEADERS += \
     src/ui/dialogs/BausteinRecommendationDialog.h \
     src/ui/dialogs/BausteinViewDialog.h \
     src/ui/dialogs/CatalogSearchDialog.h \
+    src/ui/dialogs/CockpitDialog.h \
     src/ui/dialogs/CreateUserDialog.h \
     src/ui/dialogs/LoginDialog.h \
     src/ui/dialogs/MeasureDialog.h \
@@ -105,6 +111,7 @@ HEADERS += \
     src/ui/dialogs/ReportDialog.h \
     src/ui/dialogs/TargetObjectDialog.h \
     src/ui/models/BausteinTreeModel.h \
+    src/ui/models/CockpitTableModel.h \
     src/ui/models/MeasureTableModel.h \
     src/ui/models/ReportTableModel.h \
     src/ui/models/RequirementTableModel.h \

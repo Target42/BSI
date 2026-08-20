@@ -64,8 +64,8 @@ func (s *Server) Router() http.Handler {
 			protected.Get("/auth/me", s.authHandler.Me)
 
 			protected.Get("/catalog/versions", s.catalogHandler.ListVersions)
-			protected.Get("/catalog/{version}/bausteine", s.catalogHandler.ListBausteine)
 			protected.Get("/catalog/bausteine/{bausteinID}/requirements", s.catalogHandler.ListRequirements)
+			protected.Get("/catalog/{version}/bausteine", s.catalogHandler.ListBausteine)
 			protected.Post("/admin/catalog/import", s.adminHandler.ImportCatalog)
 			protected.Get("/admin/users", s.adminHandler.ListUsers)
 			protected.Post("/admin/users", s.adminHandler.CreateUser)
@@ -100,6 +100,7 @@ func (s *Server) Router() http.Handler {
 			protected.Put("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/deviation", s.assessmentHandler.SaveDeviation)
 
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/measure-counts", s.measureHandler.MeasureCounts)
+			protected.Get("/projects/{projectID}/measures", s.measureHandler.ListProject)
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/requirements/{requirementID}/measures", s.measureHandler.List)
 			protected.Post("/projects/{projectID}/target-objects/{targetObjectID}/requirements/{requirementID}/measures", s.measureHandler.Create)
 			protected.Patch("/measures/{measureID}", s.measureHandler.Update)

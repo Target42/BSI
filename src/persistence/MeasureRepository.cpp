@@ -46,6 +46,39 @@ QList<Measure> MeasureRepository::loadMeasures(int projectId,
     return measures;
 }
 
+QList<Measure> MeasureRepository::loadProjectMeasures(int projectId) const
+{
+    QList<Measure> measures;
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral(
+        "SELECT id, project_id, target_object_id, requirement_id, title, description, "
+        "responsible, due_date, status "
+        "FROM measures "
+        "WHERE project_id = ? "
+        "ORDER BY due_date IS NULL, due_date, title"));
+    query.addBindValue(projectId);
+
+    if (!query.exec())
+        return measures;
+
+    while (query.next()) {
+        Measure measure;
+        measure.id = query.value(0).toInt();
+        measure.projectId = query.value(1).toInt();
+        measure.targetObjectId = query.value(2).toInt();
+        measure.requirementDbId = query.value(3).toInt();
+        measure.title = query.value(4).toString();
+        measure.description = query.value(5).toString();
+        measure.responsible = query.value(6).toString();
+        const QString dueDate = query.value(7).toString();
+        if (!dueDate.isEmpty())
+            measure.dueDate = QDate::fromString(dueDate, Qt::ISODate);
+        measure.status = measureStatusFromString(query.value(8).toString());
+        measures.append(measure);
+    }
+    return measures;
+}
+
 QHash<int, int> MeasureRepository::measureCounts(int projectId, int targetObjectId) const
 {
     QHash<int, int> counts;

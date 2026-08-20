@@ -5,11 +5,16 @@
 
 #include <QString>
 
-// IT-Grundschutz: welche Anforderungsstufen für ein Zielobjekt gelten
 enum class ProtectionNeed {
     BasisOnly,
     Normal,
     Elevated
+};
+
+enum class CiaLevel {
+    Normal,
+    High,
+    VeryHigh
 };
 
 inline QString protectionNeedToString(ProtectionNeed need)
@@ -31,6 +36,43 @@ inline ProtectionNeed protectionNeedFromString(const QString &value)
     if (normalized == QStringLiteral("Basis-Anforderungen"))
         return ProtectionNeed::BasisOnly;
     if (normalized.startsWith(QStringLiteral("Erhöht")))
+        return ProtectionNeed::Elevated;
+    return ProtectionNeed::Normal;
+}
+
+inline QString ciaLevelToString(CiaLevel level)
+{
+    switch (level) {
+    case CiaLevel::High:
+        return QStringLiteral("hoch");
+    case CiaLevel::VeryHigh:
+        return QStringLiteral("sehr hoch");
+    case CiaLevel::Normal:
+        break;
+    }
+    return QStringLiteral("normal");
+}
+
+inline CiaLevel ciaLevelFromString(const QString &value)
+{
+    const QString normalized = value.trimmed().toLower();
+    if (normalized == QStringLiteral("hoch") || normalized == QStringLiteral("high"))
+        return CiaLevel::High;
+    if (normalized == QStringLiteral("sehr hoch") || normalized == QStringLiteral("sehrhoch")
+        || normalized == QStringLiteral("very high"))
+        return CiaLevel::VeryHigh;
+    return CiaLevel::Normal;
+}
+
+inline CiaLevel maxCiaLevel(CiaLevel left, CiaLevel right)
+{
+    return static_cast<int>(left) >= static_cast<int>(right) ? left : right;
+}
+
+inline ProtectionNeed protectionNeedFromCiaLevels(CiaLevel confidentiality, CiaLevel integrity,
+                                                 CiaLevel availability)
+{
+    if (maxCiaLevel(maxCiaLevel(confidentiality, integrity), availability) > CiaLevel::Normal)
         return ProtectionNeed::Elevated;
     return ProtectionNeed::Normal;
 }

@@ -19,6 +19,7 @@ type
     function MigrateAssessmentTargetObjectColumn: Boolean;
     function MigrateAssessmentDueDateColumn: Boolean;
     function MigrateTargetObjectProtectionNeedColumn: Boolean;
+    function MigrateTargetObjectCiaColumns: Boolean;
     function MigrateBausteinDeviationsTable: Boolean;
   public
     constructor Create(const AFilePath: string);
@@ -152,6 +153,9 @@ const
     'CREATE TABLE IF NOT EXISTS target_objects (' +
       'id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, parent_id INTEGER NOT NULL DEFAULT 0, ' +
       'type TEXT NOT NULL, protection_need TEXT NOT NULL DEFAULT ''Normal (Basis + Standard)'', ' +
+      'confidentiality TEXT NOT NULL DEFAULT ''normal'', integrity TEXT NOT NULL DEFAULT ''normal'', ' +
+      'availability TEXT NOT NULL DEFAULT ''normal'', inherit_protection_need INTEGER NOT NULL DEFAULT 0, ' +
+      'protection_need_note TEXT NOT NULL DEFAULT '''', ' +
       'name TEXT NOT NULL, description TEXT, ' +
       'FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE)',
     'CREATE TABLE IF NOT EXISTS baustein_applicability (' +
@@ -264,6 +268,40 @@ begin
   end;
 end;
 
+function TIsmsDatabase.MigrateTargetObjectCiaColumns: Boolean;
+begin
+  Result := True;
+  if not TableExists('target_objects') then
+    Exit;
+  try
+    if not TableHasColumn('target_objects', 'confidentiality') then
+      FConnection.ExecSQL(
+        'ALTER TABLE target_objects ADD COLUMN confidentiality TEXT NOT NULL DEFAULT ''normal''');
+    if not TableHasColumn('target_objects', 'integrity') then
+      FConnection.ExecSQL(
+        'ALTER TABLE target_objects ADD COLUMN integrity TEXT NOT NULL DEFAULT ''normal''');
+    if not TableHasColumn('target_objects', 'availability') then
+      FConnection.ExecSQL(
+        'ALTER TABLE target_objects ADD COLUMN availability TEXT NOT NULL DEFAULT ''normal''');
+    if not TableHasColumn('target_objects', 'inherit_protection_need') then
+      FConnection.ExecSQL(
+        'ALTER TABLE target_objects ADD COLUMN inherit_protection_need INTEGER NOT NULL DEFAULT 0');
+    if not TableHasColumn('target_objects', 'protection_need_note') then
+      FConnection.ExecSQL(
+        'ALTER TABLE target_objects ADD COLUMN protection_need_note TEXT NOT NULL DEFAULT ''''');
+    FConnection.ExecSQL(
+      'UPDATE target_objects SET confidentiality = ''hoch'', integrity = ''hoch'', ' +
+      'availability = ''hoch'' WHERE protection_need LIKE ''Erh'#$00F6'ht%'' ' +
+      'AND confidentiality = ''normal'' AND integrity = ''normal'' AND availability = ''normal''');
+  except
+    on E: Exception do
+    begin
+      FLastError := 'Migration (C/I/A-Schutzbedarf): ' + E.Message;
+      Result := False;
+    end;
+  end;
+end;
+
 function TIsmsDatabase.MigrateBausteinDeviationsTable: Boolean;
 begin
   Result := True;
@@ -292,6 +330,7 @@ begin
   Result := MigrateAssessmentTargetObjectColumn and
             MigrateAssessmentDueDateColumn and
             MigrateTargetObjectProtectionNeedColumn and
+            MigrateTargetObjectCiaColumns and
             MigrateBausteinDeviationsTable;
 end;
 

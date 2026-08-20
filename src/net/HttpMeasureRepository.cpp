@@ -35,6 +35,24 @@ QList<Measure> HttpMeasureRepository::loadMeasures(int projectId, int targetObje
     return measures;
 }
 
+QList<Measure> HttpMeasureRepository::loadProjectMeasures(int projectId) const
+{
+    int status = 0;
+    const QJsonDocument doc = m_client.get(
+        QStringLiteral("/api/v1/projects/%1/measures").arg(projectId), &status);
+    if (status != 200 || !doc.isArray()) {
+        m_lastError = m_client.lastError();
+        return {};
+    }
+
+    QList<Measure> measures;
+    for (const QJsonValue &value : doc.array()) {
+        if (value.isObject())
+            measures.append(measureFromJson(value.toObject()));
+    }
+    return measures;
+}
+
 QHash<int, int> HttpMeasureRepository::measureCounts(int projectId, int targetObjectId) const
 {
     int status = 0;

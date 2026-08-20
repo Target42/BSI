@@ -21,6 +21,7 @@
 #include "ui/dialogs/ProjectOpenDialog.h"
 #include "ui/dialogs/ProjectDialog.h"
 #include "ui/dialogs/ProjectMembersDialog.h"
+#include "ui/dialogs/CockpitDialog.h"
 #include "ui/dialogs/ReportDialog.h"
 #include "ui/dialogs/TargetObjectDialog.h"
 
@@ -419,6 +420,9 @@ void MainWindow::buildUi()
     auto *reportMenu = menuBar()->addMenu(tr("Berichte"));
     m_sollIstAction = reportMenu->addAction(tr("Soll-Ist-Übersicht..."));
     connect(m_sollIstAction, &QAction::triggered, this, &MainWindow::showSollIstReport);
+    m_cockpitAction = reportMenu->addAction(tr("Aufgaben-Cockpit..."));
+    m_cockpitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
+    connect(m_cockpitAction, &QAction::triggered, this, &MainWindow::showCockpit);
 
     auto *catalogMenu = menuBar()->addMenu(tr("Katalog"));
     catalogMenu->addAction(tr("Baustein anzeigen..."), this, &MainWindow::viewSelectedBaustein);
@@ -484,6 +488,7 @@ void MainWindow::updateProjectUiEnabled()
     m_deleteTargetAction->setEnabled(canDeleteActiveTarget());
     m_applyRecommendationsAction->setEnabled(hasTargetObject && canEdit);
     m_sollIstAction->setEnabled(hasProject);
+    m_cockpitAction->setEnabled(hasProject);
 
     m_targetObjectTree->setEnabled(hasProject);
     m_filterRequiredBox->setEnabled(hasTargetObject);
@@ -513,7 +518,7 @@ void MainWindow::updateProjectUiEnabled()
                                   .arg(m_activeProject.name,
                                        targetObjectTypeToString(m_activeTargetObject.type),
                                        m_activeTargetObject.name,
-                                       protectionNeedToString(m_activeTargetObject.protectionNeed));
+                                       protectionNeedSummary(m_activeTargetObject));
         if (m_context.isRemote() && m_activeProject.role == QStringLiteral("viewer"))
             contextText += tr(" — Nur Lesen");
         m_contextLabel->setText(contextText);
@@ -2307,7 +2312,8 @@ void MainWindow::addTargetObject()
         draft.type = static_cast<TargetObjectType>(currentIndex.data(TargetObjectTreeModel::TargetObjectTypeRole).toInt());
     else
         draft.type = defaultChildTargetType(parent.type);
-    draft.protectionNeed = parent.protectionNeed;
+    draft.inheritProtectionNeed = true;
+    copyProtectionNeedFromParent(draft, parent);
 
     TargetObjectDialog dialog(this);
     dialog.setTargetObject(draft, parent);
@@ -2656,6 +2662,76 @@ void MainWindow::showSollIstReport()
 
     ReportDialog dialog(m_context, m_activeProject, m_activeTargetObject, this);
     dialog.exec();
+}
+
+void MainWindow::showCockpit()
+{
+    if (m_activeProject.id == 0) {
+        QMessageBox::information(this, tr("Cockpit"), tr("Bitte zuerst ein Projekt anlegen."));
+        return;
+    }
+
+    QString userName;
+    QString userEmail;
+    if (m_context.isRemote()) {
+        userName = m_context.remoteUser().displayName;
+        userEmail = m_context.remoteUser().email;
+    }
+
+    CockpitDialog dialog(m_context, m_activeProject, userName, userEmail, this);
+    if (dialog.exec() == QDialog::Accepted)
+        jumpToCockpitItem(dialog.selectedItem());
+}
+
+void MainWindow::ensureRequirementFilterAllows(AssessmentStatus status)
+{
+    if (!assessmentStatusFilterActive())
+        return;
+    if (requirementPassesStatusFilter(status))
+        return;
+    switch (status) {
+    case AssessmentStatus::Open:
+        m_reqFilterOpenBox->setChecked(true);
+        break;
+    case AssessmentStatus::Partial:
+        m_reqFilterPartialBox->setChecked(true);
+        break;
+    case AssessmentStatus::Fulfilled:
+        m_reqFilterFulfilledBox->setChecked(true);
+        break;
+    case AssessmentStatus::NotApplicable:
+        m_reqFilterNotApplicableBox->setChecked(true);
+        break;
+    }
+}
+
+void MainWindow::jumpToCockpitItem(const CockpitItem &item)
+{
+    if (item.targetObjectId <= 0)
+        return;
+
+    saveCurrentAssessment();
+    if (!m_bausteinSearchEdit->text().isEmpty()) {
+        m_bausteinSearchEdit->clear();
+        applyBausteinSearchFilter();
+    }
+    ensureRequirementFilterAllows(item.assessmentStatus);
+    m_lastBausteinByTarget.insert(item.targetObjectId, item.bausteinDbId);
+    m_lastRequirementByTarget.insert(item.targetObjectId, item.requirementDbId);
+    m_restoreRequirementId = item.requirementDbId;
+
+    if (m_activeTargetObject.id != item.targetObjectId) {
+        const QModelIndex index = m_targetObjectModel->indexForTargetObjectId(item.targetObjectId);
+        if (index.isValid())
+            m_targetObjectTree->setCurrentIndex(index);
+    } else {
+        restoreBausteinSelection(item.bausteinDbId);
+        m_restoreRequirementId = item.requirementDbId;
+        reloadActiveTargetContent();
+    }
+
+    showTemporaryStatusMessage(
+        tr("Cockpit: %1 %2").arg(item.requirementExternalId, item.title), 4000);
 }
 
 QSet<int> MainWindow::matchingBausteinIdsForSearch(const QString &query) const

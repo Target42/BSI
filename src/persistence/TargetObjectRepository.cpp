@@ -2,6 +2,7 @@
 
 #include "domain/ApplicabilityStatus.h"
 #include "domain/ProtectionNeed.h"
+#include "domain/TargetObject.h"
 #include "domain/TargetObjectType.h"
 
 #include <QSqlError>
@@ -12,42 +13,98 @@ TargetObjectRepository::TargetObjectRepository(QSqlDatabase db)
 {
 }
 
-QList<TargetObject> TargetObjectRepository::loadTargetObjects(int projectId) const
+TargetObject TargetObjectRepository::readTargetObject(const QSqlQuery &query) const
+{
+    TargetObject object;
+    object.id = query.value(0).toInt();
+    object.projectId = query.value(1).toInt();
+    object.parentId = query.value(2).toInt();
+    object.type = targetObjectTypeFromString(query.value(3).toString());
+    object.protectionNeed = protectionNeedFromString(query.value(4).toString());
+    object.confidentiality = ciaLevelFromString(query.value(5).toString());
+    object.integrity = ciaLevelFromString(query.value(6).toString());
+    object.availability = ciaLevelFromString(query.value(7).toString());
+    object.inheritProtectionNeed = query.value(8).toInt() != 0;
+    object.protectionNeedNote = query.value(9).toString();
+    object.name = query.value(10).toString();
+    object.description = query.value(11).toString();
+    if (object.confidentiality == CiaLevel::Normal && object.integrity == CiaLevel::Normal
+        && object.availability == CiaLevel::Normal
+        && object.protectionNeed == ProtectionNeed::Elevated) {
+        object.confidentiality = CiaLevel::High;
+        object.integrity = CiaLevel::High;
+        object.availability = CiaLevel::High;
+    }
+    return object;
+}
+
+void TargetObjectRepository::bindProtectionNeed(QSqlQuery &query, const TargetObject &targetObject) const
+{
+    query.addBindValue(protectionNeedToString(targetObject.protectionNeed));
+    query.addBindValue(ciaLevelToString(targetObject.confidentiality));
+    query.addBindValue(ciaLevelToString(targetObject.integrity));
+    query.addBindValue(ciaLevelToString(targetObject.availability));
+    query.addBindValue(targetObject.inheritProtectionNeed ? 1 : 0);
+    query.addBindValue(targetObject.protectionNeedNote);
+}
+
+QList<TargetObject> TargetObjectRepository::loadTargetObjectsRaw(int projectId) const
 {
     QList<TargetObject> objects;
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
-        "SELECT id, project_id, parent_id, type, protection_need, name, description "
+        "SELECT id, project_id, parent_id, type, protection_need, confidentiality, integrity, "
+        "availability, inherit_protection_need, protection_need_note, name, description "
         "FROM target_objects WHERE project_id = ? ORDER BY parent_id, name"));
     query.addBindValue(projectId);
     if (!query.exec())
         return objects;
 
-    while (query.next()) {
-        TargetObject object;
-        object.id = query.value(0).toInt();
-        object.projectId = query.value(1).toInt();
-        object.parentId = query.value(2).toInt();
-        object.type = targetObjectTypeFromString(query.value(3).toString());
-        object.protectionNeed = protectionNeedFromString(query.value(4).toString());
-        object.name = query.value(5).toString();
-        object.description = query.value(6).toString();
-        objects.append(object);
+    while (query.next())
+        objects.append(readTargetObject(query));
+    return objects;
+}
+
+void TargetObjectRepository::persistInheritedProtectionNeeds(int projectId)
+{
+    QList<TargetObject> objects = loadTargetObjectsRaw(projectId);
+    resolveInheritedProtectionNeeds(objects);
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral(
+        "UPDATE target_objects SET confidentiality = ?, integrity = ?, availability = ?, "
+        "protection_need = ? WHERE id = ?"));
+    for (const TargetObject &object : objects) {
+        if (!object.inheritProtectionNeed)
+            continue;
+        query.bindValue(0, ciaLevelToString(object.confidentiality));
+        query.bindValue(1, ciaLevelToString(object.integrity));
+        query.bindValue(2, ciaLevelToString(object.availability));
+        query.bindValue(3, protectionNeedToString(object.protectionNeed));
+        query.bindValue(4, object.id);
+        query.exec();
     }
+}
+
+QList<TargetObject> TargetObjectRepository::loadTargetObjects(int projectId) const
+{
+    QList<TargetObject> objects = loadTargetObjectsRaw(projectId);
+    resolveInheritedProtectionNeeds(objects);
     return objects;
 }
 
 TargetObject TargetObjectRepository::createTargetObject(const TargetObject &targetObject)
 {
     TargetObject object = targetObject;
+    applyCiaToProtectionNeed(object);
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
-        "INSERT INTO target_objects (project_id, parent_id, type, protection_need, name, description) "
-        "VALUES (?, ?, ?, ?, ?, ?)"));
+        "INSERT INTO target_objects (project_id, parent_id, type, protection_need, "
+        "confidentiality, integrity, availability, inherit_protection_need, protection_need_note, "
+        "name, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(object.projectId);
     query.addBindValue(object.parentId);
     query.addBindValue(targetObjectTypeToString(object.type));
-    query.addBindValue(protectionNeedToString(object.protectionNeed));
+    bindProtectionNeed(query, object);
     query.addBindValue(object.name);
     query.addBindValue(object.description);
 
@@ -62,21 +119,25 @@ TargetObject TargetObjectRepository::createTargetObject(const TargetObject &targ
 
 bool TargetObjectRepository::updateTargetObject(const TargetObject &targetObject)
 {
+    TargetObject object = targetObject;
+    applyCiaToProtectionNeed(object);
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
-        "UPDATE target_objects SET parent_id = ?, type = ?, protection_need = ?, name = ?, "
-        "description = ? WHERE id = ?"));
-    query.addBindValue(targetObject.parentId);
-    query.addBindValue(targetObjectTypeToString(targetObject.type));
-    query.addBindValue(protectionNeedToString(targetObject.protectionNeed));
-    query.addBindValue(targetObject.name);
-    query.addBindValue(targetObject.description);
-    query.addBindValue(targetObject.id);
+        "UPDATE target_objects SET parent_id = ?, type = ?, protection_need = ?, "
+        "confidentiality = ?, integrity = ?, availability = ?, inherit_protection_need = ?, "
+        "protection_need_note = ?, name = ?, description = ? WHERE id = ?"));
+    query.addBindValue(object.parentId);
+    query.addBindValue(targetObjectTypeToString(object.type));
+    bindProtectionNeed(query, object);
+    query.addBindValue(object.name);
+    query.addBindValue(object.description);
+    query.addBindValue(object.id);
 
     if (!query.exec()) {
         m_lastError = query.lastError().text();
         return false;
     }
+    persistInheritedProtectionNeeds(object.projectId);
     return true;
 }
 
@@ -141,6 +202,10 @@ TargetObject TargetObjectRepository::createDefaultScope(int projectId, const QSt
     scope.parentId = 0;
     scope.type = TargetObjectType::Scope;
     scope.protectionNeed = ProtectionNeed::Normal;
+    scope.confidentiality = CiaLevel::Normal;
+    scope.integrity = CiaLevel::Normal;
+    scope.availability = CiaLevel::Normal;
+    scope.inheritProtectionNeed = false;
     scope.name = projectName;
     scope.description = QStringLiteral("Geltungsbereich / Informationsverbund");
     return createTargetObject(scope);

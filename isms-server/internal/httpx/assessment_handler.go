@@ -336,3 +336,11 @@ func parseProjectTargetRequirement(r *http.Request) (int64, int64, int64, error)
 	}
 	return projectID, targetObjectID, requirementID, nil
 }
+
+func parseProjectID(r *http.Request) (int64, error) {
+	projectID, err := strconv.ParseInt(chi.URLParam(r, "projectID"), 10, 64)
+	if err != nil {
+		return 0, errors.New("invalid project id")
+	}
+	return projectID, nil
+}

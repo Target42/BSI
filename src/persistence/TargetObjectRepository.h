@@ -4,6 +4,7 @@
 #include "ITargetObjectRepository.h"
 
 #include <QSqlDatabase>
+#include <QSqlQuery>
 
 class TargetObjectRepository : public ITargetObjectRepository
 {
@@ -29,6 +30,10 @@ public:
 
 private:
     void deleteTargetObjectSubtree(int targetObjectId);
+    QList<TargetObject> loadTargetObjectsRaw(int projectId) const;
+    void persistInheritedProtectionNeeds(int projectId);
+    TargetObject readTargetObject(const QSqlQuery &query) const;
+    void bindProtectionNeed(QSqlQuery &query, const TargetObject &targetObject) const;
 
     QSqlDatabase m_db;
     mutable QString m_lastError;

@@ -48,6 +48,18 @@ inline TargetObject targetObjectFromJson(const QJsonObject &obj)
     target.parentId = obj.value(QStringLiteral("parentId")).toInt();
     target.type = targetObjectTypeFromString(obj.value(QStringLiteral("type")).toString());
     target.protectionNeed = protectionNeedFromString(obj.value(QStringLiteral("protectionNeed")).toString());
+    target.confidentiality = ciaLevelFromString(obj.value(QStringLiteral("confidentiality")).toString());
+    target.integrity = ciaLevelFromString(obj.value(QStringLiteral("integrity")).toString());
+    target.availability = ciaLevelFromString(obj.value(QStringLiteral("availability")).toString());
+    target.inheritProtectionNeed = obj.value(QStringLiteral("inheritProtectionNeed")).toBool();
+    target.protectionNeedNote = obj.value(QStringLiteral("protectionNeedNote")).toString();
+    if (obj.value(QStringLiteral("confidentiality")).toString().isEmpty()
+        && obj.value(QStringLiteral("integrity")).toString().isEmpty()
+        && target.protectionNeed == ProtectionNeed::Elevated) {
+        target.confidentiality = CiaLevel::High;
+        target.integrity = CiaLevel::High;
+        target.availability = CiaLevel::High;
+    }
     target.name = obj.value(QStringLiteral("name")).toString();
     target.description = obj.value(QStringLiteral("description")).toString();
     return target;

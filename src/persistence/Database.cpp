@@ -107,6 +107,8 @@ bool Database::migrateSchema()
         return false;
     if (!migrateTargetObjectProtectionNeedColumn())
         return false;
+    if (!migrateTargetObjectCiaColumns())
+        return false;
     return true;
 }
 
@@ -198,6 +200,47 @@ bool Database::migrateTargetObjectProtectionNeedColumn()
     return true;
 }
 
+bool Database::migrateTargetObjectCiaColumns()
+{
+    if (!tableExists(QStringLiteral("target_objects")))
+        return true;
+
+    QSqlQuery query(m_db);
+    auto addColumn = [this, &query](const QString &column, const QString &ddl) {
+        if (tableHasColumn(QStringLiteral("target_objects"), column))
+            return true;
+        if (!query.exec(ddl)) {
+            m_lastError = QStringLiteral("Migration (C/I/A-Schutzbedarf): %1").arg(query.lastError().text());
+            return false;
+        }
+        return true;
+    };
+    if (!addColumn(QStringLiteral("confidentiality"),
+                   QStringLiteral("ALTER TABLE target_objects ADD COLUMN confidentiality TEXT NOT NULL DEFAULT 'normal'")))
+        return false;
+    if (!addColumn(QStringLiteral("integrity"),
+                   QStringLiteral("ALTER TABLE target_objects ADD COLUMN integrity TEXT NOT NULL DEFAULT 'normal'")))
+        return false;
+    if (!addColumn(QStringLiteral("availability"),
+                   QStringLiteral("ALTER TABLE target_objects ADD COLUMN availability TEXT NOT NULL DEFAULT 'normal'")))
+        return false;
+    if (!addColumn(QStringLiteral("inherit_protection_need"),
+                   QStringLiteral("ALTER TABLE target_objects ADD COLUMN inherit_protection_need INTEGER NOT NULL DEFAULT 0")))
+        return false;
+    if (!addColumn(QStringLiteral("protection_need_note"),
+                   QStringLiteral("ALTER TABLE target_objects ADD COLUMN protection_need_note TEXT NOT NULL DEFAULT ''")))
+        return false;
+
+    if (!query.exec(QStringLiteral(
+            "UPDATE target_objects SET confidentiality = 'hoch', integrity = 'hoch', "
+            "availability = 'hoch' WHERE protection_need LIKE 'Erhöht%' "
+            "AND confidentiality = 'normal' AND integrity = 'normal' AND availability = 'normal'"))) {
+        m_lastError = QStringLiteral("Migration (C/I/A-Backfill): %1").arg(query.lastError().text());
+        return false;
+    }
+    return true;
+}
+
 bool Database::ensureIndexes()
 {
     QSqlQuery query(m_db);
@@ -284,6 +327,11 @@ bool Database::initializeSchema()
             "parent_id INTEGER NOT NULL DEFAULT 0,"
             "type TEXT NOT NULL,"
             "protection_need TEXT NOT NULL DEFAULT 'Normal (Basis + Standard)',"
+            "confidentiality TEXT NOT NULL DEFAULT 'normal',"
+            "integrity TEXT NOT NULL DEFAULT 'normal',"
+            "availability TEXT NOT NULL DEFAULT 'normal',"
+            "inherit_protection_need INTEGER NOT NULL DEFAULT 0,"
+            "protection_need_note TEXT NOT NULL DEFAULT '',"
             "name TEXT NOT NULL,"
             "description TEXT,"
             "FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE"

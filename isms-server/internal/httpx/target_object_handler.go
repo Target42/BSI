@@ -20,19 +20,29 @@ func NewTargetObjectHandler(store *repository.Store) *TargetObjectHandler {
 }
 
 type createTargetObjectRequest struct {
-	ParentID       int64  `json:"parentId"`
-	Type           string `json:"type"`
-	ProtectionNeed string `json:"protectionNeed"`
-	Name           string `json:"name"`
-	Description    string `json:"description"`
+	ParentID              int64  `json:"parentId"`
+	Type                  string `json:"type"`
+	ProtectionNeed        string `json:"protectionNeed"`
+	Confidentiality       string `json:"confidentiality"`
+	Integrity             string `json:"integrity"`
+	Availability          string `json:"availability"`
+	InheritProtectionNeed *bool  `json:"inheritProtectionNeed"`
+	ProtectionNeedNote    string `json:"protectionNeedNote"`
+	Name                  string `json:"name"`
+	Description           string `json:"description"`
 }
 
 type updateTargetObjectRequest struct {
-	ParentID       int64  `json:"parentId"`
-	Type           string `json:"type"`
-	ProtectionNeed string `json:"protectionNeed"`
-	Name           string `json:"name"`
-	Description    string `json:"description"`
+	ParentID              int64  `json:"parentId"`
+	Type                  string `json:"type"`
+	ProtectionNeed        string `json:"protectionNeed"`
+	Confidentiality       string `json:"confidentiality"`
+	Integrity             string `json:"integrity"`
+	Availability          string `json:"availability"`
+	InheritProtectionNeed *bool  `json:"inheritProtectionNeed"`
+	ProtectionNeedNote    string `json:"protectionNeedNote"`
+	Name                  string `json:"name"`
+	Description           string `json:"description"`
 }
 
 func (h *TargetObjectHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -91,9 +101,6 @@ func (h *TargetObjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name and type required")
 		return
 	}
-	if req.ProtectionNeed == "" {
-		req.ProtectionNeed = "Normal (Basis + Standard)"
-	}
 	req.Type = domain.NormalizeTargetObjectType(req.Type)
 	if err := h.validatePlacement(r, projectID, req.ParentID, req.Type); err != nil {
 		if mapRepoError(w, err) {
@@ -102,19 +109,45 @@ func (h *TargetObjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.store.CreateTargetObject(r.Context(), domain.TargetObject{
-		ProjectID:      projectID,
-		ParentID:       req.ParentID,
-		Type:           req.Type,
-		ProtectionNeed: req.ProtectionNeed,
-		Name:           req.Name,
-		Description:    req.Description,
-	})
+	item := domain.TargetObject{
+		ProjectID:          projectID,
+		ParentID:           req.ParentID,
+		Type:               req.Type,
+		ProtectionNeed:     req.ProtectionNeed,
+		Confidentiality:    req.Confidentiality,
+		Integrity:          req.Integrity,
+		Availability:       req.Availability,
+		ProtectionNeedNote: req.ProtectionNeedNote,
+		Name:               req.Name,
+		Description:        req.Description,
+	}
+	if req.InheritProtectionNeed != nil {
+		item.InheritProtectionNeed = *req.InheritProtectionNeed
+	} else {
+		item.InheritProtectionNeed = req.ParentID > 0
+	}
+	var parent *domain.TargetObject
+	if req.ParentID > 0 {
+		p, err := h.store.GetTargetObject(r.Context(), req.ParentID)
+		if err != nil {
+			if mapRepoError(w, err) {
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "parent lookup failed")
+			return
+		}
+		parent = &p
+	}
+	domain.ApplyTargetObjectProtectionNeed(&item, parent)
+	created, err := h.store.CreateTargetObject(r.Context(), item)
 	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "create target object failed")
 		return
 	}
-	writeJSON(w, http.StatusCreated, item)
+	writeJSON(w, http.StatusCreated, created)
 }
 
 func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -149,15 +182,54 @@ func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Type = domain.NormalizeTargetObjectType(req.Type)
-	item, err := h.store.UpdateTargetObject(r.Context(), domain.TargetObject{
-		ID:             targetID,
-		ProjectID:      projectID,
-		ParentID:       req.ParentID,
-		Type:           req.Type,
-		ProtectionNeed: req.ProtectionNeed,
-		Name:           req.Name,
-		Description:    req.Description,
-	})
+	current, err := h.store.GetTargetObject(r.Context(), targetID)
+	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "target lookup failed")
+		return
+	}
+	item := domain.TargetObject{
+		ID:                    targetID,
+		ProjectID:             projectID,
+		ParentID:              req.ParentID,
+		Type:                  req.Type,
+		ProtectionNeed:        current.ProtectionNeed,
+		Confidentiality:       req.Confidentiality,
+		Integrity:             req.Integrity,
+		Availability:          req.Availability,
+		InheritProtectionNeed: current.InheritProtectionNeed,
+		ProtectionNeedNote:    req.ProtectionNeedNote,
+		Name:                  req.Name,
+		Description:           req.Description,
+	}
+	if req.InheritProtectionNeed != nil {
+		item.InheritProtectionNeed = *req.InheritProtectionNeed
+	}
+	if req.Confidentiality == "" {
+		item.Confidentiality = current.Confidentiality
+	}
+	if req.Integrity == "" {
+		item.Integrity = current.Integrity
+	}
+	if req.Availability == "" {
+		item.Availability = current.Availability
+	}
+	var parent *domain.TargetObject
+	if req.ParentID > 0 {
+		p, err := h.store.GetTargetObject(r.Context(), req.ParentID)
+		if err != nil {
+			if mapRepoError(w, err) {
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "parent lookup failed")
+			return
+		}
+		parent = &p
+	}
+	domain.ApplyTargetObjectProtectionNeed(&item, parent)
+	updated, err := h.store.UpdateTargetObject(r.Context(), item)
 	if err != nil {
 		if mapRepoError(w, err) {
 			return
@@ -165,7 +237,7 @@ func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "update target object failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, item)
+	writeJSON(w, http.StatusOK, updated)
 }
 
 func (h *TargetObjectHandler) Delete(w http.ResponseWriter, r *http.Request) {

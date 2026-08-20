@@ -11,6 +11,10 @@ type
     FConnection: TFDConnection;
     FLastError: string;
     procedure DeleteTargetObjectSubtree(ATargetObjectId: Integer);
+    function ReadTargetObject(Q: TFDQuery): TTargetObject;
+    function LoadTargetObjectsRaw(AProjectId: Integer): TArray<TTargetObject>;
+    procedure PersistInheritedProtectionNeeds(AProjectId: Integer);
+    procedure BindProtectionNeedParams(Q: TFDQuery; const ATargetObject: TTargetObject);
   public
     constructor Create(AConnection: TFDConnection);
     function LoadTargetObjects(AProjectId: Integer): TArray<TTargetObject>; override;
@@ -35,33 +39,60 @@ begin
   FConnection := AConnection;
 end;
 
-function TTargetObjectRepository.LoadTargetObjects(AProjectId: Integer): TArray<TTargetObject>;
+function TTargetObjectRepository.ReadTargetObject(Q: TFDQuery): TTargetObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Id := Q.FieldByName('id').AsInteger;
+  Result.ProjectId := Q.FieldByName('project_id').AsInteger;
+  Result.ParentId := Q.FieldByName('parent_id').AsInteger;
+  Result.ObjType := TargetObjectTypeFromString(Q.FieldByName('type').AsString);
+  Result.ProtectionNeed := ProtectionNeedFromString(Q.FieldByName('protection_need').AsString);
+  Result.Confidentiality := CiaLevelFromString(Q.FieldByName('confidentiality').AsString);
+  Result.Integrity := CiaLevelFromString(Q.FieldByName('integrity').AsString);
+  Result.Availability := CiaLevelFromString(Q.FieldByName('availability').AsString);
+  Result.InheritProtectionNeed := Q.FieldByName('inherit_protection_need').AsInteger <> 0;
+  Result.ProtectionNeedNote := Q.FieldByName('protection_need_note').AsString;
+  Result.Name := Q.FieldByName('name').AsString;
+  Result.Description := Q.FieldByName('description').AsString;
+  if (Result.Confidentiality = clNormal) and (Result.Integrity = clNormal) and
+     (Result.Availability = clNormal) and (Result.ProtectionNeed = pnElevated) then
+  begin
+    Result.Confidentiality := clHigh;
+    Result.Integrity := clHigh;
+    Result.Availability := clHigh;
+  end;
+end;
+
+procedure TTargetObjectRepository.BindProtectionNeedParams(Q: TFDQuery;
+  const ATargetObject: TTargetObject);
+begin
+  Q.ParamByName('pn').AsString := ProtectionNeedToString(ATargetObject.ProtectionNeed);
+  Q.ParamByName('conf').AsString := CiaLevelToString(ATargetObject.Confidentiality);
+  Q.ParamByName('integ').AsString := CiaLevelToString(ATargetObject.Integrity);
+  Q.ParamByName('avail').AsString := CiaLevelToString(ATargetObject.Availability);
+  Q.ParamByName('inherit').AsInteger := Ord(ATargetObject.InheritProtectionNeed);
+  Q.ParamByName('pnnote').AsString := ATargetObject.ProtectionNeedNote;
+end;
+
+function TTargetObjectRepository.LoadTargetObjectsRaw(AProjectId: Integer): TArray<TTargetObject>;
 var
   Q: TFDQuery;
   List: TArray<TTargetObject>;
-  O: TTargetObject;
 begin
   SetLength(List, 0);
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FConnection;
     Q.SQL.Text :=
-      'SELECT id, project_id, parent_id, type, protection_need, name, description ' +
+      'SELECT id, project_id, parent_id, type, protection_need, confidentiality, integrity, ' +
+      'availability, inherit_protection_need, protection_need_note, name, description ' +
       'FROM target_objects WHERE project_id = :pid ORDER BY parent_id, name';
     Q.ParamByName('pid').AsInteger := AProjectId;
     Q.Open;
     while not Q.Eof do
     begin
-      FillChar(O, SizeOf(O), 0);
-      O.Id := Q.FieldByName('id').AsInteger;
-      O.ProjectId := Q.FieldByName('project_id').AsInteger;
-      O.ParentId := Q.FieldByName('parent_id').AsInteger;
-      O.ObjType := TargetObjectTypeFromString(Q.FieldByName('type').AsString);
-      O.ProtectionNeed := ProtectionNeedFromString(Q.FieldByName('protection_need').AsString);
-      O.Name := Q.FieldByName('name').AsString;
-      O.Description := Q.FieldByName('description').AsString;
       SetLength(List, Length(List) + 1);
-      List[High(List)] := O;
+      List[High(List)] := ReadTargetObject(Q);
       Q.Next;
     end;
   finally
@@ -70,21 +101,59 @@ begin
   Result := List;
 end;
 
+procedure TTargetObjectRepository.PersistInheritedProtectionNeeds(AProjectId: Integer);
+var
+  Objects: TArray<TTargetObject>;
+  O: TTargetObject;
+  Q: TFDQuery;
+begin
+  Objects := LoadTargetObjectsRaw(AProjectId);
+  ResolveInheritedProtectionNeeds(Objects);
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConnection;
+    Q.SQL.Text :=
+      'UPDATE target_objects SET confidentiality = :conf, integrity = :integ, ' +
+      'availability = :avail, protection_need = :pn WHERE id = :id';
+    for O in Objects do
+    begin
+      if not O.InheritProtectionNeed then
+        Continue;
+      Q.ParamByName('conf').AsString := CiaLevelToString(O.Confidentiality);
+      Q.ParamByName('integ').AsString := CiaLevelToString(O.Integrity);
+      Q.ParamByName('avail').AsString := CiaLevelToString(O.Availability);
+      Q.ParamByName('pn').AsString := ProtectionNeedToString(O.ProtectionNeed);
+      Q.ParamByName('id').AsInteger := O.Id;
+      Q.ExecSQL;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TTargetObjectRepository.LoadTargetObjects(AProjectId: Integer): TArray<TTargetObject>;
+begin
+  Result := LoadTargetObjectsRaw(AProjectId);
+  ResolveInheritedProtectionNeeds(Result);
+end;
+
 function TTargetObjectRepository.CreateTargetObject(const ATargetObject: TTargetObject): TTargetObject;
 var
   Q: TFDQuery;
 begin
   Result := ATargetObject;
+  ApplyCiaToProtectionNeed(Result);
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FConnection;
     Q.SQL.Text :=
-      'INSERT INTO target_objects (project_id, parent_id, type, protection_need, name, description) ' +
-      'VALUES (:pid, :parent, :typ, :pn, :name, :desc)';
+      'INSERT INTO target_objects (project_id, parent_id, type, protection_need, ' +
+      'confidentiality, integrity, availability, inherit_protection_need, protection_need_note, ' +
+      'name, description) VALUES (:pid, :parent, :typ, :pn, :conf, :integ, :avail, :inherit, :pnnote, :name, :desc)';
     Q.ParamByName('pid').AsInteger := Result.ProjectId;
     Q.ParamByName('parent').AsInteger := Result.ParentId;
     Q.ParamByName('typ').AsString := TargetObjectTypeToString(Result.ObjType);
-    Q.ParamByName('pn').AsString := ProtectionNeedToString(Result.ProtectionNeed);
+    BindProtectionNeedParams(Q, Result);
     Q.ParamByName('name').AsString := Result.Name;
     Q.ParamByName('desc').AsString := Result.Description;
     Q.ExecSQL;
@@ -102,21 +171,27 @@ end;
 function TTargetObjectRepository.UpdateTargetObject(const ATargetObject: TTargetObject): Boolean;
 var
   Q: TFDQuery;
+  Target: TTargetObject;
 begin
   Result := False;
+  Target := ATargetObject;
+  ApplyCiaToProtectionNeed(Target);
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FConnection;
     Q.SQL.Text :=
       'UPDATE target_objects SET parent_id = :parent, type = :typ, protection_need = :pn, ' +
+      'confidentiality = :conf, integrity = :integ, availability = :avail, ' +
+      'inherit_protection_need = :inherit, protection_need_note = :pnnote, ' +
       'name = :name, description = :desc WHERE id = :id';
-    Q.ParamByName('parent').AsInteger := ATargetObject.ParentId;
-    Q.ParamByName('typ').AsString := TargetObjectTypeToString(ATargetObject.ObjType);
-    Q.ParamByName('pn').AsString := ProtectionNeedToString(ATargetObject.ProtectionNeed);
-    Q.ParamByName('name').AsString := ATargetObject.Name;
-    Q.ParamByName('desc').AsString := ATargetObject.Description;
-    Q.ParamByName('id').AsInteger := ATargetObject.Id;
+    Q.ParamByName('parent').AsInteger := Target.ParentId;
+    Q.ParamByName('typ').AsString := TargetObjectTypeToString(Target.ObjType);
+    BindProtectionNeedParams(Q, Target);
+    Q.ParamByName('name').AsString := Target.Name;
+    Q.ParamByName('desc').AsString := Target.Description;
+    Q.ParamByName('id').AsInteger := Target.Id;
     Q.ExecSQL;
+    PersistInheritedProtectionNeeds(Target.ProjectId);
     Result := True;
   except
     on E: Exception do
@@ -193,6 +268,10 @@ begin
   Scope.ParentId := 0;
   Scope.ObjType := totScope;
   Scope.ProtectionNeed := pnNormal;
+  Scope.Confidentiality := clNormal;
+  Scope.Integrity := clNormal;
+  Scope.Availability := clNormal;
+  Scope.InheritProtectionNeed := False;
   Scope.Name := AProjectName;
   Scope.Description := 'Informationsverbund';
   Result := CreateTargetObject(Scope);

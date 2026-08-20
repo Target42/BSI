@@ -23,6 +23,21 @@ func (s *Store) ListMeasures(ctx context.Context, projectID, targetObjectID, req
 	return scanMeasures(rows)
 }
 
+func (s *Store) ListProjectMeasures(ctx context.Context, projectID int64) ([]domain.Measure, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, project_id, target_object_id, requirement_id, title,
+		       COALESCE(description, ''), COALESCE(responsible, ''), due_date::text, status, version, updated_at
+		FROM measures
+		WHERE project_id = $1
+		ORDER BY due_date IS NULL, due_date, title`,
+		projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanMeasures(rows)
+}
+
 func (s *Store) MeasureCounts(ctx context.Context, projectID, targetObjectID int64) (map[int64]int, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT requirement_id, COUNT(*)

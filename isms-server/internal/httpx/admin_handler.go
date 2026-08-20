@@ -38,32 +38,12 @@ func (h *AdminHandler) ImportCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxCatalogUploadBytes)
-	if err := r.ParseMultipartForm(maxCatalogUploadBytes); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid multipart form")
-		return
-	}
-
-	file, header, err := r.FormFile("file")
+	tmpPath, fileName, err := saveCatalogUpload(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "file field required")
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	defer file.Close()
-
-	tmpFile, err := os.CreateTemp("", "isms-catalog-*.xml")
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "temp file failed")
-		return
-	}
-	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
-	defer tmpFile.Close()
-
-	if _, err := io.Copy(tmpFile, file); err != nil {
-		writeError(w, http.StatusInternalServerError, "upload save failed")
-		return
-	}
-	tmpFile.Close()
 
 	result := catalog.ImportFromFile(tmpPath)
 	if !result.Success {
@@ -83,8 +63,55 @@ func (h *AdminHandler) ImportCatalog(w http.ResponseWriter, r *http.Request) {
 		"catalogVersion":   result.CatalogVersion,
 		"bausteinCount":    len(result.Bausteine),
 		"requirementCount": len(result.Requirements),
-		"fileName":         filepath.Base(header.Filename),
+		"fileName":         fileName,
 	})
+}
+
+func saveCatalogUpload(r *http.Request) (string, string, error) {
+	contentType := r.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "multipart/") {
+		if err := r.ParseMultipartForm(maxCatalogUploadBytes); err != nil {
+			return "", "", err
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			return "", "", err
+		}
+		defer file.Close()
+		tmpPath, err := writeCatalogTempFile(file)
+		if err != nil {
+			return "", "", err
+		}
+		name := "catalog.xml"
+		if header != nil && header.Filename != "" {
+			name = filepath.Base(header.Filename)
+		}
+		return tmpPath, name, nil
+	}
+
+	tmpPath, err := writeCatalogTempFile(r.Body)
+	if err != nil {
+		return "", "", err
+	}
+	return tmpPath, "catalog.xml", nil
+}
+
+func writeCatalogTempFile(src io.Reader) (string, error) {
+	tmpFile, err := os.CreateTemp("", "isms-catalog-*.xml")
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := io.Copy(tmpFile, src); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return "", err
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		return "", err
+	}
+	return tmpPath, nil
 }
 
 type createUserRequest struct {

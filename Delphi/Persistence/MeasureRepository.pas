@@ -13,6 +13,7 @@ type
   public
     constructor Create(AConnection: TFDConnection);
     function LoadMeasures(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TArray<TMeasure>; override;
+    function LoadProjectMeasures(AProjectId: Integer): TArray<TMeasure>; override;
     function MeasureCounts(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, Integer>; override;
     function CreateMeasure(const AMeasure: TMeasure): TMeasure; override;
     function UpdateMeasure(const AMeasure: TMeasure): TMeasureSaveResult; override;
@@ -55,6 +56,48 @@ begin
       M.TargetObjectId := ATargetObjectId;
       M.RequirementDbId := ARequirementDbId;
       M.Id := Q.FieldByName('id').AsInteger;
+      M.Title := Q.FieldByName('title').AsString;
+      M.Description := Q.FieldByName('description').AsString;
+      M.Responsible := Q.FieldByName('responsible').AsString;
+      DueStr := Q.FieldByName('due_date').AsString;
+      if DueStr <> '' then
+        M.DueDate := IsoToDate(DueStr);
+      M.Status := MeasureStatusFromString(Q.FieldByName('status').AsString);
+      SetLength(List, Length(List) + 1);
+      List[High(List)] := M;
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+  Result := List;
+end;
+
+function TMeasureRepository.LoadProjectMeasures(AProjectId: Integer): TArray<TMeasure>;
+var
+  Q: TFDQuery;
+  List: TArray<TMeasure>;
+  M: TMeasure;
+  DueStr: string;
+begin
+  SetLength(List, 0);
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConnection;
+    Q.SQL.Text :=
+      'SELECT id, project_id, target_object_id, requirement_id, title, description, ' +
+      'responsible, due_date, status FROM measures ' +
+      'WHERE project_id = :pid ' +
+      'ORDER BY due_date IS NULL, due_date, title';
+    Q.ParamByName('pid').AsInteger := AProjectId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FillChar(M, SizeOf(M), 0);
+      M.Id := Q.FieldByName('id').AsInteger;
+      M.ProjectId := Q.FieldByName('project_id').AsInteger;
+      M.TargetObjectId := Q.FieldByName('target_object_id').AsInteger;
+      M.RequirementDbId := Q.FieldByName('requirement_id').AsInteger;
       M.Title := Q.FieldByName('title').AsString;
       M.Description := Q.FieldByName('description').AsString;
       M.Responsible := Q.FieldByName('responsible').AsString;

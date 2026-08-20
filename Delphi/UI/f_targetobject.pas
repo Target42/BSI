@@ -13,22 +13,38 @@ type
     edtName: TEdit;
     lblType: TLabel;
     cboType: TComboBox;
-    lblProtection: TLabel;
-    cboProtection: TComboBox;
+    chkInherit: TCheckBox;
+    lblConfidentiality: TLabel;
+    cboConfidentiality: TComboBox;
+    lblIntegrity: TLabel;
+    cboIntegrity: TComboBox;
+    lblAvailability: TLabel;
+    cboAvailability: TComboBox;
+    lblOverall: TLabel;
+    lblProtectionNote: TLabel;
+    memProtectionNote: TMemo;
     lblDescription: TLabel;
     memDescription: TMemo;
     btnOk: TButton;
     btnCancel: TButton;
     procedure FormCreate(Sender: TObject);
-    procedure btnOkClick(Sender: TObject);
   private
     FTargetObject: TTargetObject;
     FParent: TTargetObject;
     FEditMode: Boolean;
     procedure FillTypeItems(const ATypes: TArray<TTargetObjectType>;
       ASelected: TTargetObjectType);
+    procedure FillCiaCombo(ACombo: TComboBox);
     function SelectedObjType: TTargetObjectType;
+    function SelectedCiaLevel(ACombo: TComboBox): TCiaLevel;
+    procedure SetCiaCombo(ACombo: TComboBox; ALevel: TCiaLevel);
     procedure ApplyParentContext;
+    procedure LoadProtectionNeedToControls;
+    procedure UpdateCiaEnabled;
+    procedure SyncOverallLabel;
+    procedure InheritClick(Sender: TObject);
+    procedure CiaChange(Sender: TObject);
+    procedure OkClick(Sender: TObject);
   public
     class function ExecuteCreate(var ATargetObject: TTargetObject;
       const AParent: TTargetObject): Boolean;
@@ -44,13 +60,33 @@ const
   S_WirdAngelegtUnter = 'Wird angelegt unter: ';
   S_Uebergeordnet = #$00DC'bergeordnet: ';
   S_Wurzel = 'Wurzel des Informationsverbunds';
+  S_GesamtPrefix = 'Gesamt nach Maximumprinzip: ';
 
 procedure TTargetObjectForm.FormCreate(Sender: TObject);
 begin
-  cboProtection.Items.Clear;
-  cboProtection.Items.Add(ProtectionNeedToString(pnBasisOnly));
-  cboProtection.Items.Add(ProtectionNeedToString(pnNormal));
-  cboProtection.Items.Add(ProtectionNeedToString(pnElevated));
+  FillCiaCombo(cboConfidentiality);
+  FillCiaCombo(cboIntegrity);
+  FillCiaCombo(cboAvailability);
+  chkInherit.OnClick := InheritClick;
+  cboConfidentiality.OnChange := CiaChange;
+  cboIntegrity.OnChange := CiaChange;
+  cboAvailability.OnChange := CiaChange;
+  btnOk.OnClick := OkClick;
+end;
+
+procedure TTargetObjectForm.FillCiaCombo(ACombo: TComboBox);
+var
+  Level: TCiaLevel;
+begin
+  ACombo.Items.BeginUpdate;
+  try
+    ACombo.Items.Clear;
+    for Level := Low(TCiaLevel) to High(TCiaLevel) do
+      ACombo.Items.Add(CiaLevelToString(Level));
+  finally
+    ACombo.Items.EndUpdate;
+  end;
+  ACombo.ItemIndex := 0;
 end;
 
 procedure TTargetObjectForm.FillTypeItems(const ATypes: TArray<TTargetObjectType>;
@@ -94,15 +130,35 @@ begin
   Result := TTargetObjectType(NativeInt(cboType.Items.Objects[cboType.ItemIndex]) - 1);
 end;
 
+function TTargetObjectForm.SelectedCiaLevel(ACombo: TComboBox): TCiaLevel;
+begin
+  if ACombo.ItemIndex < 0 then
+    Exit(clNormal);
+  Result := TCiaLevel(ACombo.ItemIndex);
+end;
+
+procedure TTargetObjectForm.SetCiaCombo(ACombo: TComboBox; ALevel: TCiaLevel);
+begin
+  ACombo.ItemIndex := Ord(ALevel);
+  if ACombo.ItemIndex < 0 then
+    ACombo.ItemIndex := 0;
+end;
+
 procedure TTargetObjectForm.ApplyParentContext;
 var
   Allowed: TArray<TTargetObjectType>;
+  CanInherit: Boolean;
 begin
+  CanInherit := FParent.Id > 0;
+  chkInherit.Visible := CanInherit;
   if IsRootScopeTarget(FTargetObject) and FEditMode then
   begin
     lblParent.Caption := S_Wurzel;
     FillTypeItems(TArray<TTargetObjectType>.Create(totScope), totScope);
     cboType.Enabled := False;
+    chkInherit.Visible := False;
+    chkInherit.Checked := False;
+    UpdateCiaEnabled;
     Exit;
   end;
 
@@ -121,6 +177,56 @@ begin
     Allowed := ScopeLayerTypes;
   end;
   FillTypeItems(Allowed, FTargetObject.ObjType);
+  UpdateCiaEnabled;
+end;
+
+procedure TTargetObjectForm.LoadProtectionNeedToControls;
+begin
+  chkInherit.Checked := FTargetObject.InheritProtectionNeed and (FParent.Id > 0);
+  SetCiaCombo(cboConfidentiality, FTargetObject.Confidentiality);
+  SetCiaCombo(cboIntegrity, FTargetObject.Integrity);
+  SetCiaCombo(cboAvailability, FTargetObject.Availability);
+  memProtectionNote.Text := FTargetObject.ProtectionNeedNote;
+  UpdateCiaEnabled;
+  SyncOverallLabel;
+end;
+
+procedure TTargetObjectForm.UpdateCiaEnabled;
+var
+  Inherit: Boolean;
+begin
+  Inherit := chkInherit.Visible and chkInherit.Checked;
+  cboConfidentiality.Enabled := not Inherit;
+  cboIntegrity.Enabled := not Inherit;
+  cboAvailability.Enabled := not Inherit;
+  if Inherit and (FParent.Id > 0) then
+  begin
+    SetCiaCombo(cboConfidentiality, FParent.Confidentiality);
+    SetCiaCombo(cboIntegrity, FParent.Integrity);
+    SetCiaCombo(cboAvailability, FParent.Availability);
+  end;
+  SyncOverallLabel;
+end;
+
+procedure TTargetObjectForm.SyncOverallLabel;
+var
+  Need: TProtectionNeed;
+begin
+  Need := ProtectionNeedFromCiaLevels(
+    SelectedCiaLevel(cboConfidentiality),
+    SelectedCiaLevel(cboIntegrity),
+    SelectedCiaLevel(cboAvailability));
+  lblOverall.Caption := S_GesamtPrefix + ProtectionNeedToString(Need);
+end;
+
+procedure TTargetObjectForm.InheritClick(Sender: TObject);
+begin
+  UpdateCiaEnabled;
+end;
+
+procedure TTargetObjectForm.CiaChange(Sender: TObject);
+begin
+  SyncOverallLabel;
 end;
 
 class function TTargetObjectForm.ExecuteCreate(var ATargetObject: TTargetObject;
@@ -135,9 +241,9 @@ begin
     F.FTargetObject := ATargetObject;
     F.FParent := AParent;
     F.edtName.Text := '';
-    F.cboProtection.ItemIndex := Ord(ATargetObject.ProtectionNeed);
     F.memDescription.Clear;
     F.ApplyParentContext;
+    F.LoadProtectionNeedToControls;
     Result := F.ShowModal = mrOk;
     if Result then
       ATargetObject := F.FTargetObject;
@@ -158,9 +264,9 @@ begin
     F.FTargetObject := ATargetObject;
     F.FParent := AParent;
     F.edtName.Text := ATargetObject.Name;
-    F.cboProtection.ItemIndex := Ord(ATargetObject.ProtectionNeed);
     F.memDescription.Text := ATargetObject.Description;
     F.ApplyParentContext;
+    F.LoadProtectionNeedToControls;
     Result := F.ShowModal = mrOk;
     if Result then
       ATargetObject := F.FTargetObject;
@@ -169,7 +275,7 @@ begin
   end;
 end;
 
-procedure TTargetObjectForm.btnOkClick(Sender: TObject);
+procedure TTargetObjectForm.OkClick(Sender: TObject);
 begin
   if Trim(edtName.Text) = '' then
   begin
@@ -179,8 +285,14 @@ begin
   FTargetObject.Name := Trim(edtName.Text);
   FTargetObject.Description := Trim(memDescription.Text);
   FTargetObject.ObjType := SelectedObjType;
-  if cboProtection.ItemIndex >= 0 then
-    FTargetObject.ProtectionNeed := TProtectionNeed(cboProtection.ItemIndex);
+  FTargetObject.InheritProtectionNeed := chkInherit.Visible and chkInherit.Checked;
+  FTargetObject.Confidentiality := SelectedCiaLevel(cboConfidentiality);
+  FTargetObject.Integrity := SelectedCiaLevel(cboIntegrity);
+  FTargetObject.Availability := SelectedCiaLevel(cboAvailability);
+  FTargetObject.ProtectionNeedNote := Trim(memProtectionNote.Text);
+  FTargetObject.ProtectionNeed := ProtectionNeedFromCiaLevels(
+    FTargetObject.Confidentiality, FTargetObject.Integrity, FTargetObject.Availability);
+  FinalizeTargetObjectProtectionNeed(FTargetObject, FParent);
   ModalResult := mrOk;
 end;
 

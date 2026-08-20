@@ -11,6 +11,7 @@ public:
     explicit MeasureRepository(QSqlDatabase db);
 
     QList<Measure> loadMeasures(int projectId, int targetObjectId, int requirementDbId) const override;
+    QList<Measure> loadProjectMeasures(int projectId) const override;
     QHash<int, int> measureCounts(int projectId, int targetObjectId) const override;
 
     Measure createMeasure(const Measure &measure) override;

@@ -48,6 +48,8 @@ uses
 
   ReportService in 'Services\ReportService.pas',
 
+  CockpitService in 'Services\CockpitService.pas',
+
   ReportExporter in 'Services\ReportExporter.pas',
 
   SearchEditHelper in 'UI\SearchEditHelper.pas',
@@ -67,6 +69,8 @@ uses
   f_measure in 'UI\f_measure.pas' {MeasureForm},
 
   f_report in 'UI\f_report.pas' {ReportForm},
+
+  f_cockpit in 'UI\f_cockpit.pas' {CockpitForm},
 
   f_bausteinview in 'UI\f_bausteinview.pas' {BausteinViewForm},
 

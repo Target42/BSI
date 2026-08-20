@@ -202,9 +202,24 @@ func (s *Store) DeleteProject(ctx context.Context, projectID int64) error {
 	return nil
 }
 
-func (s *Store) ListTargetObjects(ctx context.Context, projectID int64) ([]domain.TargetObject, error) {
+const targetObjectColumns = `
+	id, project_id, parent_id, type, protection_need,
+	confidentiality, integrity, availability, inherit_protection_need, protection_need_note,
+	name, description, created_at, updated_at`
+
+func scanTargetObject(scanner interface{ Scan(dest ...any) error }) (domain.TargetObject, error) {
+	var t domain.TargetObject
+	err := scanner.Scan(
+		&t.ID, &t.ProjectID, &t.ParentID, &t.Type, &t.ProtectionNeed,
+		&t.Confidentiality, &t.Integrity, &t.Availability, &t.InheritProtectionNeed, &t.ProtectionNeedNote,
+		&t.Name, &t.Description, &t.CreatedAt, &t.UpdatedAt,
+	)
+	return t, err
+}
+
+func (s *Store) listTargetObjectsRaw(ctx context.Context, projectID int64) ([]domain.TargetObject, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, project_id, parent_id, type, protection_need, name, description, created_at, updated_at
+		SELECT `+targetObjectColumns+`
 		FROM target_objects
 		WHERE project_id = $1
 		ORDER BY parent_id, id`, projectID)
@@ -215,8 +230,8 @@ func (s *Store) ListTargetObjects(ctx context.Context, projectID int64) ([]domai
 
 	var items []domain.TargetObject
 	for rows.Next() {
-		var t domain.TargetObject
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.ParentID, &t.Type, &t.ProtectionNeed, &t.Name, &t.Description, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		t, err := scanTargetObject(rows)
+		if err != nil {
 			return nil, err
 		}
 		items = append(items, t)
@@ -224,40 +239,105 @@ func (s *Store) ListTargetObjects(ctx context.Context, projectID int64) ([]domai
 	return items, rows.Err()
 }
 
+func (s *Store) persistInheritedProtectionNeed(ctx context.Context, t domain.TargetObject) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE target_objects
+		SET confidentiality = $2, integrity = $3, availability = $4, protection_need = $5, updated_at = now()
+		WHERE id = $1`,
+		t.ID, t.Confidentiality, t.Integrity, t.Availability, t.ProtectionNeed,
+	)
+	return err
+}
+
+func (s *Store) cascadeInheritedProtectionNeed(ctx context.Context, projectID int64) error {
+	items, err := s.listTargetObjectsRaw(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	domain.ResolveInheritedProtectionNeeds(items)
+	for _, item := range items {
+		if !item.InheritProtectionNeed {
+			continue
+		}
+		if err := s.persistInheritedProtectionNeed(ctx, item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) ListTargetObjects(ctx context.Context, projectID int64) ([]domain.TargetObject, error) {
+	items, err := s.listTargetObjectsRaw(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	domain.ResolveInheritedProtectionNeeds(items)
+	return items, nil
+}
+
 func (s *Store) GetTargetObject(ctx context.Context, id int64) (domain.TargetObject, error) {
-	var t domain.TargetObject
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, project_id, parent_id, type, protection_need, name, description, created_at, updated_at
-		FROM target_objects WHERE id = $1`, id).Scan(
-		&t.ID, &t.ProjectID, &t.ParentID, &t.Type, &t.ProtectionNeed, &t.Name, &t.Description, &t.CreatedAt, &t.UpdatedAt)
+	t, err := scanTargetObject(s.pool.QueryRow(ctx, `
+		SELECT `+targetObjectColumns+`
+		FROM target_objects WHERE id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.TargetObject{}, ErrNotFound
 	}
-	return t, err
+	if err != nil {
+		return domain.TargetObject{}, err
+	}
+	if t.InheritProtectionNeed && t.ParentID > 0 {
+		items, listErr := s.ListTargetObjects(ctx, t.ProjectID)
+		if listErr != nil {
+			return domain.TargetObject{}, listErr
+		}
+		for _, item := range items {
+			if item.ID == t.ID {
+				return item, nil
+			}
+		}
+	}
+	domain.ApplyTargetObjectProtectionNeed(&t, nil)
+	return t, nil
 }
 
 func (s *Store) CreateTargetObject(ctx context.Context, t domain.TargetObject) (domain.TargetObject, error) {
-	err := s.pool.QueryRow(ctx, `
-		INSERT INTO target_objects (project_id, parent_id, type, protection_need, name, description)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, project_id, parent_id, type, protection_need, name, description, created_at, updated_at`,
-		t.ProjectID, t.ParentID, t.Type, t.ProtectionNeed, t.Name, t.Description,
-	).Scan(&t.ID, &t.ProjectID, &t.ParentID, &t.Type, &t.ProtectionNeed, &t.Name, &t.Description, &t.CreatedAt, &t.UpdatedAt)
-	return t, err
+	created, err := scanTargetObject(s.pool.QueryRow(ctx, `
+		INSERT INTO target_objects (
+			project_id, parent_id, type, protection_need,
+			confidentiality, integrity, availability, inherit_protection_need, protection_need_note,
+			name, description)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING `+targetObjectColumns,
+		t.ProjectID, t.ParentID, t.Type, t.ProtectionNeed,
+		t.Confidentiality, t.Integrity, t.Availability, t.InheritProtectionNeed, t.ProtectionNeedNote,
+		t.Name, t.Description,
+	))
+	return created, err
 }
 
 func (s *Store) UpdateTargetObject(ctx context.Context, t domain.TargetObject) (domain.TargetObject, error) {
-	err := s.pool.QueryRow(ctx, `
+	updated, err := scanTargetObject(s.pool.QueryRow(ctx, `
 		UPDATE target_objects
-		SET parent_id = $2, type = $3, protection_need = $4, name = $5, description = $6, updated_at = now()
+		SET parent_id = $2, type = $3, protection_need = $4,
+			confidentiality = $5, integrity = $6, availability = $7,
+			inherit_protection_need = $8, protection_need_note = $9,
+			name = $10, description = $11, updated_at = now()
 		WHERE id = $1
-		RETURNING id, project_id, parent_id, type, protection_need, name, description, created_at, updated_at`,
-		t.ID, t.ParentID, t.Type, t.ProtectionNeed, t.Name, t.Description,
-	).Scan(&t.ID, &t.ProjectID, &t.ParentID, &t.Type, &t.ProtectionNeed, &t.Name, &t.Description, &t.CreatedAt, &t.UpdatedAt)
+		RETURNING `+targetObjectColumns,
+		t.ID, t.ParentID, t.Type, t.ProtectionNeed,
+		t.Confidentiality, t.Integrity, t.Availability, t.InheritProtectionNeed, t.ProtectionNeedNote,
+		t.Name, t.Description,
+	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.TargetObject{}, ErrNotFound
 	}
-	return t, err
+	if err != nil {
+		return domain.TargetObject{}, err
+	}
+	if err := s.cascadeInheritedProtectionNeed(ctx, updated.ProjectID); err != nil {
+		return domain.TargetObject{}, err
+	}
+	return s.GetTargetObject(ctx, updated.ID)
 }
 
 func (s *Store) DeleteTargetObject(ctx context.Context, targetObjectID int64) error {

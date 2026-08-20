@@ -75,6 +75,37 @@ func TestIsRootScopeTarget(t *testing.T) {
 	}
 }
 
+func TestProtectionNeedFromCia(t *testing.T) {
+	if got := ProtectionNeedFromCia(CiaNormal, CiaNormal, CiaNormal); got != NeedNormal {
+		t.Fatalf("all normal: got %q want %q", got, NeedNormal)
+	}
+	if got := ProtectionNeedFromCia(CiaHigh, CiaNormal, CiaNormal); got != NeedElevated {
+		t.Fatalf("one high: got %q want %q", got, NeedElevated)
+	}
+	if got := ProtectionNeedFromCia(CiaNormal, CiaVeryHigh, CiaNormal); got != NeedElevated {
+		t.Fatalf("one very high: got %q want %q", got, NeedElevated)
+	}
+}
+
+func TestResolveInheritedProtectionNeeds(t *testing.T) {
+	items := []TargetObject{
+		{ID: 1, ParentID: 0, Confidentiality: CiaHigh, Integrity: CiaNormal, Availability: CiaNormal},
+		{ID: 2, ParentID: 1, InheritProtectionNeed: true, Confidentiality: CiaNormal, Integrity: CiaNormal, Availability: CiaNormal},
+		{ID: 3, ParentID: 2, InheritProtectionNeed: true, Confidentiality: CiaNormal, Integrity: CiaNormal, Availability: CiaVeryHigh},
+		{ID: 4, ParentID: 1, InheritProtectionNeed: false, Confidentiality: CiaNormal, Integrity: CiaHigh, Availability: CiaNormal},
+	}
+	ResolveInheritedProtectionNeeds(items)
+	if items[1].Confidentiality != CiaHigh || items[1].ProtectionNeed != NeedElevated {
+		t.Fatalf("child did not inherit parent CIA: %+v", items[1])
+	}
+	if items[2].Confidentiality != CiaHigh || items[2].Availability != CiaNormal {
+		t.Fatalf("grandchild did not inherit source CIA: %+v", items[2])
+	}
+	if items[3].Integrity != CiaHigh || items[3].Confidentiality != CiaNormal {
+		t.Fatalf("override was changed: %+v", items[3])
+	}
+}
+
 func TestCanInheritAssessments(t *testing.T) {
 	tests := []struct {
 		parent string

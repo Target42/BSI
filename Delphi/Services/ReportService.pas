@@ -118,8 +118,10 @@ begin
               FillChar(Row, SizeOf(Row), 0);
               Row.TargetObjectId := TargetObject.Id;
               Row.TargetObjectName := TargetObject.Name;
+              Row.BausteinDbId := Pair.Key;
               Row.BausteinExternalId := Requirement.BausteinExternalId;
               Row.BausteinTitle := BausteinById[Pair.Key].Title;
+              Row.RequirementDbId := Requirement.Id;
               Row.RequirementExternalId := Requirement.ExternalId;
               Row.RequirementTitle := Requirement.Title;
               Row.Level := RequirementLevelToString(Requirement.Level);

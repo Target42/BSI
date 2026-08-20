@@ -10,6 +10,7 @@ type
   TAssessmentStatus = (asOpen, asPartial, asFulfilled, asNotApplicable);
   TApplicabilityStatus = (apUndefined, apRequired, apPossible, apNotApplicable);
   TProtectionNeed = (pnBasisOnly, pnNormal, pnElevated);
+  TCiaLevel = (clNormal, clHigh, clVeryHigh);
   TTargetObjectType = (totScope, totProcess, totApplication, totITSystem, totNetwork, totInfrastructure);
   TRequirementLevel = (rlUnknown, rlBasis, rlStandard, rlErhoeht);
   TMeasureStatus = (msOpen, msInProgress, msDone);
@@ -30,6 +31,11 @@ type
     ParentId: Integer;
     ObjType: TTargetObjectType;
     ProtectionNeed: TProtectionNeed;
+    Confidentiality: TCiaLevel;
+    Integrity: TCiaLevel;
+    Availability: TCiaLevel;
+    InheritProtectionNeed: Boolean;
+    ProtectionNeedNote: string;
     Name: string;
     Description: string;
   end;
@@ -107,8 +113,10 @@ type
   TReportRow = record
     TargetObjectId: Integer;
     TargetObjectName: string;
+    BausteinDbId: Integer;
     BausteinExternalId: string;
     BausteinTitle: string;
+    RequirementDbId: Integer;
     RequirementExternalId: string;
     RequirementTitle: string;
     Level: string;
@@ -128,6 +136,46 @@ type
     NotApplicableCount: Integer;
     OverdueCount: Integer;
     MeasureCount: Integer;
+  end;
+
+  TCockpitKind = (ckAssessment, ckMeasure);
+  TCockpitKindFilter = (ckfAll, ckfAssessments, ckfMeasures);
+  TCockpitDueFilter = (cdfAll, cdfOverdue, cdfThisWeek, cdfHasDate, cdfNoDate);
+
+  TCockpitItem = record
+    Kind: TCockpitKind;
+    TargetObjectId: Integer;
+    TargetObjectName: string;
+    BausteinDbId: Integer;
+    BausteinExternalId: string;
+    RequirementDbId: Integer;
+    RequirementExternalId: string;
+    Title: string;
+    StatusText: string;
+    Responsible: string;
+    DueDate: TDateTime;
+    Overdue: Boolean;
+    MeasureId: Integer;
+    AssessmentStatus: TAssessmentStatus;
+    MeasureStatus: TMeasureStatus;
+  end;
+
+  TCockpitFilter = record
+    Kind: TCockpitKindFilter;
+    Due: TCockpitDueFilter;
+    HideDone: Boolean;
+    MineOnly: Boolean;
+    CurrentUserName: string;
+    CurrentUserEmail: string;
+    ResponsibleNeedle: string;
+  end;
+
+  TCockpitSummary = record
+    TotalCount: Integer;
+    AssessmentCount: Integer;
+    MeasureCount: Integer;
+    OverdueCount: Integer;
+    DueThisWeekCount: Integer;
   end;
 
   TBausteinRecommendationTier = (brtCore, brtSupplementary);
@@ -187,6 +235,15 @@ function ApplicabilityStatusToString(AValue: TApplicabilityStatus): string;
 function ApplicabilityStatusFromString(const AValue: string): TApplicabilityStatus;
 function ProtectionNeedToString(AValue: TProtectionNeed): string;
 function ProtectionNeedFromString(const AValue: string): TProtectionNeed;
+function CiaLevelToString(AValue: TCiaLevel): string;
+function CiaLevelFromString(const AValue: string): TCiaLevel;
+function MaxCiaLevel(ALeft, ARight: TCiaLevel): TCiaLevel;
+function ProtectionNeedFromCiaLevels(AConfidentiality, AIntegrity, AAvailability: TCiaLevel): TProtectionNeed;
+function ProtectionNeedSummary(const ATarget: TTargetObject): string;
+procedure ApplyCiaToProtectionNeed(var ATarget: TTargetObject);
+procedure CopyProtectionNeedFromParent(var AChild: TTargetObject; const AParent: TTargetObject);
+procedure FinalizeTargetObjectProtectionNeed(var ATarget: TTargetObject; const AParent: TTargetObject);
+procedure ResolveInheritedProtectionNeeds(var AObjects: TArray<TTargetObject>);
 function TargetObjectTypeToString(AValue: TTargetObjectType): string;
 function TargetObjectTypeFromString(const AValue: string): TTargetObjectType;
 function TargetObjectCaption(const ATarget: TTargetObject): string;
@@ -212,6 +269,10 @@ function IsoToDateTime(const AValue: string): TDateTime;
 function IsValidDate(const ADate: TDateTime): Boolean;
 function ReportProgressPercent(const ASummary: TReportSummary): Integer;
 function BausteinRecommendationTierToString(AValue: TBausteinRecommendationTier): string;
+function CockpitKindToString(AKind: TCockpitKind): string;
+function CockpitItemIsDone(const AItem: TCockpitItem): Boolean;
+function IsDueThisWeek(const ADate: TDateTime): Boolean;
+function DefaultCockpitFilter: TCockpitFilter;
 
 function ProjectMemberRoleLabel(const ARole: string): string;
 function ProjectMemberRoleOptions: TArray<string>;
@@ -333,6 +394,122 @@ begin
   Result := pnNormal;
 end;
 
+function CiaLevelToString(AValue: TCiaLevel): string;
+begin
+  case AValue of
+    clHigh: Result := 'hoch';
+    clVeryHigh: Result := 'sehr hoch';
+  else
+    Result := 'normal';
+  end;
+end;
+
+function CiaLevelFromString(const AValue: string): TCiaLevel;
+var
+  Normalized: string;
+begin
+  Normalized := LowerCase(Trim(AValue));
+  if (Normalized = 'hoch') or (Normalized = 'high') then
+    Exit(clHigh);
+  if (Normalized = 'sehr hoch') or (Normalized = 'sehrhoch') or
+     (Normalized = 'very high') then
+    Exit(clVeryHigh);
+  Result := clNormal;
+end;
+
+function MaxCiaLevel(ALeft, ARight: TCiaLevel): TCiaLevel;
+begin
+  if ALeft >= ARight then
+    Result := ALeft
+  else
+    Result := ARight;
+end;
+
+function ProtectionNeedFromCiaLevels(AConfidentiality, AIntegrity,
+  AAvailability: TCiaLevel): TProtectionNeed;
+begin
+  if MaxCiaLevel(MaxCiaLevel(AConfidentiality, AIntegrity), AAvailability) > clNormal then
+    Result := pnElevated
+  else
+    Result := pnNormal;
+end;
+
+procedure ApplyCiaToProtectionNeed(var ATarget: TTargetObject);
+var
+  Derived: TProtectionNeed;
+  KeepBasis: Boolean;
+begin
+  KeepBasis := (ATarget.ProtectionNeed = pnBasisOnly) and not ATarget.InheritProtectionNeed;
+  Derived := ProtectionNeedFromCiaLevels(
+    ATarget.Confidentiality, ATarget.Integrity, ATarget.Availability);
+  if KeepBasis and (Derived = pnNormal) then
+    ATarget.ProtectionNeed := pnBasisOnly
+  else
+    ATarget.ProtectionNeed := Derived;
+end;
+
+procedure CopyProtectionNeedFromParent(var AChild: TTargetObject; const AParent: TTargetObject);
+begin
+  AChild.Confidentiality := AParent.Confidentiality;
+  AChild.Integrity := AParent.Integrity;
+  AChild.Availability := AParent.Availability;
+  ApplyCiaToProtectionNeed(AChild);
+end;
+
+procedure FinalizeTargetObjectProtectionNeed(var ATarget: TTargetObject;
+  const AParent: TTargetObject);
+begin
+  if ATarget.ParentId <= 0 then
+    ATarget.InheritProtectionNeed := False
+  else if ATarget.InheritProtectionNeed and (AParent.Id > 0) then
+    CopyProtectionNeedFromParent(ATarget, AParent);
+  ApplyCiaToProtectionNeed(ATarget);
+end;
+
+function ProtectionNeedSummary(const ATarget: TTargetObject): string;
+begin
+  Result := Format('V %s, I %s, A %s',
+    [CiaLevelToString(ATarget.Confidentiality),
+     CiaLevelToString(ATarget.Integrity),
+     CiaLevelToString(ATarget.Availability)]);
+  if ATarget.InheritProtectionNeed then
+    Result := Result + ' ' + EnDash + ' geerbt';
+end;
+
+procedure ResolveInheritedProtectionNeeds(var AObjects: TArray<TTargetObject>);
+var
+  ById: TDictionary<Integer, Integer>;
+  I, Guard, ParentIndex: Integer;
+  Parent: TTargetObject;
+begin
+  ById := TDictionary<Integer, Integer>.Create;
+  try
+    for I := 0 to High(AObjects) do
+      if AObjects[I].Id > 0 then
+        ById.AddOrSetValue(AObjects[I].Id, I);
+    for I := 0 to High(AObjects) do
+    begin
+      if not AObjects[I].InheritProtectionNeed or (AObjects[I].ParentId <= 0) then
+      begin
+        ApplyCiaToProtectionNeed(AObjects[I]);
+        Continue;
+      end;
+      Parent := AObjects[I];
+      Guard := 0;
+      while Parent.InheritProtectionNeed and (Parent.ParentId > 0) and (Guard < 64) do
+      begin
+        Inc(Guard);
+        if not ById.TryGetValue(Parent.ParentId, ParentIndex) then
+          Break;
+        Parent := AObjects[ParentIndex];
+      end;
+      CopyProtectionNeedFromParent(AObjects[I], Parent);
+    end;
+  finally
+    ById.Free;
+  end;
+end;
+
 function TargetObjectTypeToString(AValue: TTargetObjectType): string;
 begin
   case AValue of
@@ -368,7 +545,7 @@ function TargetObjectCaption(const ATarget: TTargetObject): string;
 begin
   Result := Format('%s ' + EnDash + ' %s [%s]',
     [TargetObjectTypeToString(ATarget.ObjType), ATarget.Name,
-     ProtectionNeedToString(ATarget.ProtectionNeed)]);
+     ProtectionNeedSummary(ATarget)]);
 end;
 
 function AllowedChildTargetTypes(AParentType: TTargetObjectType): TArray<TTargetObjectType>;
@@ -596,6 +773,44 @@ begin
   else
     Result := 'Kern';
   end;
+end;
+
+function CockpitKindToString(AKind: TCockpitKind): string;
+begin
+  case AKind of
+    ckMeasure: Result := 'Ma'#$00DF'nahme';
+  else
+    Result := 'Bewertung';
+  end;
+end;
+
+function CockpitItemIsDone(const AItem: TCockpitItem): Boolean;
+begin
+  case AItem.Kind of
+    ckMeasure:
+      Result := AItem.MeasureStatus = msDone;
+  else
+    Result := (AItem.AssessmentStatus = asFulfilled) or
+      (AItem.AssessmentStatus = asNotApplicable);
+  end;
+end;
+
+function IsDueThisWeek(const ADate: TDateTime): Boolean;
+var
+  Today: TDateTime;
+begin
+  if not IsValidDate(ADate) then
+    Exit(False);
+  Today := Date;
+  Result := (Trunc(ADate) >= Trunc(Today)) and (Trunc(ADate) < Trunc(Today) + 7);
+end;
+
+function DefaultCockpitFilter: TCockpitFilter;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Kind := ckfAll;
+  Result.Due := cdfAll;
+  Result.HideDone := True;
 end;
 
 function ProjectMemberRoleLabel(const ARole: string): string;

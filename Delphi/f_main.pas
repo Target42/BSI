@@ -97,6 +97,7 @@ type
     mnuApplyRecommendations: TMenuItem;
     mnuReports: TMenuItem;
     mnuSollIst: TMenuItem;
+    mnuCockpit: TMenuItem;
     mnuCatalog: TMenuItem;
     mnuViewBaustein: TMenuItem;
     mnuCatalogSearch: TMenuItem;
@@ -114,6 +115,7 @@ type
     procedure DoEditTarget(Sender: TObject);
     procedure DoDeleteTarget(Sender: TObject);
     procedure DoShowSollIstReport(Sender: TObject);
+    procedure DoShowCockpit(Sender: TObject);
     procedure tvTargetsClick(Sender: TObject);
     procedure tvTargetsChange(Sender: TObject; Node: TTreeNode);
     procedure tvBausteineChange(Sender: TObject; Node: TTreeNode);
@@ -234,6 +236,8 @@ type
     procedure ApplyTargetSelection(ATargetId: Integer; AAutoSwitchIfEmpty: Boolean = False);
     procedure ApplyBausteinSelection(ABausteinId: Integer);
     procedure SelectRequirementRow(ARequirementId: Integer);
+    procedure JumpToCockpitItem(const AItem: TCockpitItem);
+    procedure EnsureRequirementFilterAllows(AStatus: TAssessmentStatus);
     procedure LoadRequirementsForBaustein(ABausteinDbId: Integer);
     procedure LoadRequirementDetails(ARow: Integer);
     procedure LoadMeasuresForCurrentRequirement;
@@ -262,8 +266,8 @@ var
 implementation
 
 uses
-  f_project, f_projectopen, f_targetobject, f_measure, f_report, ReportService,
-  RequirementTextFormatter, BausteinRecommendationService, AppSession,
+  f_project, f_projectopen, f_targetobject, f_measure, f_report, f_cockpit,
+  ReportService, RequirementTextFormatter, BausteinRecommendationService, AppSession,
   f_bausteinview, f_catalogsearch, f_bausteinrecommendation, f_projectmembers,
   InheritanceService;
 
@@ -492,7 +496,7 @@ begin
       [FActiveProject.Name,
        TargetObjectTypeToString(FActiveTarget.ObjType),
        FActiveTarget.Name,
-       ProtectionNeedToString(FActiveTarget.ProtectionNeed)]);
+       ProtectionNeedSummary(FActiveTarget)]);
     if FContext.IsRemote and SameText(FActiveProject.Role, 'viewer') then
       ContextText := ContextText + ' — Nur Lesen';
   end;
@@ -591,6 +595,7 @@ begin
   mnuEditTarget.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
   mnuDeleteTarget.Enabled := CanDeleteActiveTarget;
   mnuSollIst.Enabled := HasProject;
+  mnuCockpit.Enabled := HasProject;
   mnuApplyRecommendations.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
   mnuRelogin.Enabled := FContext.IsRemote;
   mnuSwitchUser.Enabled := True;
@@ -1642,6 +1647,62 @@ begin
   end;
 end;
 
+procedure TMainForm.DoShowCockpit(Sender: TObject);
+var
+  Item: TCockpitItem;
+  UserName, UserEmail: string;
+begin
+  if not HasActiveProject then
+    Exit;
+  UserName := '';
+  UserEmail := '';
+  if FContext.IsRemote then
+  begin
+    UserName := FContext.RemoteUser.DisplayName;
+    UserEmail := FContext.RemoteUser.Email;
+  end;
+  if TCockpitForm.Execute(Self, FContext, FActiveProject, UserName, UserEmail, Item) then
+    JumpToCockpitItem(Item);
+end;
+
+procedure TMainForm.EnsureRequirementFilterAllows(AStatus: TAssessmentStatus);
+begin
+  if not AssessmentStatusFilterActive then
+    Exit;
+  if RequirementPassesStatusFilter(AStatus) then
+    Exit;
+  case AStatus of
+    asOpen: chkReqFilterOpen.Checked := True;
+    asPartial: chkReqFilterPartial.Checked := True;
+    asFulfilled: chkReqFilterFulfilled.Checked := True;
+  else
+    chkReqFilterNotApplicable.Checked := True;
+  end;
+end;
+
+procedure TMainForm.JumpToCockpitItem(const AItem: TCockpitItem);
+begin
+  if AItem.TargetObjectId <= 0 then
+    Exit;
+  SaveCurrentAssessment;
+  if Trim(edtBausteinSearch.Text) <> '' then
+    edtBausteinSearch.Text := '';
+  FLastBausteinByTarget.AddOrSetValue(AItem.TargetObjectId, AItem.BausteinDbId);
+  FLastRequirementByTarget.AddOrSetValue(AItem.TargetObjectId, AItem.RequirementDbId);
+  FActiveRequirementId := AItem.RequirementDbId;
+  ApplyTargetSelection(AItem.TargetObjectId, False);
+  EnsureRequirementFilterAllows(AItem.AssessmentStatus);
+  if AItem.BausteinDbId > 0 then
+  begin
+    if FActiveBausteinId <> AItem.BausteinDbId then
+      ApplyBausteinSelection(AItem.BausteinDbId)
+    else
+      LoadRequirementsForBaustein(AItem.BausteinDbId);
+  end;
+  SelectRequirementRow(AItem.RequirementDbId);
+  ShowTemporaryStatusMessage('Cockpit: ' + AItem.RequirementExternalId + ' ' + AItem.Title, 4000);
+end;
+
 procedure TMainForm.DoImportCatalog(Sender: TObject);
 var
   Dlg: TOpenDialog;
@@ -1827,11 +1888,13 @@ begin
   FillChar(O, SizeOf(O), 0);
   O.ProjectId := FActiveProject.Id;
   O.ParentId := Parent.Id;
+  O.ProtectionNeed := pnNormal;
   if FromLayer then
     O.ObjType := Layer
   else
     O.ObjType := DefaultChildTargetType(Parent.ObjType);
-  O.ProtectionNeed := Parent.ProtectionNeed;
+  O.InheritProtectionNeed := True;
+  CopyProtectionNeedFromParent(O, Parent);
   if not TTargetObjectForm.ExecuteCreate(O, Parent) then
     Exit;
   O := FContext.TargetObjectRepository.CreateTargetObject(O);

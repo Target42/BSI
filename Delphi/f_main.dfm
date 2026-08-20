@@ -592,6 +592,11 @@ object MainForm: TMainForm
         Caption = 'Soll-Ist-'#220'bersicht'#8230
         OnClick = DoShowSollIstReport
       end
+      object mnuCockpit: TMenuItem
+        Caption = 'Aufgaben-Cockpit'#8230
+        ShortCut = 24641
+        OnClick = DoShowCockpit
+      end
     end
     object mnuCatalog: TMenuItem
       Caption = 'Katalog'

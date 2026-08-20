@@ -5,6 +5,7 @@
 
 #include <QDialog>
 
+class QCheckBox;
 class QComboBox;
 class QLabel;
 class QLineEdit;
@@ -25,12 +26,22 @@ protected:
 
 private:
     void fillTypeBox();
+    void fillCiaBox(QComboBox *box);
+    void setCiaBox(QComboBox *box, CiaLevel level);
+    CiaLevel selectedCiaLevel(const QComboBox *box) const;
     void updateParentLabel();
+    void updateCiaEnabled();
+    void syncOverallLabel();
 
     QLabel *m_parentLabel = nullptr;
     QLineEdit *m_nameEdit = nullptr;
     QComboBox *m_typeBox = nullptr;
-    QComboBox *m_protectionBox = nullptr;
+    QCheckBox *m_inheritCheck = nullptr;
+    QComboBox *m_confidentialityBox = nullptr;
+    QComboBox *m_integrityBox = nullptr;
+    QComboBox *m_availabilityBox = nullptr;
+    QLabel *m_overallLabel = nullptr;
+    QTextEdit *m_protectionNoteEdit = nullptr;
     QTextEdit *m_descriptionEdit = nullptr;
     TargetObject m_object;
     TargetObject m_parent;

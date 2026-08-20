@@ -9,6 +9,13 @@ const (
 	TargetTypeITSystem       = "IT-System"
 	TargetTypeNetwork        = "Netz"
 	TargetTypeInfrastructure = "Infrastruktur"
+
+	CiaNormal    = "normal"
+	CiaHigh      = "hoch"
+	CiaVeryHigh  = "sehr hoch"
+	NeedNormal   = "Normal (Basis + Standard)"
+	NeedElevated = "Erhöht (Basis + Standard + Erhöht)"
+	NeedBasis    = "Basis-Anforderungen"
 )
 
 // RequirementLevelApplies mirrors ProtectionNeed logic from the Qt client.
@@ -19,9 +26,9 @@ func RequirementLevelApplies(level, protectionNeed string) bool {
 	}
 
 	switch protectionNeed {
-	case "Basis-Anforderungen":
+	case NeedBasis:
 		return level == "Basis"
-	case "Erhöht (Basis + Standard + Erhöht)":
+	case NeedElevated:
 		return level == "Basis" || level == "Standard" || level == "Erhöht"
 	default: // Normal (Basis + Standard)
 		return level == "Basis" || level == "Standard"
@@ -100,5 +107,90 @@ func CanInheritAssessments(parentType, childType string) bool {
 		return child == TargetTypeInfrastructure || child == TargetTypeITSystem || child == TargetTypeNetwork
 	default:
 		return false
+	}
+}
+
+func NormalizeCiaLevel(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case CiaHigh, "high":
+		return CiaHigh
+	case CiaVeryHigh, "sehrhoch", "very high":
+		return CiaVeryHigh
+	default:
+		return CiaNormal
+	}
+}
+
+func ciaRank(value string) int {
+	switch NormalizeCiaLevel(value) {
+	case CiaVeryHigh:
+		return 2
+	case CiaHigh:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func MaxCiaLevel(values ...string) string {
+	max := CiaNormal
+	for _, value := range values {
+		if ciaRank(value) > ciaRank(max) {
+			max = NormalizeCiaLevel(value)
+		}
+	}
+	return max
+}
+
+func ProtectionNeedFromCia(confidentiality, integrity, availability string) string {
+	if ciaRank(MaxCiaLevel(confidentiality, integrity, availability)) > 0 {
+		return NeedElevated
+	}
+	return NeedNormal
+}
+
+func ApplyTargetObjectProtectionNeed(target *TargetObject, parent *TargetObject) {
+	keepBasis := target.ProtectionNeed == NeedBasis
+	if target.ParentID <= 0 {
+		target.InheritProtectionNeed = false
+	} else if target.InheritProtectionNeed && parent != nil && parent.ID > 0 {
+		keepBasis = false
+		target.Confidentiality = parent.Confidentiality
+		target.Integrity = parent.Integrity
+		target.Availability = parent.Availability
+	}
+	target.Confidentiality = NormalizeCiaLevel(target.Confidentiality)
+	target.Integrity = NormalizeCiaLevel(target.Integrity)
+	target.Availability = NormalizeCiaLevel(target.Availability)
+	derived := ProtectionNeedFromCia(target.Confidentiality, target.Integrity, target.Availability)
+	if keepBasis && derived == NeedNormal {
+		target.ProtectionNeed = NeedBasis
+	} else {
+		target.ProtectionNeed = derived
+	}
+}
+
+func ResolveInheritedProtectionNeeds(items []TargetObject) {
+	byID := make(map[int64]int, len(items))
+	for i := range items {
+		if items[i].ID > 0 {
+			byID[items[i].ID] = i
+		}
+	}
+	for i := range items {
+		current := items[i]
+		if !current.InheritProtectionNeed || current.ParentID <= 0 {
+			ApplyTargetObjectProtectionNeed(&items[i], nil)
+			continue
+		}
+		parent := current
+		for guard := 0; parent.InheritProtectionNeed && parent.ParentID > 0 && guard < 64; guard++ {
+			idx, ok := byID[parent.ParentID]
+			if !ok {
+				break
+			}
+			parent = items[idx]
+		}
+		ApplyTargetObjectProtectionNeed(&items[i], &parent)
 	}
 }

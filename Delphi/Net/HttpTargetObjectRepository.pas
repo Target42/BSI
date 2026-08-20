@@ -71,11 +71,7 @@ begin
   FillChar(Result, SizeOf(Result), 0);
   Body := TJSONObject.Create;
   try
-    Body.AddPair('parentId', TJSONNumber.Create(ATargetObject.ParentId));
-    Body.AddPair('type', TargetObjectTypeToString(ATargetObject.ObjType));
-    Body.AddPair('protectionNeed', ProtectionNeedToString(ATargetObject.ProtectionNeed));
-    Body.AddPair('name', ATargetObject.Name);
-    Body.AddPair('description', ATargetObject.Description);
+    AddTargetObjectJsonFields(Body, ATargetObject);
     Doc := FClient.PostJson(Format('/api/v1/projects/%d/target-objects', [ATargetObject.ProjectId]), Body, Status);
     try
       if (Status <> 201) or not (Doc is TJSONObject) then
@@ -101,11 +97,7 @@ begin
   Result := False;
   Body := TJSONObject.Create;
   try
-    Body.AddPair('parentId', TJSONNumber.Create(ATargetObject.ParentId));
-    Body.AddPair('type', TargetObjectTypeToString(ATargetObject.ObjType));
-    Body.AddPair('protectionNeed', ProtectionNeedToString(ATargetObject.ProtectionNeed));
-    Body.AddPair('name', ATargetObject.Name);
-    Body.AddPair('description', ATargetObject.Description);
+    AddTargetObjectJsonFields(Body, ATargetObject);
     Doc := FClient.PatchJson(Format('/api/v1/target-objects/%d', [ATargetObject.Id]), Body, Status);
     try
       if Status <> 200 then

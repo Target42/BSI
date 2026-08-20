@@ -38,6 +38,11 @@ TargetObject HttpTargetObjectRepository::createTargetObject(const TargetObject &
     body.insert(QStringLiteral("parentId"), targetObject.parentId);
     body.insert(QStringLiteral("type"), targetObjectTypeToString(targetObject.type));
     body.insert(QStringLiteral("protectionNeed"), protectionNeedToString(targetObject.protectionNeed));
+    body.insert(QStringLiteral("confidentiality"), ciaLevelToString(targetObject.confidentiality));
+    body.insert(QStringLiteral("integrity"), ciaLevelToString(targetObject.integrity));
+    body.insert(QStringLiteral("availability"), ciaLevelToString(targetObject.availability));
+    body.insert(QStringLiteral("inheritProtectionNeed"), targetObject.inheritProtectionNeed);
+    body.insert(QStringLiteral("protectionNeedNote"), targetObject.protectionNeedNote);
     body.insert(QStringLiteral("name"), targetObject.name);
     body.insert(QStringLiteral("description"), targetObject.description);
 
@@ -57,6 +62,11 @@ bool HttpTargetObjectRepository::updateTargetObject(const TargetObject &targetOb
     body.insert(QStringLiteral("parentId"), targetObject.parentId);
     body.insert(QStringLiteral("type"), targetObjectTypeToString(targetObject.type));
     body.insert(QStringLiteral("protectionNeed"), protectionNeedToString(targetObject.protectionNeed));
+    body.insert(QStringLiteral("confidentiality"), ciaLevelToString(targetObject.confidentiality));
+    body.insert(QStringLiteral("integrity"), ciaLevelToString(targetObject.integrity));
+    body.insert(QStringLiteral("availability"), ciaLevelToString(targetObject.availability));
+    body.insert(QStringLiteral("inheritProtectionNeed"), targetObject.inheritProtectionNeed);
+    body.insert(QStringLiteral("protectionNeedNote"), targetObject.protectionNeedNote);
     body.insert(QStringLiteral("name"), targetObject.name);
     body.insert(QStringLiteral("description"), targetObject.description);
 

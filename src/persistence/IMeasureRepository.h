@@ -14,6 +14,7 @@ public:
     virtual ~IMeasureRepository() = default;
 
     virtual QList<Measure> loadMeasures(int projectId, int targetObjectId, int requirementDbId) const = 0;
+    virtual QList<Measure> loadProjectMeasures(int projectId) const = 0;
     virtual QHash<int, int> measureCounts(int projectId, int targetObjectId) const = 0;
 
     virtual Measure createMeasure(const Measure &measure) = 0;

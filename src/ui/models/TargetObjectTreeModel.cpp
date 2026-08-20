@@ -205,7 +205,7 @@ QVariant TargetObjectTreeModel::data(const QModelIndex &index, int role) const
         QString text = QStringLiteral("%1 – %2  [%3]")
                            .arg(targetObjectTypeToString(object.type),
                                 object.name,
-                                protectionNeedToString(object.protectionNeed));
+                                protectionNeedSummary(object));
         const ReportSummary summary = m_progressSummaries.value(object.id);
         text += ReportService::formatTreeProgressSuffix(summary);
         return text;

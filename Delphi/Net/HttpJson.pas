@@ -16,6 +16,9 @@ function ProjectMemberFromJson(AObj: TJSONObject): TProjectMember;
 function RepairUtf8Mojibake(const S: string): string;
 function JsonStringValue(AObj: TJSONObject; const AName: string;
   const ADefault: string = ''): string;
+function JsonBoolValue(AObj: TJSONObject; const AName: string;
+  ADefault: Boolean = False): Boolean;
+procedure AddTargetObjectJsonFields(ABody: TJSONObject; const ATarget: TTargetObject);
 
 implementation
 
@@ -46,6 +49,36 @@ begin
   else
     Result := V.Value;
   Result := RepairUtf8Mojibake(Result);
+end;
+
+function JsonBoolValue(AObj: TJSONObject; const AName: string;
+  ADefault: Boolean = False): Boolean;
+var
+  V: TJSONValue;
+begin
+  Result := ADefault;
+  if not AObj.TryGetValue(AName, V) or (V = nil) then
+    Exit;
+  if V is TJSONTrue then
+    Exit(True);
+  if V is TJSONFalse then
+    Exit(False);
+  if V is TJSONBool then
+    Result := TJSONBool(V).AsBoolean;
+end;
+
+procedure AddTargetObjectJsonFields(ABody: TJSONObject; const ATarget: TTargetObject);
+begin
+  ABody.AddPair('parentId', TJSONNumber.Create(ATarget.ParentId));
+  ABody.AddPair('type', TargetObjectTypeToString(ATarget.ObjType));
+  ABody.AddPair('protectionNeed', ProtectionNeedToString(ATarget.ProtectionNeed));
+  ABody.AddPair('confidentiality', CiaLevelToString(ATarget.Confidentiality));
+  ABody.AddPair('integrity', CiaLevelToString(ATarget.Integrity));
+  ABody.AddPair('availability', CiaLevelToString(ATarget.Availability));
+  ABody.AddPair('inheritProtectionNeed', TJSONBool.Create(ATarget.InheritProtectionNeed));
+  ABody.AddPair('protectionNeedNote', ATarget.ProtectionNeedNote);
+  ABody.AddPair('name', ATarget.Name);
+  ABody.AddPair('description', ATarget.Description);
 end;
 
 function ParseDateTimeValue(AValue: TJSONValue): TDateTime;
@@ -98,8 +131,21 @@ begin
   Result.ParentId := AObj.GetValue<Integer>('parentId', 0);
   Result.ObjType := TargetObjectTypeFromString(JsonStringValue(AObj, 'type'));
   Result.ProtectionNeed := ProtectionNeedFromString(JsonStringValue(AObj, 'protectionNeed'));
+  Result.Confidentiality := CiaLevelFromString(JsonStringValue(AObj, 'confidentiality'));
+  Result.Integrity := CiaLevelFromString(JsonStringValue(AObj, 'integrity'));
+  Result.Availability := CiaLevelFromString(JsonStringValue(AObj, 'availability'));
+  Result.InheritProtectionNeed := JsonBoolValue(AObj, 'inheritProtectionNeed');
+  Result.ProtectionNeedNote := JsonStringValue(AObj, 'protectionNeedNote');
   Result.Name := JsonStringValue(AObj, 'name');
   Result.Description := JsonStringValue(AObj, 'description');
+  if (JsonStringValue(AObj, 'confidentiality') = '') and
+     (JsonStringValue(AObj, 'integrity') = '') and
+     (Result.ProtectionNeed = pnElevated) then
+  begin
+    Result.Confidentiality := clHigh;
+    Result.Integrity := clHigh;
+    Result.Availability := clHigh;
+  end;
 end;
 
 function BausteinFromJson(AObj: TJSONObject): TBaustein;

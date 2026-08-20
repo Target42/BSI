@@ -73,7 +73,9 @@ QList<ReportRow> ReportService::buildSollIstReport(int projectId,
                 ReportRow row;
                 row.targetObjectId = targetObject.id;
                 row.targetObjectName = targetObject.name;
+                row.bausteinDbId = it.key();
                 row.bausteinExternalId = requirement.bausteinExternalId;
+                row.requirementDbId = requirement.id;
                 row.requirementExternalId = requirement.externalId;
                 row.requirementTitle = requirement.title;
                 row.level = requirementLevelToString(requirement.level);

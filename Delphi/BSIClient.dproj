@@ -179,6 +179,7 @@
         <DCCReference Include="Catalog\GrundschutzImporter.pas"/>
         <DCCReference Include="Catalog\RequirementTextFormatter.pas"/>
         <DCCReference Include="Services\ReportService.pas"/>
+        <DCCReference Include="Services\CockpitService.pas"/>
         <DCCReference Include="Services\ReportExporter.pas"/>
         <DCCReference Include="Services\BausteinRecommendationService.pas"/>
         <DCCReference Include="Services\InheritanceService.pas"/>
@@ -204,6 +205,10 @@
         </DCCReference>
         <DCCReference Include="UI\f_report.pas">
             <Form>ReportForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="UI\f_cockpit.pas">
+            <Form>CockpitForm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="UI\SearchEditHelper.pas"/>

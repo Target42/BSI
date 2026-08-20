@@ -14,6 +14,7 @@ type
   public
     constructor Create(AClient: TApiClient);
     function LoadMeasures(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TArray<TMeasure>; override;
+    function LoadProjectMeasures(AProjectId: Integer): TArray<TMeasure>; override;
     function MeasureCounts(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, Integer>; override;
     function CreateMeasure(const AMeasure: TMeasure): TMeasure; override;
     function UpdateMeasure(const AMeasure: TMeasure): TMeasureSaveResult; override;
@@ -42,6 +43,33 @@ begin
   Doc := FClient.Get(
     Format('/api/v1/projects/%d/target-objects/%d/requirements/%d/measures',
       [AProjectId, ATargetObjectId, ARequirementDbId]), Status);
+  try
+    if (Status <> 200) or not (Doc is TJSONArray) then
+    begin
+      FLastError := FClient.LastError;
+      Exit;
+    end;
+    Arr := TJSONArray(Doc);
+    SetLength(List, Arr.Count);
+    for I := 0 to Arr.Count - 1 do
+      if Arr.Items[I] is TJSONObject then
+        List[I] := MeasureFromJson(TJSONObject(Arr.Items[I]));
+  finally
+    Doc.Free;
+  end;
+  Result := List;
+end;
+
+function THttpMeasureRepository.LoadProjectMeasures(AProjectId: Integer): TArray<TMeasure>;
+var
+  Doc: TJSONValue;
+  Arr: TJSONArray;
+  I: Integer;
+  List: TArray<TMeasure>;
+  Status: Integer;
+begin
+  SetLength(List, 0);
+  Doc := FClient.Get(Format('/api/v1/projects/%d/measures', [AProjectId]), Status);
   try
     if (Status <> 200) or not (Doc is TJSONArray) then
     begin

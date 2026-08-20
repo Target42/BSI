@@ -21,6 +21,7 @@ private:
     bool migrateAssessmentTargetObjectColumn();
     bool migrateAssessmentDueDateColumn();
     bool migrateTargetObjectProtectionNeedColumn();
+    bool migrateTargetObjectCiaColumns();
     bool migrateSchema();
     bool ensureIndexes();
     bool tableExists(const QString &table) const;

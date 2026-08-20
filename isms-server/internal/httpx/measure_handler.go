@@ -66,6 +66,36 @@ func (h *MeasureHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+func (h *MeasureHandler) ListProject(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "viewer"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+
+	items, err := h.store.ListProjectMeasures(r.Context(), projectID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list measures failed")
+		return
+	}
+	if items == nil {
+		items = []domain.Measure{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 func (h *MeasureHandler) Create(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
