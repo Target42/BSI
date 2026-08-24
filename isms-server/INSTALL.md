@@ -35,13 +35,22 @@ source ~/.profile
 go version
 ```
 
-Aktuelle Dateinamen: [https://go.dev/dl/](https://go.dev/dl/). Alternativ die Binary auf einem anderen Rechner bauen und rüberkopieren:
+Aktuelle Dateinamen: [https://go.dev/dl/](https://go.dev/dl/). Alternativ beide Targets (Linux + Windows) bauen und die Linux-Binary rüberkopieren:
 
 ```powershell
 # Windows (im Ordner isms-server)
-$env:GOOS="linux"; $env:GOARCH="amd64"; go build -o isms-server ./cmd/isms-server
-scp isms-server nutzer@ubuntu-host:~/isms-server/
+.\scripts\build.ps1
+scp dist\isms-server-linux-amd64 nutzer@ubuntu-host:~/isms-server/isms-server
 ```
+
+```bash
+# Linux / WSL / Git Bash
+./scripts/build.sh
+scp dist/isms-server-linux-amd64 nutzer@ubuntu-host:~/isms-server/isms-server
+```
+
+Nur ein Target: `.\scripts\build.ps1 -Targets linux` bzw. `./scripts/build.sh linux`.
+Ausgaben landen in `dist/` (`isms-server-linux-amd64`, `isms-server-windows-amd64.exe`).
 
 ### 2. Quellcode
 
@@ -99,9 +108,12 @@ Katalog-XML nach `/opt/isms/catalog/` legen (das Skript im nächsten Schritt leg
 
 ```bash
 cd ~/BSI/isms-server   # oder dein Clone-Pfad
-go build -o isms-server ./cmd/isms-server
+./scripts/build.sh linux
+cp dist/isms-server-linux-amd64 ./isms-server
 sudo ./scripts/install-systemd.sh
 ```
+
+(Alternativ weiterhin: `go build -o isms-server ./cmd/isms-server`.)
 
 Das installiert:
 
@@ -197,5 +209,5 @@ psql -U postgres -f scripts/setup-local-db.sql
 
 - Logs Ubuntu: `journalctl -u isms-server`. Windows/NSSM: `%ProgramData%\ISMS\logs\`.
 - Katalog-Import nur beim **ersten** Start, wenn die DB noch leer ist. Später: Client **Datei → IT-Grundschutz XML importieren**.
-- HTTPS: Zertifikat eintragen oder Reverse Proxy (nginx/Caddy) davor. Dev-Zertifikat: `scripts/generate-dev-cert.ps1` (siehe README).
+- HTTPS: Reverse Proxy (nginx) vor dem Server, Vorlage `deploy/nginx-isms.conf`. Der Go-Dienst nur lokal binden (`HTTP_ADDR=127.0.0.1:8080`), Client-URL `https://isms.<host>`. Ohne eigenen Hostnamen: `location /isms/` in den bestehenden vHost (Client dann `https://<host>/isms`). Dev-Zertifikat ohne Proxy: `scripts/generate-dev-cert.ps1` (siehe README).
 - Binary-Update Ubuntu: neu bauen, `sudo cp isms-server /opt/isms/isms-server && sudo systemctl restart isms-server`.

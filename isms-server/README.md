@@ -190,6 +190,18 @@ Voraussetzungen: PostgreSQL läuft, Server gestartet (`go run ./cmd/isms-server`
 - [ ] **Projekt → Server-Sitzung erneuern** → neues Token ohne Neustart
 - [ ] Optional HTTPS: Dev-Zertifikat, `https://localhost:8443`, TLS-Checkbox im Login
 
+## Bauen (Linux + Windows)
+
+```powershell
+.\scripts\build.ps1
+```
+
+```bash
+./scripts/build.sh
+```
+
+Erzeugt in `dist/`: `isms-server-linux-amd64` und `isms-server-windows-amd64.exe`.
+
 ## Nativer Betrieb (Dienst)
 
 Kurzanleitung und Install-Skripte: **[INSTALL.md](INSTALL.md)**

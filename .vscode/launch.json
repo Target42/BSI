@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ISMS Server",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/isms-server/cmd/isms-server",
+      "cwd": "${workspaceFolder}/isms-server",
+      "envFile": "${workspaceFolder}/isms-server/.env"
+    }
+  ]
+}
