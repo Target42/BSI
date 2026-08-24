@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Grids,
-  Vcl.ExtCtrls, IsmsDomain, AppContext, CockpitService;
+  Vcl.ExtCtrls, IsmsDomain, AppContext, CockpitService, GridHelper;
 
 type
   TCockpitForm = class(TForm)
@@ -140,6 +140,7 @@ begin
   sgItems.ColWidths[5] := 110;
   sgItems.ColWidths[6] := 140;
   sgItems.ColWidths[7] := 90;
+  EnableGridColumnSizing(sgItems);
 
   cboKind.OnChange := KindChange;
   cboDue.OnChange := DueChange;

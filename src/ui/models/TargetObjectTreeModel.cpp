@@ -6,8 +6,15 @@
 #include "domain/TargetObjectType.h"
 #include "services/ReportService.h"
 
+#include <QDataStream>
 #include <QFont>
 #include <QHash>
+#include <QIODevice>
+#include <QMimeData>
+
+namespace {
+const char *kTargetObjectMime = "application/x-bsi-target-object-id";
+} // namespace
 
 TargetObjectTreeModel::TargetObjectTreeModel(QObject *parent)
     : QAbstractItemModel(parent)
@@ -51,6 +58,7 @@ void TargetObjectTreeModel::insertLayerGroups(int scopeIndex)
 void TargetObjectTreeModel::setTargetObjects(const QList<TargetObject> &objects)
 {
     beginResetModel();
+    m_objects = objects;
     m_nodes.clear();
     m_idToIndex.clear();
     m_progressSummaries.clear();
@@ -232,7 +240,92 @@ Qt::ItemFlags TargetObjectTreeModel::flags(const QModelIndex &index) const
 {
     if (!index.isValid())
         return Qt::NoItemFlags;
-    return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+    Qt::ItemFlags itemFlags = Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled;
+    if (!isLayerGroup(index)) {
+        const TargetObject object = targetObjectForIndex(index);
+        if (object.id > 0 && !isRootScopeTarget(object))
+            itemFlags |= Qt::ItemIsDragEnabled;
+    }
+    return itemFlags;
+}
+
+QStringList TargetObjectTreeModel::mimeTypes() const
+{
+    return {QString::fromLatin1(kTargetObjectMime)};
+}
+
+QMimeData *TargetObjectTreeModel::mimeData(const QModelIndexList &indexes) const
+{
+    for (const QModelIndex &index : indexes) {
+        if (!index.isValid() || isLayerGroup(index))
+            continue;
+        const TargetObject object = targetObjectForIndex(index);
+        if (object.id <= 0 || isRootScopeTarget(object))
+            continue;
+        auto *mime = new QMimeData();
+        QByteArray encoded;
+        QDataStream stream(&encoded, QIODevice::WriteOnly);
+        stream << object.id;
+        mime->setData(QString::fromLatin1(kTargetObjectMime), encoded);
+        return mime;
+    }
+    return nullptr;
+}
+
+Qt::DropActions TargetObjectTreeModel::supportedDropActions() const
+{
+    return Qt::MoveAction;
+}
+
+bool TargetObjectTreeModel::canDropMimeData(const QMimeData *data, Qt::DropAction action, int row,
+                                            int column, const QModelIndex &parent) const
+{
+    Q_UNUSED(row)
+    Q_UNUSED(column)
+    Q_UNUSED(action)
+    if (data == nullptr || !data->hasFormat(QString::fromLatin1(kTargetObjectMime)))
+        return false;
+    if (!parent.isValid())
+        return false;
+
+    QByteArray encoded = data->data(QString::fromLatin1(kTargetObjectMime));
+    QDataStream stream(&encoded, QIODevice::ReadOnly);
+    int objectId = 0;
+    stream >> objectId;
+    const TargetObject moving = findTargetObjectById(m_objects, objectId);
+    if (moving.id == 0)
+        return false;
+
+    const bool layer = isLayerGroup(parent);
+    const TargetObject dropTarget = targetObjectForIndex(parent);
+    const QString reason = targetMoveRejectedReasonForDrop(m_objects, moving, dropTarget, layer);
+    if (!reason.isEmpty())
+        return false;
+    const int newParentId = moveDestinationParentId(m_objects, dropTarget, layer);
+    return newParentId != moving.parentId;
+}
+
+bool TargetObjectTreeModel::dropMimeData(const QMimeData *data, Qt::DropAction action, int row,
+                                         int column, const QModelIndex &parent)
+{
+    if (!canDropMimeData(data, action, row, column, parent))
+        return false;
+
+    QByteArray encoded = data->data(QString::fromLatin1(kTargetObjectMime));
+    QDataStream stream(&encoded, QIODevice::ReadOnly);
+    int objectId = 0;
+    stream >> objectId;
+    const TargetObject moving = findTargetObjectById(m_objects, objectId);
+    const bool layer = isLayerGroup(parent);
+    const TargetObject dropTarget = targetObjectForIndex(parent);
+    const int newParentId = moveDestinationParentId(m_objects, dropTarget, layer);
+    emit targetMoveRequested(moving.id, newParentId);
+    return true;
+}
+
+QList<TargetObject> TargetObjectTreeModel::targetObjects() const
+{
+    return m_objects;
 }
 
 TargetObject TargetObjectTreeModel::targetObjectForIndex(const QModelIndex &index) const

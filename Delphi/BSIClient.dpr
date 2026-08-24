@@ -53,6 +53,7 @@ uses
   ReportExporter in 'Services\ReportExporter.pas',
 
   SearchEditHelper in 'UI\SearchEditHelper.pas',
+  GridHelper in 'UI\GridHelper.pas',
 
   BausteinRecommendationService in 'Services\BausteinRecommendationService.pas',
 
@@ -65,6 +66,8 @@ uses
   f_projectopen in 'UI\f_projectopen.pas' {ProjectOpenForm},
 
   f_targetobject in 'UI\f_targetobject.pas' {TargetObjectForm},
+
+  f_movetarget in 'UI\f_movetarget.pas' {MoveTargetForm},
 
   f_measure in 'UI\f_measure.pas' {MeasureForm},
 

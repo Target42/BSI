@@ -20,6 +20,7 @@ type
     FReloginHandler: TReloginHandler;
     FLastError: string;
     FLastAuthFailure: Boolean;
+    FBaseUrlResolved: Boolean;
     function DoHttpRequest(const AMethod, APath: string; const ABody: string;
       const AContentType: string; out AStatus: Integer; AAllowRelogin: Boolean): TJSONValue;
     function BuildUrl(const APath: string): string;
@@ -28,6 +29,16 @@ type
     procedure ConfigureHttp;
     class function StreamToUtf8Bytes(AStream: TStream): TBytes; static;
     class function ParseUtf8Json(const ABytes: TBytes): TJSONValue; static;
+    class function NormalizeBaseUrl(const AValue: string): string; static;
+    class function EndsWithPath(const AUrl, APath: string): Boolean; static;
+    class function BaseUrlFromHealthUrl(const AUrl: string): string; static;
+    procedure ResolvePublicBaseUrlIfNeeded;
+    function IsmsReachableAt(const ABase: string; out AResolvedBase: string;
+      out AUnreachable: Boolean): Boolean;
+    function RawGet(const AUrl: string; out AStatus: Integer; out ABytes: TBytes): Boolean;
+    function ProbeHealth(const ABase: string; out AResolvedBase: string;
+      out AUnreachable: Boolean): Boolean;
+    function ProbeApiRoot(const ABase: string; out AUnreachable: Boolean): Boolean;
   public
     constructor Create(const ABaseUrl: string = '');
     destructor Destroy; override;
@@ -60,10 +71,14 @@ type
 
 implementation
 
+uses
+  IdURI;
+
 const
   kExpirySkewSeconds = 60;
   kDefaultReadTimeoutMs = 30000;
   kUploadReadTimeoutMs = 15 * 60 * 1000;
+  kProxyPrefixes: array[0..0] of string = ('/isms');
 
 constructor TApiClient.Create(const ABaseUrl: string);
 begin
@@ -84,20 +99,171 @@ begin
   inherited;
 end;
 
-procedure TApiClient.SetBaseUrl(const AValue: string);
+class function TApiClient.NormalizeBaseUrl(const AValue: string): string;
 var
-  S: string;
   ApiPos: Integer;
 begin
-  S := Trim(AValue);
-  while (S <> '') and (Copy(S, Length(S), 1) = '/') do
-    SetLength(S, Length(S) - 1);
-  ApiPos := Pos('/api/v1', LowerCase(S));
+  Result := Trim(AValue);
+  while (Result <> '') and (Copy(Result, Length(Result), 1) = '/') do
+    SetLength(Result, Length(Result) - 1);
+  ApiPos := Pos('/api/v1', LowerCase(Result));
   if ApiPos > 0 then
-    S := Copy(S, 1, ApiPos - 1);
-  while (S <> '') and (Copy(S, Length(S), 1) = '/') do
-    SetLength(S, Length(S) - 1);
-  FBaseUrl := S;
+    Result := Copy(Result, 1, ApiPos - 1);
+  while (Result <> '') and (Copy(Result, Length(Result), 1) = '/') do
+    SetLength(Result, Length(Result) - 1);
+end;
+
+class function TApiClient.EndsWithPath(const AUrl, APath: string): Boolean;
+begin
+  Result := (APath <> '') and (Length(AUrl) >= Length(APath)) and
+    SameText(Copy(AUrl, Length(AUrl) - Length(APath) + 1, Length(APath)), APath);
+end;
+
+class function TApiClient.BaseUrlFromHealthUrl(const AUrl: string): string;
+begin
+  Result := NormalizeBaseUrl(AUrl);
+  if EndsWithPath(Result, '/health') then
+    SetLength(Result, Length(Result) - Length('/health'));
+  Result := NormalizeBaseUrl(Result);
+end;
+
+procedure TApiClient.SetBaseUrl(const AValue: string);
+begin
+  FBaseUrl := NormalizeBaseUrl(AValue);
+  FBaseUrlResolved := False;
+end;
+
+function TApiClient.RawGet(const AUrl: string; out AStatus: Integer; out ABytes: TBytes): Boolean;
+var
+  ResponseStream: TMemoryStream;
+begin
+  Result := False;
+  AStatus := 0;
+  SetLength(ABytes, 0);
+  FHttp.Request.CustomHeaders.Clear;
+  FHttp.Request.Accept := 'application/json';
+  FHttp.Request.ContentType := '';
+  FHttp.Request.ContentLength := 0;
+  ResponseStream := TMemoryStream.Create;
+  try
+    try
+      FHttp.Get(AUrl, ResponseStream);
+      AStatus := FHttp.ResponseCode;
+      ABytes := StreamToUtf8Bytes(ResponseStream);
+      Result := True;
+    except
+      AStatus := FHttp.ResponseCode;
+    end;
+  finally
+    ResponseStream.Free;
+  end;
+end;
+
+function TApiClient.ProbeHealth(const ABase: string; out AResolvedBase: string;
+  out AUnreachable: Boolean): Boolean;
+var
+  Status: Integer;
+  Bytes: TBytes;
+  Doc: TJSONValue;
+  StatusValue: string;
+  FinalUrl: string;
+begin
+  Result := False;
+  AUnreachable := False;
+  AResolvedBase := ABase;
+  if not RawGet(ABase + '/health', Status, Bytes) then
+  begin
+    AUnreachable := True;
+    Exit;
+  end;
+  if Status <> 200 then
+    Exit;
+  Doc := ParseUtf8Json(Bytes);
+  try
+    if not (Doc is TJSONObject) then
+      Exit;
+    if not TJSONObject(Doc).TryGetValue<string>('status', StatusValue) then
+      Exit;
+    if not SameText(StatusValue, 'ok') then
+      Exit;
+  finally
+    Doc.Free;
+  end;
+  try
+    FinalUrl := FHttp.URL.GetFullURI([]);
+  except
+    FinalUrl := ABase + '/health';
+  end;
+  AResolvedBase := BaseUrlFromHealthUrl(FinalUrl);
+  if AResolvedBase = '' then
+    AResolvedBase := ABase;
+  Result := True;
+end;
+
+function TApiClient.ProbeApiRoot(const ABase: string; out AUnreachable: Boolean): Boolean;
+var
+  Status: Integer;
+  Bytes: TBytes;
+begin
+  Result := False;
+  AUnreachable := False;
+  if not RawGet(ABase + '/api/v1/auth/login', Status, Bytes) then
+  begin
+    AUnreachable := True;
+    Exit;
+  end;
+  // POST-only login: Chi answers GET with 405. nginx without the location yields 404.
+  Result := (Status = 400) or (Status = 401) or (Status = 405) or (Status = 415) or
+    (Status = 422);
+end;
+
+function TApiClient.IsmsReachableAt(const ABase: string; out AResolvedBase: string;
+  out AUnreachable: Boolean): Boolean;
+begin
+  AResolvedBase := ABase;
+  if ProbeHealth(ABase, AResolvedBase, AUnreachable) then
+    Exit(True);
+  if AUnreachable then
+    Exit(False);
+  Result := ProbeApiRoot(ABase, AUnreachable);
+  if Result then
+    AResolvedBase := ABase;
+end;
+
+procedure TApiClient.ResolvePublicBaseUrlIfNeeded;
+var
+  Resolved: string;
+  Unreachable: Boolean;
+  Prefix: string;
+  Candidate: string;
+begin
+  if FBaseUrlResolved then
+    Exit;
+  FBaseUrlResolved := True;
+  if Trim(FBaseUrl) = '' then
+    Exit;
+
+  if IsmsReachableAt(FBaseUrl, Resolved, Unreachable) then
+  begin
+    FBaseUrl := Resolved;
+    Exit;
+  end;
+  if Unreachable then
+    Exit;
+
+  for Prefix in kProxyPrefixes do
+  begin
+    if EndsWithPath(FBaseUrl, Prefix) then
+      Continue;
+    Candidate := FBaseUrl + Prefix;
+    if IsmsReachableAt(Candidate, Resolved, Unreachable) then
+    begin
+      FBaseUrl := Resolved;
+      Exit;
+    end;
+    if Unreachable then
+      Exit;
+  end;
 end;
 
 function TApiClient.GetBaseUrl: string;
@@ -250,6 +416,7 @@ begin
   end;
 
   ConfigureHttp;
+  ResolvePublicBaseUrlIfNeeded;
   FHttp.Request.Accept := 'application/json';
   FHttp.Request.AcceptCharSet := 'utf-8';
   FHttp.Request.CustomHeaders.Clear;
@@ -468,6 +635,7 @@ begin
   end;
 
   ConfigureHttp;
+  ResolvePublicBaseUrlIfNeeded;
   FHttp.Request.CustomHeaders.Clear;
   if FAccessToken <> '' then
     FHttp.Request.CustomHeaders.AddValue('Authorization', 'Bearer ' + FAccessToken);

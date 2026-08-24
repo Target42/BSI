@@ -8,6 +8,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSslError>
+#include <QStringList>
 #include <QTimeZone>
 
 namespace {
@@ -30,15 +31,14 @@ QString networkFailureMessage(const QString &errorString)
 } // namespace
 
 ApiClient::ApiClient(const QString &baseUrl)
-    : m_baseUrl(baseUrl)
 {
+    setBaseUrl(baseUrl);
 }
 
 void ApiClient::setBaseUrl(const QString &baseUrl)
 {
-    m_baseUrl = baseUrl.trimmed();
-    while (m_baseUrl.endsWith(QLatin1Char('/')))
-        m_baseUrl.chop(1);
+    m_baseUrl = normalizeBaseUrl(baseUrl);
+    m_baseUrlResolved = false;
 }
 
 QString ApiClient::baseUrl() const
@@ -240,6 +240,7 @@ QJsonDocument ApiClient::sendRequest(const QByteArray &method, const QString &pa
     }
 
     QNetworkAccessManager manager;
+    resolvePublicBaseUrlIfNeeded();
     QNetworkRequest request(buildUrl(path));
     if (!contentType.isEmpty())
         request.setHeader(QNetworkRequest::ContentTypeHeader, contentType);
@@ -307,6 +308,165 @@ QJsonDocument ApiClient::sendRequest(const QByteArray &method, const QString &pa
     }
 
     return doc;
+}
+
+QString ApiClient::normalizeBaseUrl(const QString &baseUrl)
+{
+    QString url = baseUrl.trimmed();
+    while (url.endsWith(QLatin1Char('/')))
+        url.chop(1);
+    const int apiPos = url.toLower().indexOf(QLatin1String("/api/v1"));
+    if (apiPos >= 0)
+        url = url.left(apiPos);
+    while (url.endsWith(QLatin1Char('/')))
+        url.chop(1);
+    return url;
+}
+
+bool ApiClient::endsWithPath(const QString &url, const QString &path)
+{
+    return !path.isEmpty() && url.endsWith(path, Qt::CaseInsensitive);
+}
+
+QString ApiClient::baseUrlFromHealthUrl(const QUrl &url)
+{
+    QString resolved = normalizeBaseUrl(
+        url.toString(QUrl::RemoveQuery | QUrl::RemoveFragment | QUrl::StripTrailingSlash));
+    if (endsWithPath(resolved, QStringLiteral("/health")))
+        resolved.chop(QStringLiteral("/health").size());
+    return normalizeBaseUrl(resolved);
+}
+
+bool ApiClient::rawGet(const QUrl &url, int *status, QByteArray *payload, QUrl *finalUrl) const
+{
+    if (status)
+        *status = 0;
+    if (payload)
+        payload->clear();
+    if (finalUrl)
+        *finalUrl = url;
+
+    QNetworkAccessManager manager;
+    QNetworkRequest request(url);
+    request.setRawHeader("Accept", "application/json");
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(15000);
+#elif QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
+    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+#endif
+
+    QNetworkReply *reply = manager.get(request);
+    if (!reply)
+        return false;
+    configureTls(reply);
+
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (status)
+        *status = code;
+    if (payload)
+        *payload = reply->readAll();
+    if (finalUrl)
+        *finalUrl = reply->url();
+
+    const bool networkOk = !(reply->error() && code == 0);
+    delete reply;
+    return networkOk;
+}
+
+bool ApiClient::probeHealth(const QString &base, QString *resolvedBase, bool *unreachable) const
+{
+    if (resolvedBase)
+        *resolvedBase = base;
+    if (unreachable)
+        *unreachable = false;
+
+    int status = 0;
+    QByteArray payload;
+    QUrl finalUrl;
+    if (!rawGet(QUrl(base + QStringLiteral("/health")), &status, &payload, &finalUrl)) {
+        if (unreachable)
+            *unreachable = true;
+        return false;
+    }
+    if (status != 200)
+        return false;
+
+    const QJsonDocument doc = QJsonDocument::fromJson(payload);
+    if (!doc.isObject())
+        return false;
+    if (doc.object().value(QStringLiteral("status")).toString() != QLatin1String("ok"))
+        return false;
+
+    const QString resolved = baseUrlFromHealthUrl(finalUrl);
+    if (resolvedBase)
+        *resolvedBase = resolved.isEmpty() ? base : resolved;
+    return true;
+}
+
+bool ApiClient::probeApiRoot(const QString &base, bool *unreachable) const
+{
+    if (unreachable)
+        *unreachable = false;
+
+    int status = 0;
+    QByteArray payload;
+    QUrl finalUrl;
+    if (!rawGet(QUrl(base + QStringLiteral("/api/v1/auth/login")), &status, &payload, &finalUrl)) {
+        if (unreachable)
+            *unreachable = true;
+        return false;
+    }
+    Q_UNUSED(payload)
+    Q_UNUSED(finalUrl)
+    return status == 400 || status == 401 || status == 405 || status == 415 || status == 422;
+}
+
+bool ApiClient::ismsReachableAt(const QString &base, QString *resolvedBase, bool *unreachable) const
+{
+    if (probeHealth(base, resolvedBase, unreachable))
+        return true;
+    if (unreachable && *unreachable)
+        return false;
+    if (resolvedBase)
+        *resolvedBase = base;
+    return probeApiRoot(base, unreachable);
+}
+
+void ApiClient::resolvePublicBaseUrlIfNeeded() const
+{
+    if (m_baseUrlResolved)
+        return;
+    m_baseUrlResolved = true;
+    if (m_baseUrl.trimmed().isEmpty())
+        return;
+
+    QString resolved;
+    bool unreachable = false;
+    if (ismsReachableAt(m_baseUrl, &resolved, &unreachable)) {
+        m_baseUrl = resolved;
+        return;
+    }
+    if (unreachable)
+        return;
+
+    static const QStringList kProxyPrefixes{QStringLiteral("/isms")};
+    for (const QString &prefix : kProxyPrefixes) {
+        if (endsWithPath(m_baseUrl, prefix))
+            continue;
+        const QString candidate = m_baseUrl + prefix;
+        if (ismsReachableAt(candidate, &resolved, &unreachable)) {
+            m_baseUrl = resolved;
+            return;
+        }
+        if (unreachable)
+            return;
+    }
 }
 
 void ApiClient::configureTls(QNetworkReply *reply) const

@@ -66,7 +66,9 @@ private slots:
     void deleteMeasure();
     void addTargetObject();
     void editTargetObject();
+    void moveTargetObject();
     void deleteTargetObject();
+    void refreshProject();
     void showTargetObjectContextMenu(const QPoint &pos);
     void showBausteinContextMenu(const QPoint &pos);
     void setBausteinApplicability(ApplicabilityStatus status);
@@ -146,6 +148,8 @@ private:
     TargetObject findRootScope(const QList<TargetObject> &objects) const;
     TargetObject resolveParentForNewTarget(const QList<TargetObject> &objects) const;
     bool canDeleteActiveTarget() const;
+    bool applyTargetObjectMove(int objectId, int newParentId, bool showErrors);
+    void requestTargetObjectMove(int objectId, int newParentId);
     void showTemporaryStatusMessage(const QString &message, int timeoutMs = 5000);
     void configureRemoteSessionWatcher();
     int activeTargetObjectId() const;
@@ -222,7 +226,9 @@ private:
     QAction *m_deleteProjectAction = nullptr;
     QAction *m_addTargetAction = nullptr;
     QAction *m_editTargetAction = nullptr;
+    QAction *m_moveTargetAction = nullptr;
     QAction *m_deleteTargetAction = nullptr;
+    QAction *m_refreshProjectAction = nullptr;
     QAction *m_applyRecommendationsAction = nullptr;
     QAction *m_manageMembersAction = nullptr;
     QAction *m_switchUserAction = nullptr;

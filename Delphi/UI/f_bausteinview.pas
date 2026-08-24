@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Grids, Vcl.ComCtrls,
-  IsmsDomain, RequirementTextFormatter, SearchEditHelper;
+  IsmsDomain, RequirementTextFormatter, SearchEditHelper, GridHelper;
 
 type
   TBausteinViewForm = class(TForm)
@@ -92,6 +92,7 @@ begin
   sgRequirements.ColWidths[1] := 360;
   sgRequirements.ColWidths[2] := 80;
   sgRequirements.ColWidths[3] := 120;
+  EnableGridColumnSizing(sgRequirements);
 end;
 
 function TextContains(const AHaystack, ANeedle: string): Boolean;

@@ -38,6 +38,7 @@ SOURCES += \
     src/ui/dialogs/CreateUserDialog.cpp \
     src/ui/dialogs/LoginDialog.cpp \
     src/ui/dialogs/MeasureDialog.cpp \
+    src/ui/dialogs/MoveTargetObjectDialog.cpp \
     src/ui/dialogs/ProjectOpenDialog.cpp \
     src/ui/dialogs/ProjectDialog.cpp \
     src/ui/dialogs/ProjectMembersDialog.cpp \
@@ -98,6 +99,7 @@ HEADERS += \
     src/services/ReportExporter.h \
     src/services/ReportService.h \
     src/ui/MainWindow.h \
+    src/ui/TableViewHelper.h \
     src/ui/dialogs/BausteinRecommendationDialog.h \
     src/ui/dialogs/BausteinViewDialog.h \
     src/ui/dialogs/CatalogSearchDialog.h \
@@ -105,6 +107,7 @@ HEADERS += \
     src/ui/dialogs/CreateUserDialog.h \
     src/ui/dialogs/LoginDialog.h \
     src/ui/dialogs/MeasureDialog.h \
+    src/ui/dialogs/MoveTargetObjectDialog.h \
     src/ui/dialogs/ProjectOpenDialog.h \
     src/ui/dialogs/ProjectDialog.h \
     src/ui/dialogs/ProjectMembersDialog.h \

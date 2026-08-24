@@ -2,12 +2,12 @@
 
 #include "domain/ProtectionNeed.h"
 #include "services/BausteinRecommendationService.h"
+#include "ui/TableViewHelper.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -52,11 +52,7 @@ BausteinRecommendationDialog::BausteinRecommendationDialog(
     m_table->setColumnCount(ColumnCount);
     m_table->setHorizontalHeaderLabels(
         {tr("Übernehmen"), tr("Baustein"), tr("Empfehlung"), tr("Begründung"), tr("Aktuell")});
-    m_table->horizontalHeader()->setSectionResizeMode(BausteinColumn, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(ReasonColumn, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(SelectColumn, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(TierColumn, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(StatusColumn, QHeaderView::ResizeToContents);
+    enableResizableColumns(m_table);
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     populateTable();

@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   System.Generics.Collections, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
-  Vcl.StdCtrls, Vcl.Grids, IsmsDomain, BausteinRecommendationService;
+  Vcl.StdCtrls, Vcl.Grids, IsmsDomain, BausteinRecommendationService, GridHelper;
 
 type
   TBausteinRecommendationForm = class(TForm)
@@ -78,6 +78,7 @@ begin
   sgRecommendations.ColWidths[2] := 90;
   sgRecommendations.ColWidths[3] := 320;
   sgRecommendations.ColWidths[4] := 100;
+  EnableGridColumnSizing(sgRecommendations);
 end;
 
 procedure TBausteinRecommendationForm.Populate(

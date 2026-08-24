@@ -2,10 +2,10 @@
 
 #include "catalog/RequirementTextFormatter.h"
 #include "ui/dialogs/BausteinViewDialog.h"
+#include "ui/TableViewHelper.h"
 
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -106,11 +106,7 @@ CatalogSearchDialog::CatalogSearchDialog(const QList<Baustein> &bausteine,
     m_table->setColumnCount(ColumnCount);
     m_table->setHorizontalHeaderLabels(
         {tr("Kapitel"), tr("Baustein"), tr("Anforderung"), tr("Fundstelle"), tr("Auszug")});
-    m_table->horizontalHeader()->setSectionResizeMode(GroupColumn, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(BausteinColumn, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(RequirementColumn, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(FieldColumn, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(SnippetColumn, QHeaderView::Stretch);
+    enableResizableColumns(m_table);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);

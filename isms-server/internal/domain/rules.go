@@ -95,6 +95,42 @@ func IsRootScopeTarget(parentID int64, objectType string) bool {
 	return parentID == 0 && NormalizeTargetObjectType(objectType) == TargetTypeScope
 }
 
+func FindTargetByID(items []TargetObject, id int64) (TargetObject, bool) {
+	if id <= 0 {
+		return TargetObject{}, false
+	}
+	for _, item := range items {
+		if item.ID == id {
+			return item, true
+		}
+	}
+	return TargetObject{}, false
+}
+
+func WouldCreateParentCycle(items []TargetObject, objectID, newParentID int64) bool {
+	if objectID <= 0 || newParentID <= 0 {
+		return false
+	}
+	byID := make(map[int64]TargetObject, len(items))
+	for _, item := range items {
+		if item.ID > 0 {
+			byID[item.ID] = item
+		}
+	}
+	current := newParentID
+	for guard := 0; current > 0 && guard < 64; guard++ {
+		if current == objectID {
+			return true
+		}
+		item, ok := byID[current]
+		if !ok {
+			return false
+		}
+		current = item.ParentID
+	}
+	return false
+}
+
 func CanInheritAssessments(parentType, childType string) bool {
 	parent := NormalizeTargetObjectType(parentType)
 	child := NormalizeTargetObjectType(childType)

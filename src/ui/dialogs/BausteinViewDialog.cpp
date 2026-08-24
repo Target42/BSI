@@ -2,9 +2,9 @@
 
 #include "catalog/RequirementTextFormatter.h"
 #include "domain/RequirementLevel.h"
+#include "ui/TableViewHelper.h"
 
 #include <QDialogButtonBox>
-#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QTableWidget>
@@ -60,10 +60,7 @@ BausteinViewDialog::BausteinViewDialog(const Baustein &baustein,
     m_table->setColumnCount(ColumnCount);
     m_table->setHorizontalHeaderLabels(
         {tr("Anforderung"), tr("Titel"), tr("Stufe"), tr("Rolle")});
-    m_table->horizontalHeader()->setSectionResizeMode(IdColumn, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(TitleColumn, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(LevelColumn, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(RoleColumn, QHeaderView::ResizeToContents);
+    enableResizableColumns(m_table);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);

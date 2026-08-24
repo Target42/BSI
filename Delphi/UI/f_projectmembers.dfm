@@ -31,7 +31,7 @@ object ProjectMembersForm: TProjectMembersForm
     DefaultRowHeight = 22
     FixedCols = 0
     RowCount = 2
-    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goColSizing, goRangeSelect, goRowSelect, goThumbTracking]
     TabOrder = 0
     OnSelectCell = sgMembersSelectCell
     ColWidths = (

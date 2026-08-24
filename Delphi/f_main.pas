@@ -7,13 +7,14 @@ uses
   System.Generics.Collections, System.Math, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.Menus, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.Grids,
   IsmsDomain, AppContext, AppPaths, FireDAC.UI.Intf, FireDAC.VCLUI.Wait,
-  FireDAC.Stan.Intf, FireDAC.Comp.UI, Vcl.ToolWin, SearchEditHelper;
+  FireDAC.Stan.Intf, FireDAC.Comp.UI, Vcl.ToolWin, SearchEditHelper, GridHelper;
 
 type
   TMainForm = class(TForm)
     ToolBar: TToolBar;
     btnToolNewProject: TToolButton;
     btnToolOpenProject: TToolButton;
+    btnToolRefresh: TToolButton;
     btnToolAddTarget: TToolButton;
     btnToolImportCatalog: TToolButton;
     StatusBar: TStatusBar;
@@ -35,6 +36,7 @@ type
     mnuTargets: TPopupMenu;
     mniTargetAdd: TMenuItem;
     mniTargetEdit: TMenuItem;
+    mniTargetMove: TMenuItem;
     mniTargetDelete: TMenuItem;
     mniTargetSep: TMenuItem;
     mniTargetRecommendations: TMenuItem;
@@ -84,6 +86,8 @@ type
     mnuSep1: TMenuItem;
     mnuExit: TMenuItem;
     mnuProject: TMenuItem;
+    mnuRefreshProject: TMenuItem;
+    mnuSepRefresh: TMenuItem;
     mnuEditProject: TMenuItem;
     mnuDeleteProject: TMenuItem;
     mnuManageMembers: TMenuItem;
@@ -92,6 +96,7 @@ type
     mnuSepSession: TMenuItem;
     mnuAddTarget: TMenuItem;
     mnuEditTarget: TMenuItem;
+    mnuMoveTarget: TMenuItem;
     mnuDeleteTarget: TMenuItem;
     mnuSep3: TMenuItem;
     mnuApplyRecommendations: TMenuItem;
@@ -113,6 +118,8 @@ type
     procedure DoDeleteProject(Sender: TObject);
     procedure DoAddTarget(Sender: TObject);
     procedure DoEditTarget(Sender: TObject);
+    procedure DoMoveTarget(Sender: TObject);
+    procedure DoRefreshProject(Sender: TObject);
     procedure DoDeleteTarget(Sender: TObject);
     procedure DoShowSollIstReport(Sender: TObject);
     procedure DoShowCockpit(Sender: TObject);
@@ -147,6 +154,10 @@ type
     procedure DoSwitchUser(Sender: TObject);
     procedure CheckRemoteSession(Sender: TObject);
     procedure tvTargetsContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
+    procedure tvTargetsStartDrag(Sender: TObject; var DragObject: TDragObject);
+    procedure tvTargetsDragOver(Sender, Source: TObject; X, Y: Integer; State: TDragState;
+      var Accept: Boolean);
+    procedure tvTargetsDragDrop(Sender, Source: TObject; X, Y: Integer);
     procedure cboAssignedBausteineChange(Sender: TObject);
     procedure chkHighlightRecommendationsClick(Sender: TObject);
     procedure BausteinViewMenuClick(Sender: TObject);
@@ -183,6 +194,8 @@ type
     FContextMenuBausteinId: Integer;
     FBlockTargetSelection: Boolean;
     FSuppressStatusFilterChange: Boolean;
+    FDragSourceId: Integer;
+    FDragObjects: TArray<TTargetObject>;
     FClearBausteinSearch: TSearchClearButton;
 
     procedure SetAppContext(const AContext: TAppContext);
@@ -219,6 +232,10 @@ type
     function FindRootScope(const Objects: TArray<TTargetObject>): TTargetObject;
     function ResolveParentForNewTarget(const Objects: TArray<TTargetObject>): TTargetObject;
     function CanDeleteActiveTarget: Boolean;
+    function ApplyTargetObjectMove(AObjectId, ANewParentId: Integer;
+      AShowErrors: Boolean): Boolean;
+    function ParentIdForDropNode(Node: TTreeNode; const Objects: TArray<TTargetObject>;
+      const AMoving: TTargetObject; out AParentId: Integer; out AError: string): Boolean;
     function IsLayerGroupNode(Node: TTreeNode; out AType: TTargetObjectType): Boolean;
     function BuildBausteinCaption(const B: TBaustein): string;
     function MatchingBausteinIdsForSearch(const ANeedle: string): TDictionary<Integer, Byte>;
@@ -266,7 +283,7 @@ var
 implementation
 
 uses
-  f_project, f_projectopen, f_targetobject, f_measure, f_report, f_cockpit,
+  f_project, f_projectopen, f_targetobject, f_movetarget, f_measure, f_report, f_cockpit,
   ReportService, RequirementTextFormatter, BausteinRecommendationService, AppSession,
   f_bausteinview, f_catalogsearch, f_bausteinrecommendation, f_projectmembers,
   InheritanceService;
@@ -381,6 +398,8 @@ begin
   sgMeasures.ColWidths[1] := 150;
   sgMeasures.ColWidths[2] := 90;
   sgMeasures.ColWidths[3] := 100;
+  EnableGridColumnSizing(sgRequirements);
+  EnableGridColumnSizing(sgMeasures);
 
   cboAssessmentStatus.Items.Add(AssessmentStatusToString(asOpen));
   cboAssessmentStatus.Items.Add(AssessmentStatusToString(asPartial));
@@ -593,7 +612,10 @@ begin
   mnuDeleteProject.Enabled := HasProject and CanDelete;
   mnuAddTarget.Enabled := HasProject and CanEdit;
   mnuEditTarget.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
+  mnuMoveTarget.Enabled := CanDeleteActiveTarget;
   mnuDeleteTarget.Enabled := CanDeleteActiveTarget;
+  mnuRefreshProject.Enabled := HasProject;
+  btnToolRefresh.Enabled := HasProject;
   mnuSollIst.Enabled := HasProject;
   mnuCockpit.Enabled := HasProject;
   mnuApplyRecommendations.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
@@ -1938,6 +1960,107 @@ begin
   ReloadTargetObjects(O.Id);
 end;
 
+procedure TMainForm.DoRefreshProject(Sender: TObject);
+begin
+  if not HasActiveProject then
+    Exit;
+  SaveCurrentAssessment;
+  PersistSessionSelection;
+  ReloadTargetObjects(FActiveTarget.Id);
+  if FActiveBausteinId > 0 then
+    LoadRequirementsForBaustein(FActiveBausteinId);
+  ShowTemporaryStatusMessage('Projektstand aktualisiert');
+end;
+
+function TMainForm.ApplyTargetObjectMove(AObjectId, ANewParentId: Integer;
+  AShowErrors: Boolean): Boolean;
+var
+  Objects: TArray<TTargetObject>;
+  O, Parent: TTargetObject;
+  Error: string;
+begin
+  Result := False;
+  if not CanEditActiveProject or (AObjectId <= 0) or (ANewParentId <= 0) then
+    Exit;
+  Objects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
+  O := FindTargetById(Objects, AObjectId);
+  Error := TargetMoveRejectedReason(Objects, O, ANewParentId);
+  if Error <> '' then
+  begin
+    if AShowErrors then
+      MessageDlg(Error, mtInformation, [mbOK], 0);
+    Exit;
+  end;
+  if O.ParentId = ANewParentId then
+    Exit(True);
+  O.ParentId := ANewParentId;
+  Parent := FindTargetById(Objects, ANewParentId);
+  FinalizeTargetObjectProtectionNeed(O, Parent);
+  if not FContext.TargetObjectRepository.UpdateTargetObject(O) then
+  begin
+    if AShowErrors then
+      MessageDlg('Verschieben fehlgeschlagen: ' + FContext.TargetObjectRepository.LastError,
+        mtError, [mbOK], 0);
+    Exit;
+  end;
+  if FActiveTarget.Id = O.Id then
+    FActiveTarget := O;
+  Result := True;
+end;
+
+function TMainForm.ParentIdForDropNode(Node: TTreeNode; const Objects: TArray<TTargetObject>;
+  const AMoving: TTargetObject; out AParentId: Integer; out AError: string): Boolean;
+var
+  Layer: TTargetObjectType;
+  Dest: TTargetObject;
+  Scope: TTargetObject;
+begin
+  Result := False;
+  AParentId := 0;
+  AError := '';
+  if Node = nil then
+  begin
+    AError := 'Bitte ein Ziel w'#$00E4'hlen.';
+    Exit;
+  end;
+  Scope := FindRootScope(Objects);
+  if IsLayerGroupNode(Node, Layer) then
+  begin
+    if Layer <> AMoving.ObjType then
+    begin
+      AError := Format('Dieses Zielobjekt geh'#$00F6'rt in die Schicht ' + #$201E + '%s' + #$201C + '.',
+        [TargetObjectLayerGroupTitle(AMoving.ObjType)]);
+      Exit;
+    end;
+    AParentId := Scope.Id;
+  end
+  else
+  begin
+    Dest := FindTargetById(Objects, Integer(Node.Data));
+    AParentId := Dest.Id;
+  end;
+  AError := TargetMoveRejectedReason(Objects, AMoving, AParentId);
+  Result := AError = '';
+end;
+
+procedure TMainForm.DoMoveTarget(Sender: TObject);
+var
+  Objects: TArray<TTargetObject>;
+  ParentId: Integer;
+begin
+  if not CanEditActiveProject then
+    Exit;
+  if (FActiveTarget.Id = 0) or IsRootScopeTarget(FActiveTarget) then
+    Exit;
+  Objects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
+  if not TMoveTargetForm.Execute(Objects, FActiveTarget, ParentId) then
+    Exit;
+  if not ApplyTargetObjectMove(FActiveTarget.Id, ParentId, True) then
+    Exit;
+  ReloadTargetObjects(FActiveTarget.Id);
+  ShowTemporaryStatusMessage('Zielobjekt verschoben');
+end;
+
 procedure TMainForm.DoDeleteTarget(Sender: TObject);
 begin
   if not HasActiveProject then
@@ -2765,11 +2888,70 @@ begin
     mniTargetAdd.Caption := 'Zielobjekt hinzuf'#$00FC'gen'#$2026;
   mniTargetEdit.Visible := HasTarget and not OnLayer;
   mniTargetEdit.Enabled := HasTarget and not OnLayer;
+  mniTargetMove.Visible := CanDeleteActiveTarget and not OnLayer;
+  mniTargetMove.Enabled := CanDeleteActiveTarget and not OnLayer;
   mniTargetDelete.Visible := HasTarget and not OnLayer;
   mniTargetDelete.Enabled := CanDeleteActiveTarget and not OnLayer;
   mniTargetSep.Visible := HasTarget and not OnLayer;
   mniTargetRecommendations.Visible := HasTarget and not OnLayer;
   mniTargetRecommendations.Enabled := HasTarget and not OnLayer;
+end;
+
+procedure TMainForm.tvTargetsStartDrag(Sender: TObject; var DragObject: TDragObject);
+var
+  Layer: TTargetObjectType;
+begin
+  FDragSourceId := 0;
+  SetLength(FDragObjects, 0);
+  if not CanEditActiveProject then
+    Exit;
+  if (tvTargets.Selected = nil) or IsLayerGroupNode(tvTargets.Selected, Layer) then
+    Exit;
+  FDragSourceId := Integer(tvTargets.Selected.Data);
+  if FDragSourceId <= 0 then
+    Exit;
+  FDragObjects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
+end;
+
+procedure TMainForm.tvTargetsDragOver(Sender, Source: TObject; X, Y: Integer; State: TDragState;
+  var Accept: Boolean);
+var
+  Moving: TTargetObject;
+  Node: TTreeNode;
+  ParentId: Integer;
+  Error: string;
+begin
+  Accept := False;
+  if (Source <> tvTargets) or (FDragSourceId <= 0) then
+    Exit;
+  Moving := FindTargetById(FDragObjects, FDragSourceId);
+  Node := tvTargets.GetNodeAt(X, Y);
+  if not ParentIdForDropNode(Node, FDragObjects, Moving, ParentId, Error) then
+    Exit;
+  Accept := ParentId <> Moving.ParentId;
+end;
+
+procedure TMainForm.tvTargetsDragDrop(Sender, Source: TObject; X, Y: Integer);
+var
+  Moving: TTargetObject;
+  Node: TTreeNode;
+  ParentId: Integer;
+  Error: string;
+begin
+  if (Source <> tvTargets) or (FDragSourceId <= 0) then
+    Exit;
+  Moving := FindTargetById(FDragObjects, FDragSourceId);
+  Node := tvTargets.GetNodeAt(X, Y);
+  if not ParentIdForDropNode(Node, FDragObjects, Moving, ParentId, Error) then
+  begin
+    if Error <> '' then
+      MessageDlg(Error, mtInformation, [mbOK], 0);
+    Exit;
+  end;
+  if not ApplyTargetObjectMove(Moving.Id, ParentId, True) then
+    Exit;
+  ReloadTargetObjects(Moving.Id);
+  ShowTemporaryStatusMessage('Zielobjekt verschoben');
 end;
 
 procedure TMainForm.BausteinViewMenuClick(Sender: TObject);

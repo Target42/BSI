@@ -63,6 +63,27 @@ func TestIsAllowedChildTargetType(t *testing.T) {
 	}
 }
 
+func TestWouldCreateParentCycle(t *testing.T) {
+	items := []TargetObject{
+		{ID: 1, ParentID: 0, Type: TargetTypeScope},
+		{ID: 2, ParentID: 1, Type: TargetTypeITSystem},
+		{ID: 3, ParentID: 2, Type: TargetTypeApplication},
+		{ID: 4, ParentID: 1, Type: TargetTypeProcess},
+	}
+	if !WouldCreateParentCycle(items, 2, 3) {
+		t.Fatal("moving a system under its own application should cycle")
+	}
+	if WouldCreateParentCycle(items, 3, 1) {
+		t.Fatal("moving an application under the scope should not cycle")
+	}
+	if WouldCreateParentCycle(items, 3, 4) {
+		t.Fatal("moving an application under a sibling process should not cycle")
+	}
+	if !WouldCreateParentCycle(items, 3, 3) {
+		t.Fatal("moving an object under itself should cycle")
+	}
+}
+
 func TestIsRootScopeTarget(t *testing.T) {
 	if !IsRootScopeTarget(0, "Geltungsbereich") {
 		t.Fatal("Geltungsbereich at root should be treated as Informationsverbund")

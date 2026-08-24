@@ -166,6 +166,11 @@ begin
       if not Client.ValidateSession(Err) then
         Exit;
       FSettings.UseRemote := True;
+      if Client.GetBaseUrl <> FSettings.ServerUrl then
+      begin
+        FSettings.ServerUrl := Client.GetBaseUrl;
+        FSettings.Save;
+      end;
       Result := True;
     finally
       Client.Free;
@@ -218,6 +223,7 @@ begin
       MessageDlg(Err, mtError, [mbOK], 0);
       Exit;
     end;
+    FSettings.ServerUrl := Client.GetBaseUrl;
     FSettings.AccessToken := Client.AccessToken;
     FSettings.TokenExpiresAt := Client.TokenExpiresAt;
     FSettings.Save;

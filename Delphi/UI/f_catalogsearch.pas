@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   System.Generics.Collections, System.Math, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.StdCtrls, Vcl.Grids, Vcl.ComCtrls, Vcl.ExtCtrls, IsmsDomain, AppContext,
-  RequirementTextFormatter, f_bausteinview, SearchEditHelper;
+  RequirementTextFormatter, f_bausteinview, SearchEditHelper, GridHelper;
 
 type
   TSearchHit = record
@@ -124,6 +124,7 @@ begin
   sgResults.ColWidths[2] := 220;
   sgResults.ColWidths[3] := 120;
   sgResults.ColWidths[4] := 360;
+  EnableGridColumnSizing(sgResults);
 end;
 
 function ContainsNeedle(const AHaystack, ANeedle: string): Boolean;

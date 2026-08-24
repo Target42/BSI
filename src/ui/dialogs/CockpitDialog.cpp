@@ -2,12 +2,12 @@
 
 #include "services/CockpitService.h"
 #include "ui/models/CockpitTableModel.h"
+#include "ui/TableViewHelper.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -54,9 +54,7 @@ CockpitDialog::CockpitDialog(AppContext &context, const Project &project, const 
     m_table->setAlternatingRowColors(true);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->horizontalHeader()->setSectionResizeMode(CockpitTableModel::TitleColumn,
-                                                      QHeaderView::Stretch);
+    enableResizableColumns(m_table);
 
     connect(m_kindBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &CockpitDialog::applyFilter);

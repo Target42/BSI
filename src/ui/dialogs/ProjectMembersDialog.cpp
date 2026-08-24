@@ -2,6 +2,7 @@
 
 #include "net/HttpTeamService.h"
 #include "ui/dialogs/CreateUserDialog.h"
+#include "ui/TableViewHelper.h"
 
 #include <QComboBox>
 #include <QCoreApplication>
@@ -9,7 +10,6 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -52,9 +52,7 @@ ProjectMembersDialog::ProjectMembersDialog(ApiClient &client, int projectId,
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    enableResizableColumns(m_table);
     connect(m_table, &QTableWidget::itemSelectionChanged, this,
             &ProjectMembersDialog::onSelectionChanged);
 

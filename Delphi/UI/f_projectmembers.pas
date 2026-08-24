@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   System.Generics.Collections, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.StdCtrls, Vcl.Grids, Vcl.ExtCtrls, IsmsDomain, ApiClient, HttpTeamService,
-  f_createuser;
+  f_createuser, GridHelper;
 
 type
   TProjectMembersForm = class(TForm)
@@ -91,6 +91,7 @@ begin
   sgMembers.Cells[0, 0] := 'Name';
   sgMembers.Cells[1, 0] := 'E-Mail';
   sgMembers.Cells[2, 0] := 'Rolle';
+  EnableGridColumnSizing(sgMembers);
 end;
 
 procedure TProjectMembersForm.ConfigureManagementUi;

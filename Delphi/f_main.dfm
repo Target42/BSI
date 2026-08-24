@@ -45,14 +45,20 @@ object MainForm: TMainForm
       Caption = 'Projekt '#246'ffnen'
       OnClick = DoOpenProject
     end
-    object btnToolAddTarget: TToolButton
+    object btnToolRefresh: TToolButton
       Left = 244
+      Top = 0
+      Caption = 'Aktualisieren'
+      OnClick = DoRefreshProject
+    end
+    object btnToolAddTarget: TToolButton
+      Left = 366
       Top = 0
       Caption = 'Zielobjekt hinzuf'#252'gen'
       OnClick = DoAddTarget
     end
     object btnToolImportCatalog: TToolButton
-      Left = 366
+      Left = 488
       Top = 0
       Caption = 'Katalog importieren'
       OnClick = DoImportCatalog
@@ -118,6 +124,7 @@ object MainForm: TMainForm
         Width = 304
         Height = 212
         Anchors = [akLeft, akTop, akRight, akBottom]
+        DragMode = dmAutomatic
         HideSelection = False
         Indent = 19
         PopupMenu = mnuTargets
@@ -126,6 +133,9 @@ object MainForm: TMainForm
         OnChange = tvTargetsChange
         OnClick = tvTargetsClick
         OnContextPopup = tvTargetsContextPopup
+        OnDragDrop = tvTargetsDragDrop
+        OnDragOver = tvTargetsDragOver
+        OnStartDrag = tvTargetsStartDrag
       end
     end
     object grpBausteine: TGroupBox
@@ -342,7 +352,7 @@ object MainForm: TMainForm
         DefaultRowHeight = 20
         FixedCols = 0
         RowCount = 2
-        Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
+        Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goColSizing, goRangeSelect, goRowSelect, goThumbTracking]
         TabOrder = 6
         OnDrawCell = sgRequirementsDrawCell
         OnSelectCell = sgRequirementsSelectCell
@@ -474,7 +484,7 @@ object MainForm: TMainForm
           DefaultRowHeight = 20
           FixedCols = 0
           RowCount = 2
-          Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
+          Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goColSizing, goRangeSelect, goRowSelect, goThumbTracking]
           TabOrder = 0
           OnDblClick = sgMeasuresDblClick
         end
@@ -543,6 +553,14 @@ object MainForm: TMainForm
     end
     object mnuProject: TMenuItem
       Caption = 'Projekt'
+      object mnuRefreshProject: TMenuItem
+        Caption = 'Aktualisieren'
+        ShortCut = 116
+        OnClick = DoRefreshProject
+      end
+      object mnuSepRefresh: TMenuItem
+        Caption = '-'
+      end
       object mnuEditProject: TMenuItem
         Caption = 'Projekteigenschaften'#8230
         OnClick = DoEditProject
@@ -573,6 +591,10 @@ object MainForm: TMainForm
       object mnuEditTarget: TMenuItem
         Caption = 'Zielobjekt bearbeiten'#8230
         OnClick = DoEditTarget
+      end
+      object mnuMoveTarget: TMenuItem
+        Caption = 'Zielobjekt verschieben'#8230
+        OnClick = DoMoveTarget
       end
       object mnuDeleteTarget: TMenuItem
         Caption = 'Zielobjekt l'#246'schen'#8230
@@ -656,6 +678,10 @@ object MainForm: TMainForm
     object mniTargetEdit: TMenuItem
       Caption = 'Zielobjekt bearbeiten'#8230
       OnClick = DoEditTarget
+    end
+    object mniTargetMove: TMenuItem
+      Caption = 'Verschieben'#8230
+      OnClick = DoMoveTarget
     end
     object mniTargetDelete: TMenuItem
       Caption = 'Zielobjekt l'#246'schen'#8230

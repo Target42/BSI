@@ -110,6 +110,9 @@ bool LoginDialog::trySilentLogin()
     if (!m_client.validateSession(&error))
         return false;
 
+    m_settings.setUseRemote(true);
+    m_settings.setServerUrl(m_client.baseUrl());
+    m_settings.save();
     accept();
     return true;
 }
@@ -161,5 +164,6 @@ void LoginDialog::tryAccept()
 
     m_settings.setAccessToken(m_client.accessToken());
     m_settings.setTokenExpiresAt(m_client.tokenExpiresAt());
+    m_settings.setServerUrl(m_client.baseUrl());
     accept();
 }

@@ -2,12 +2,12 @@
 
 #include "services/ReportExporter.h"
 #include "services/ReportService.h"
+#include "ui/TableViewHelper.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
@@ -30,9 +30,7 @@ ReportDialog::ReportDialog(AppContext &context,
     m_table = new QTableView(this);
     m_table->setModel(m_model);
     m_table->setAlternatingRowColors(true);
-    m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->horizontalHeader()->setSectionResizeMode(ReportTableModel::RequirementColumn,
-                                                      QHeaderView::Stretch);
+    enableResizableColumns(m_table);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
 
     m_scopeBox = new QComboBox(this);

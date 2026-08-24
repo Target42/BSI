@@ -199,6 +199,10 @@
             <Form>TargetObjectForm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="UI\f_movetarget.pas">
+            <Form>MoveTargetForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="UI\f_measure.pas">
             <Form>MeasureForm</Form>
             <FormType>dfm</FormType>
@@ -212,6 +216,7 @@
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="UI\SearchEditHelper.pas"/>
+        <DCCReference Include="UI\GridHelper.pas"/>
         <DCCReference Include="UI\f_bausteinview.pas">
             <Form>BausteinViewForm</Form>
             <FormType>dfm</FormType>

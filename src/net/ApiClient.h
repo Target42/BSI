@@ -59,11 +59,20 @@ private:
     bool isAuthEndpoint(const QString &path) const;
     QUrl buildUrl(const QString &path) const;
     static QString readApiError(const QJsonDocument &doc, const QString &fallback);
+    static QString normalizeBaseUrl(const QString &baseUrl);
+    static bool endsWithPath(const QString &url, const QString &path);
+    static QString baseUrlFromHealthUrl(const QUrl &url);
+    void resolvePublicBaseUrlIfNeeded() const;
+    bool ismsReachableAt(const QString &base, QString *resolvedBase, bool *unreachable) const;
+    bool rawGet(const QUrl &url, int *status, QByteArray *payload, QUrl *finalUrl) const;
+    bool probeHealth(const QString &base, QString *resolvedBase, bool *unreachable) const;
+    bool probeApiRoot(const QString &base, bool *unreachable) const;
 
-    QString m_baseUrl;
+    mutable QString m_baseUrl;
     QString m_accessToken;
     QDateTime m_tokenExpiresAt;
     bool m_insecureSkipTlsVerify = false;
+    mutable bool m_baseUrlResolved = false;
     ReloginHandler m_reloginHandler;
     mutable QString m_lastError;
     mutable bool m_lastAuthFailure = false;

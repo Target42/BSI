@@ -18,13 +18,16 @@
 #include "services/Inheritance.h"
 #include "services/ReportService.h"
 #include "ui/dialogs/MeasureDialog.h"
+#include "ui/dialogs/MoveTargetObjectDialog.h"
 #include "ui/dialogs/ProjectOpenDialog.h"
 #include "ui/dialogs/ProjectDialog.h"
 #include "ui/dialogs/ProjectMembersDialog.h"
 #include "ui/dialogs/CockpitDialog.h"
 #include "ui/dialogs/ReportDialog.h"
 #include "ui/dialogs/TargetObjectDialog.h"
+#include "ui/TableViewHelper.h"
 
+#include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
@@ -37,7 +40,6 @@
 #include <QHash>
 #include <QGridLayout>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QKeySequence>
 #include <QLabel>
@@ -121,6 +123,13 @@ void MainWindow::buildUi()
     m_targetObjectTree->setModel(m_targetObjectModel);
     m_targetObjectTree->setHeaderHidden(true);
     m_targetObjectTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_targetObjectTree->setDragEnabled(true);
+    m_targetObjectTree->setAcceptDrops(true);
+    m_targetObjectTree->setDropIndicatorShown(true);
+    m_targetObjectTree->setDragDropMode(QAbstractItemView::DragDrop);
+    m_targetObjectTree->setDefaultDropAction(Qt::MoveAction);
+    connect(m_targetObjectModel, &TargetObjectTreeModel::targetMoveRequested, this,
+            &MainWindow::requestTargetObjectMove);
     connect(m_targetObjectTree->selectionModel(), &QItemSelectionModel::currentChanged, this,
             [this](const QModelIndex &current, const QModelIndex &) {
                 onTargetObjectSelected(current);
@@ -225,9 +234,7 @@ void MainWindow::buildUi()
     m_requirementTable->setModel(m_requirementModel);
     m_requirementTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_requirementTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_requirementTable->horizontalHeader()->setStretchLastSection(true);
-    m_requirementTable->horizontalHeader()->setSectionResizeMode(RequirementTableModel::TitleColumn,
-                                                                 QHeaderView::Stretch);
+    enableResizableColumns(m_requirementTable);
     m_requirementTable->setAlternatingRowColors(true);
     connect(m_requirementTable->selectionModel(), &QItemSelectionModel::currentChanged, this,
             [this](const QModelIndex &current, const QModelIndex &) {
@@ -263,9 +270,7 @@ void MainWindow::buildUi()
     m_measureTable->setModel(m_measureModel);
     m_measureTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_measureTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_measureTable->horizontalHeader()->setStretchLastSection(true);
-    m_measureTable->horizontalHeader()->setSectionResizeMode(MeasureTableModel::TitleColumn,
-                                                             QHeaderView::Stretch);
+    enableResizableColumns(m_measureTable);
     m_measureTable->setAlternatingRowColors(true);
     connect(m_measureTable, &QTableView::doubleClicked, this, &MainWindow::editMeasure);
 
@@ -391,6 +396,10 @@ void MainWindow::buildUi()
     fileMenu->addAction(tr("Beenden"), this, &QWidget::close);
 
     auto *projectMenu = menuBar()->addMenu(tr("Projekt"));
+    m_refreshProjectAction = projectMenu->addAction(tr("Aktualisieren"));
+    m_refreshProjectAction->setShortcut(QKeySequence::Refresh);
+    connect(m_refreshProjectAction, &QAction::triggered, this, &MainWindow::refreshProject);
+    projectMenu->addSeparator();
     m_editProjectAction = projectMenu->addAction(tr("Projekteigenschaften..."));
     connect(m_editProjectAction, &QAction::triggered, this, &MainWindow::editProject);
     m_deleteProjectAction = projectMenu->addAction(tr("Projekt löschen..."));
@@ -409,6 +418,8 @@ void MainWindow::buildUi()
     connect(m_addTargetAction, &QAction::triggered, this, &MainWindow::addTargetObject);
     m_editTargetAction = projectMenu->addAction(tr("Zielobjekt bearbeiten..."));
     connect(m_editTargetAction, &QAction::triggered, this, &MainWindow::editTargetObject);
+    m_moveTargetAction = projectMenu->addAction(tr("Zielobjekt verschieben..."));
+    connect(m_moveTargetAction, &QAction::triggered, this, &MainWindow::moveTargetObject);
     m_deleteTargetAction = projectMenu->addAction(tr("Zielobjekt löschen"));
     connect(m_deleteTargetAction, &QAction::triggered, this, &MainWindow::deleteTargetObject);
     projectMenu->addSeparator();
@@ -433,6 +444,7 @@ void MainWindow::buildUi()
     auto *toolBar = addToolBar(tr("Projekt"));
     toolBar->addAction(newProjectAction);
     toolBar->addAction(openProjectAction);
+    toolBar->addAction(m_refreshProjectAction);
     toolBar->addAction(m_addTargetAction);
     toolBar->addAction(importCatalogAction);
 
@@ -485,12 +497,16 @@ void MainWindow::updateProjectUiEnabled()
     m_reloginAction->setEnabled(m_context.isRemote());
     m_addTargetAction->setEnabled(hasProject && canEdit);
     m_editTargetAction->setEnabled(hasProject && canEdit && hasTargetObject);
+    m_moveTargetAction->setEnabled(canDeleteActiveTarget());
     m_deleteTargetAction->setEnabled(canDeleteActiveTarget());
+    m_refreshProjectAction->setEnabled(hasProject);
     m_applyRecommendationsAction->setEnabled(hasTargetObject && canEdit);
     m_sollIstAction->setEnabled(hasProject);
     m_cockpitAction->setEnabled(hasProject);
 
     m_targetObjectTree->setEnabled(hasProject);
+    m_targetObjectTree->setDragEnabled(hasProject && canEdit);
+    m_targetObjectTree->setAcceptDrops(hasProject && canEdit);
     m_filterRequiredBox->setEnabled(hasTargetObject);
     m_filterPossibleBox->setEnabled(hasTargetObject);
     m_filterNotApplicableBox->setEnabled(hasTargetObject);
@@ -2364,6 +2380,95 @@ void MainWindow::editTargetObject()
     reloadActiveTargetContent();
 }
 
+void MainWindow::refreshProject()
+{
+    if (m_activeProject.id == 0)
+        return;
+
+    if (m_activeRequirementId != 0 && m_displayedAssessmentTargetId != 0)
+        saveAssessmentFor(m_displayedAssessmentTargetId, m_activeRequirementId);
+    persistSessionSelection();
+    reloadTargetObjects();
+    reloadActiveTargetContent();
+    showTemporaryStatusMessage(tr("Projektstand aktualisiert"));
+}
+
+bool MainWindow::applyTargetObjectMove(int objectId, int newParentId, bool showErrors)
+{
+    if (!canEditActiveProject() || objectId <= 0 || newParentId <= 0)
+        return false;
+
+    QList<TargetObject> objects =
+        m_context.targetObjectRepository().loadTargetObjects(m_activeProject.id);
+    TargetObject object = findTargetById(objects, objectId);
+    QString error;
+    if (!canMoveTargetObject(objects, object, newParentId, &error)) {
+        if (showErrors && !error.isEmpty())
+            QMessageBox::information(this, tr("Zielobjekt verschieben"), error);
+        return false;
+    }
+    if (object.parentId == newParentId)
+        return true;
+
+    object.parentId = newParentId;
+    const TargetObject parent = findTargetById(objects, newParentId);
+    finalizeTargetObjectProtectionNeed(object, parent);
+    if (!m_context.targetObjectRepository().updateTargetObject(object)) {
+        if (showErrors)
+            QMessageBox::critical(this, tr("Zielobjekt verschieben"),
+                                  m_context.targetObjectRepository().lastError());
+        return false;
+    }
+
+    if (m_activeTargetObject.id == object.id)
+        m_activeTargetObject = object;
+    return true;
+}
+
+void MainWindow::requestTargetObjectMove(int objectId, int newParentId)
+{
+    if (!applyTargetObjectMove(objectId, newParentId, true))
+        return;
+    QTimer::singleShot(0, this, [this, objectId]() {
+        m_activeTargetObject.id = objectId;
+        reloadTargetObjects();
+        reloadActiveTargetContent();
+        showTemporaryStatusMessage(tr("Zielobjekt verschoben"));
+    });
+}
+
+void MainWindow::moveTargetObject()
+{
+    if (!canEditActiveProject())
+        return;
+
+    const QModelIndex index = m_targetObjectTree->currentIndex();
+    if (!index.isValid() || m_targetObjectModel->isLayerGroup(index))
+        return;
+
+    const TargetObject object = m_targetObjectModel->targetObjectForIndex(index);
+    if (object.id == 0 || isRootScopeTarget(object))
+        return;
+
+    const QList<TargetObject> objects =
+        m_context.targetObjectRepository().loadTargetObjects(m_activeProject.id);
+    MoveTargetObjectDialog dialog(objects, object, this);
+    if (!dialog.hasDestinations()) {
+        QMessageBox::information(
+            this, tr("Zielobjekt verschieben"),
+            tr("Für dieses Zielobjekt ist kein anderes gültiges übergeordnetes Objekt vorhanden."));
+        return;
+    }
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    if (!applyTargetObjectMove(object.id, dialog.selectedParentId(), true))
+        return;
+    reloadTargetObjects();
+    reloadActiveTargetContent();
+    showTemporaryStatusMessage(tr("Zielobjekt verschoben"));
+}
+
 void MainWindow::deleteTargetObject()
 {
     if (!canEditActiveProject())
@@ -2440,8 +2545,10 @@ void MainWindow::showTargetObjectContextMenu(const QPoint &pos)
         menu.addAction(addCaption, this, &MainWindow::addTargetObject);
         if (!onLayer && current.id != 0) {
             menu.addAction(tr("Bearbeiten..."), this, &MainWindow::editTargetObject);
-            if (!isRootScopeTarget(current))
+            if (!isRootScopeTarget(current)) {
+                menu.addAction(tr("Verschieben..."), this, &MainWindow::moveTargetObject);
                 menu.addAction(tr("Löschen"), this, &MainWindow::deleteTargetObject);
+            }
             menu.addSeparator();
             menu.addAction(tr("Baustein-Empfehlungen übernehmen..."), this,
                            &MainWindow::applyBausteinRecommendations);

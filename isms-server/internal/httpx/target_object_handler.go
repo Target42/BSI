@@ -102,7 +102,7 @@ func (h *TargetObjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Type = domain.NormalizeTargetObjectType(req.Type)
-	if err := h.validatePlacement(r, projectID, req.ParentID, req.Type); err != nil {
+	if err := h.validatePlacement(r, projectID, req.ParentID, req.Type, 0); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -188,6 +188,17 @@ func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "target lookup failed")
+		return
+	}
+	if domain.IsRootScopeTarget(current.ParentID, current.Type) && req.ParentID != current.ParentID {
+		writeError(w, http.StatusBadRequest, "Der Informationsverbund kann nicht verschoben werden")
+		return
+	}
+	if err := h.validatePlacement(r, projectID, req.ParentID, req.Type, targetID); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	item := domain.TargetObject{
@@ -288,12 +299,15 @@ func (h *TargetObjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *TargetObjectHandler) validatePlacement(r *http.Request, projectID, parentID int64, childType string) error {
+func (h *TargetObjectHandler) validatePlacement(r *http.Request, projectID, parentID int64, childType string, objectID int64) error {
 	if parentID == 0 {
 		if domain.NormalizeTargetObjectType(childType) != domain.TargetTypeScope {
 			return fmt.Errorf("ein Objekt ohne übergeordnetes Zielobjekt muss ein Informationsverbund sein")
 		}
 		return nil
+	}
+	if objectID > 0 && parentID == objectID {
+		return fmt.Errorf("ein Zielobjekt kann nicht unter sich selbst eingehängt werden")
 	}
 	parent, err := h.store.GetTargetObject(r.Context(), parentID)
 	if err != nil {
@@ -304,6 +318,15 @@ func (h *TargetObjectHandler) validatePlacement(r *http.Request, projectID, pare
 	}
 	if !domain.IsAllowedChildTargetType(parent.Type, childType) {
 		return fmt.Errorf("dieser Zielobjekt-Typ ist unter %s nicht zulässig", parent.Type)
+	}
+	if objectID > 0 {
+		items, listErr := h.store.ListTargetObjects(r.Context(), projectID)
+		if listErr != nil {
+			return listErr
+		}
+		if domain.WouldCreateParentCycle(items, objectID, parentID) {
+			return fmt.Errorf("ein Zielobjekt kann nicht unter ein eigenes Unterobjekt verschoben werden")
+		}
 	}
 	return nil
 }

@@ -7,6 +7,7 @@
 #include <QAbstractItemModel>
 #include <QHash>
 #include <QList>
+#include <QMimeData>
 
 class TargetObjectTreeModel : public QAbstractItemModel
 {
@@ -30,10 +31,21 @@ public:
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     Qt::ItemFlags flags(const QModelIndex &index) const override;
+    QStringList mimeTypes() const override;
+    QMimeData *mimeData(const QModelIndexList &indexes) const override;
+    bool canDropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
+                         const QModelIndex &parent) const override;
+    bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
+                      const QModelIndex &parent) override;
+    Qt::DropActions supportedDropActions() const override;
 
     TargetObject targetObjectForIndex(const QModelIndex &index) const;
     QModelIndex indexForTargetObjectId(int targetObjectId) const;
     bool isLayerGroup(const QModelIndex &index) const;
+    QList<TargetObject> targetObjects() const;
+
+signals:
+    void targetMoveRequested(int objectId, int newParentId);
 
 private:
     QModelIndex indexForNode(int nodeIndex) const;
@@ -45,6 +57,7 @@ private:
         QList<int> childNodeIndices;
     };
 
+    QList<TargetObject> m_objects;
     QList<Node> m_nodes;
     QHash<int, int> m_idToIndex;
     QHash<int, ReportSummary> m_progressSummaries;

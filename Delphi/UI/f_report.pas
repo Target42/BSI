@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Grids, Vcl.ExtCtrls,
-  IsmsDomain, AppContext, ReportService, ReportExporter;
+  IsmsDomain, AppContext, ReportService, ReportExporter, GridHelper;
 
 type
   TReportForm = class(TForm)
@@ -88,6 +88,7 @@ begin
   sgReport.RowCount := 2;
   sgReport.FixedRows := 1;
   sgReport.Options := sgReport.Options + [goRowSelect];
+  EnableGridColumnSizing(sgReport);
   sgReport.Cells[0, 0] := 'Zielobjekt';
   sgReport.Cells[1, 0] := 'Baustein';
   sgReport.Cells[2, 0] := 'Anforderung';

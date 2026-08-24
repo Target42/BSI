@@ -67,7 +67,7 @@ object ReportForm: TReportForm
     DefaultRowHeight = 20
     FixedCols = 0
     RowCount = 2
-    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goColSizing, goRangeSelect, goRowSelect, goThumbTracking]
     TabOrder = 1
   end
   object pnlBottom: TPanel

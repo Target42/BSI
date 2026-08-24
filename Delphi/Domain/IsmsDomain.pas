@@ -40,6 +40,11 @@ type
     Description: string;
   end;
 
+  TTargetMoveDestination = record
+    ParentId: Integer;
+    Caption: string;
+  end;
+
   TBaustein = record
     Id: Integer;
     Standard: TStandardType;
@@ -252,6 +257,16 @@ function DefaultChildTargetType(AParentType: TTargetObjectType): TTargetObjectTy
 function CanHaveChildTargetObjects(AParentType: TTargetObjectType): Boolean;
 function IsAllowedChildTargetType(AParentType, AChildType: TTargetObjectType): Boolean;
 function IsRootScopeTarget(const ATarget: TTargetObject): Boolean;
+function FindTargetObjectById(const AObjects: TArray<TTargetObject>; AId: Integer): TTargetObject;
+function FindRootScopeTarget(const AObjects: TArray<TTargetObject>): TTargetObject;
+function WouldCreateTargetParentCycle(const AObjects: TArray<TTargetObject>;
+  AObjectId, ANewParentId: Integer): Boolean;
+function TargetMoveRejectedReason(const AObjects: TArray<TTargetObject>;
+  const AMoving: TTargetObject; ANewParentId: Integer): string;
+function CanMoveTargetObject(const AObjects: TArray<TTargetObject>;
+  const AMoving: TTargetObject; ANewParentId: Integer): Boolean;
+function PossibleTargetMoveDestinations(const AObjects: TArray<TTargetObject>;
+  const AMoving: TTargetObject): TArray<TTargetMoveDestination>;
 function ScopeLayerTypes: TArray<TTargetObjectType>;
 function TargetObjectLayerGroupTitle(AType: TTargetObjectType): string;
 function CanInheritAssessments(AParentType, AChildType: TTargetObjectType): Boolean;
@@ -597,6 +612,115 @@ end;
 function IsRootScopeTarget(const ATarget: TTargetObject): Boolean;
 begin
   Result := (ATarget.ParentId = 0) and (ATarget.ObjType = totScope);
+end;
+
+function FindTargetObjectById(const AObjects: TArray<TTargetObject>; AId: Integer): TTargetObject;
+var
+  O: TTargetObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  if AId <= 0 then
+    Exit;
+  for O in AObjects do
+    if O.Id = AId then
+      Exit(O);
+end;
+
+function FindRootScopeTarget(const AObjects: TArray<TTargetObject>): TTargetObject;
+var
+  O: TTargetObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  for O in AObjects do
+    if IsRootScopeTarget(O) then
+      Exit(O);
+  for O in AObjects do
+    if O.ParentId = 0 then
+      Exit(O);
+end;
+
+function WouldCreateTargetParentCycle(const AObjects: TArray<TTargetObject>;
+  AObjectId, ANewParentId: Integer): Boolean;
+var
+  CurrentId: Integer;
+  Current: TTargetObject;
+  Guard: Integer;
+begin
+  Result := False;
+  if (AObjectId <= 0) or (ANewParentId <= 0) then
+    Exit;
+  CurrentId := ANewParentId;
+  Guard := 0;
+  while (CurrentId > 0) and (Guard < 64) do
+  begin
+    if CurrentId = AObjectId then
+      Exit(True);
+    Current := FindTargetObjectById(AObjects, CurrentId);
+    if Current.Id = 0 then
+      Exit(False);
+    CurrentId := Current.ParentId;
+    Inc(Guard);
+  end;
+end;
+
+function TargetMoveRejectedReason(const AObjects: TArray<TTargetObject>;
+  const AMoving: TTargetObject; ANewParentId: Integer): string;
+var
+  Parent: TTargetObject;
+begin
+  if AMoving.Id <= 0 then
+    Exit('Kein Zielobjekt ausgew'#$00E4'hlt.');
+  if IsRootScopeTarget(AMoving) then
+    Exit('Der Informationsverbund kann nicht verschoben werden.');
+  if ANewParentId <= 0 then
+    Exit('Bitte ein '#$00FC'bergeordnetes Zielobjekt w'#$00E4'hlen.');
+  if WouldCreateTargetParentCycle(AObjects, AMoving.Id, ANewParentId) then
+    Exit('Ein Zielobjekt kann nicht unter ein eigenes Unterobjekt verschoben werden.');
+  Parent := FindTargetObjectById(AObjects, ANewParentId);
+  if Parent.Id = 0 then
+    Exit(#$00DC'bergeordnetes Zielobjekt wurde nicht gefunden.');
+  if not IsAllowedChildTargetType(Parent.ObjType, AMoving.ObjType) then
+    Exit(Format('Dieser Zielobjekt-Typ ist unter %s nicht zul'#$00E4'ssig.',
+      [TargetObjectTypeToString(Parent.ObjType)]));
+  Result := '';
+end;
+
+function CanMoveTargetObject(const AObjects: TArray<TTargetObject>;
+  const AMoving: TTargetObject; ANewParentId: Integer): Boolean;
+begin
+  Result := TargetMoveRejectedReason(AObjects, AMoving, ANewParentId) = '';
+end;
+
+function PossibleTargetMoveDestinations(const AObjects: TArray<TTargetObject>;
+  const AMoving: TTargetObject): TArray<TTargetMoveDestination>;
+var
+  Scope: TTargetObject;
+  Candidate: TTargetObject;
+  Dest: TTargetMoveDestination;
+begin
+  SetLength(Result, 0);
+  if (AMoving.Id <= 0) or IsRootScopeTarget(AMoving) then
+    Exit;
+  Scope := FindRootScopeTarget(AObjects);
+  if (Scope.Id > 0) and (Scope.Id <> AMoving.ParentId) and
+    CanMoveTargetObject(AObjects, AMoving, Scope.Id) then
+  begin
+    Dest.ParentId := Scope.Id;
+    Dest.Caption := 'Schicht: ' + TargetObjectLayerGroupTitle(AMoving.ObjType);
+    Result := Result + [Dest];
+  end;
+  for Candidate in AObjects do
+  begin
+    if (Candidate.Id = AMoving.Id) or (Candidate.Id = AMoving.ParentId) then
+      Continue;
+    if Candidate.Id = Scope.Id then
+      Continue;
+    if not CanMoveTargetObject(AObjects, AMoving, Candidate.Id) then
+      Continue;
+    Dest.ParentId := Candidate.Id;
+    Dest.Caption := TargetObjectCaption(Candidate);
+    Result := Result + [Dest];
+  end;
 end;
 
 function ScopeLayerTypes: TArray<TTargetObjectType>;
