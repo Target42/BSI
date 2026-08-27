@@ -1,0 +1,144 @@
+{{define "assessment"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Requirement.ExternalID}} · {{.Project.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        /
+        <a href="{{href (printf "/projects/%d/report" .Project.ID)}}">Soll-Ist</a>
+        / Bewertung
+      </p>
+      <h1>{{.Requirement.ExternalID}} {{.Requirement.Title}}</h1>
+      <p class="lede">
+        {{.Target.Name}}
+        {{if .Baustein.Title}} · {{.Baustein.ExternalID}} {{.Baustein.Title}}{{end}}
+        {{if .Requirement.Level}} · Stufe {{.Requirement.Level}}{{end}}
+      </p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      {{if .Requirement.Text}}
+        <div class="req-text">{{.Requirement.Text}}</div>
+      {{end}}
+
+      {{if .CanEdit}}
+      <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/requirements/%d" .Project.ID .Target.ID .Requirement.ID)}}">
+        <input type="hidden" name="version" value="{{.Assessment.Version}}">
+        <div class="form-grid">
+          <div class="field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              {{range .AssessmentStatuses}}
+              <option value="{{.}}" {{if eq . $.Assessment.Status}}selected{{end}}>{{.}}</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="responsible">Verantwortlich</label>
+            <input id="responsible" name="responsible" value="{{.Assessment.Responsible}}">
+          </div>
+          <div class="field">
+            <label for="dueDate">Frist</label>
+            <input id="dueDate" name="dueDate" type="date" value="{{dueValue .Assessment.DueDate}}">
+          </div>
+        </div>
+        <div class="field">
+          <label for="note">Notiz</label>
+          <textarea id="note" name="note" rows="6">{{.Assessment.Note}}</textarea>
+        </div>
+        <p class="muted">Version {{.Assessment.Version}} — bei Konflikt wird der aktuelle Stand vom Server angezeigt.</p>
+        <button class="btn" type="submit">Bewertung speichern</button>
+      </form>
+      {{else}}
+      <div class="card">
+        <p>
+          Status:
+          <span class="{{statusClass .Assessment.Status false}}">{{.Assessment.Status}}</span>
+        </p>
+        <p>Verantwortlich: {{if .Assessment.Responsible}}{{.Assessment.Responsible}}{{else}}—{{end}}</p>
+        <p>Frist: {{formatDue .Assessment.DueDate}}</p>
+        {{if .Assessment.Note}}<div class="req-text">{{.Assessment.Note}}</div>{{end}}
+        <p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>
+      </div>
+      {{end}}
+
+      <h2>Maßnahmen zu dieser Anforderung</h2>
+      {{if not .RelatedMeasures}}
+        <p class="muted">Noch keine Maßnahmen zu dieser Anforderung.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Maßnahme</th>
+                <th>Status</th>
+                <th>Verantwortlich</th>
+                <th>Frist</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .RelatedMeasures}}
+              <tr>
+                <td><a href="{{href (printf "/projects/%d/measures/%d" $.Project.ID .ID)}}">{{.Title}}</a></td>
+                <td>
+                  <span class="{{statusClass .Status .Overdue}}">
+                    {{.Status}}{{if .Overdue}} · überfällig{{end}}
+                  </span>
+                </td>
+                <td>{{if .Responsible}}{{.Responsible}}{{else}}—{{end}}</td>
+                <td>{{formatDue .DueDate}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted"><a href="{{href (printf "/projects/%d/cockpit" .Project.ID)}}">Zum Maßnahmen-Cockpit</a></p>
+      {{end}}
+
+      {{if .CanEdit}}
+      <h2>Neue Maßnahme</h2>
+      <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/requirements/%d/measures" .Project.ID .Target.ID .Requirement.ID)}}">
+        <div class="field">
+          <label for="measureTitle">Titel</label>
+          <input id="measureTitle" name="title" required>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="measureStatus">Status</label>
+            <select id="measureStatus" name="status">
+              {{range .MeasureStatuses}}
+              <option value="{{.}}">{{.}}</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="measureResponsible">Verantwortlich</label>
+            <input id="measureResponsible" name="responsible">
+          </div>
+          <div class="field">
+            <label for="measureDue">Frist</label>
+            <input id="measureDue" name="dueDate" type="date">
+          </div>
+        </div>
+        <div class="field">
+          <label for="measureDescription">Beschreibung</label>
+          <textarea id="measureDescription" name="description" rows="3"></textarea>
+        </div>
+        <button class="btn" type="submit">Maßnahme anlegen</button>
+      </form>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

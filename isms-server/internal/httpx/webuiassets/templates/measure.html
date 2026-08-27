@@ -1,0 +1,78 @@
+{{define "measure"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Measure.Title}} · {{.Project.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        /
+        <a href="{{href (printf "/projects/%d/cockpit" .Project.ID)}}">Cockpit</a>
+        /
+        <a href="{{href (printf "/projects/%d/targets/%d/requirements/%d" .Project.ID .Measure.TargetObjectID .Measure.RequirementID)}}">Bewertung</a>
+        / Maßnahme
+      </p>
+      <h1>{{if .Measure.Title}}{{.Measure.Title}}{{else}}Maßnahme{{end}}</h1>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      {{if .CanEdit}}
+      <form class="card" method="post" action="{{href (printf "/projects/%d/measures/%d/edit" .Project.ID .Measure.ID)}}">
+        <input type="hidden" name="version" value="{{.Measure.Version}}">
+        <div class="field">
+          <label for="title">Titel</label>
+          <input id="title" name="title" required value="{{.Measure.Title}}">
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              {{range .MeasureStatuses}}
+              <option value="{{.}}" {{if eq . $.Measure.Status}}selected{{end}}>{{.}}</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="responsible">Verantwortlich</label>
+            <input id="responsible" name="responsible" value="{{.Measure.Responsible}}">
+          </div>
+          <div class="field">
+            <label for="dueDate">Frist</label>
+            <input id="dueDate" name="dueDate" type="date" value="{{dueValue .Measure.DueDate}}">
+          </div>
+        </div>
+        <div class="field">
+          <label for="description">Beschreibung</label>
+          <textarea id="description" name="description" rows="5">{{.Measure.Description}}</textarea>
+        </div>
+        <p class="muted">Version {{.Measure.Version}} — bei Konflikt wird der aktuelle Stand vom Server angezeigt.</p>
+        <div class="form-actions">
+          <button class="btn" type="submit">Speichern</button>
+        </div>
+      </form>
+      <form class="card danger-card" method="post" action="{{href (printf "/projects/%d/measures/%d/delete" .Project.ID .Measure.ID)}}">
+        <p class="muted">Löschen entfernt die Maßnahme unwiderruflich.</p>
+        <button class="btn btn-danger" type="submit">Maßnahme löschen</button>
+      </form>
+      {{else}}
+      <div class="card">
+        <p>Status: <span class="{{statusClass .Measure.Status false}}">{{.Measure.Status}}</span></p>
+        <p>Verantwortlich: {{if .Measure.Responsible}}{{.Measure.Responsible}}{{else}}—{{end}}</p>
+        <p>Frist: {{formatDue .Measure.DueDate}}</p>
+        {{if .Measure.Description}}<div class="req-text">{{.Measure.Description}}</div>{{end}}
+        <p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>
+      </div>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -23,11 +23,13 @@ type Server struct {
 	reportHandler     *ReportHandler
 	adminHandler      *AdminHandler
 	memberHandler     *MemberHandler
+	webUI             *webUI
 }
 
 func NewServer(
 	authService *auth.Service,
 	store *repository.Store,
+	publicBase string,
 ) *Server {
 	reportService := service.NewReportService(store)
 	return &Server{
@@ -41,6 +43,7 @@ func NewServer(
 		reportHandler:     NewReportHandler(store, reportService),
 		adminHandler:      NewAdminHandler(store),
 		memberHandler:     NewMemberHandler(store),
+		webUI:             newWebUI(authService, store, reportService, publicBase),
 	}
 }
 
@@ -108,6 +111,16 @@ func (s *Server) Router() http.Handler {
 		})
 	})
 
+	if s.webUI != nil {
+		s.webUI.mount(r)
+	}
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, "/api/") {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		http.NotFound(w, req)
+	})
 	return r
 }
 

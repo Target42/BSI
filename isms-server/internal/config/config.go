@@ -25,6 +25,7 @@ type Config struct {
 	AdminDisplayName string
 	CatalogVersion   string
 	CatalogXMLPath   string
+	WebPublicBase    string
 }
 
 func Load() (Config, error) {
@@ -42,6 +43,7 @@ func Load() (Config, error) {
 		CatalogXMLPath:   os.Getenv("CATALOG_XML_PATH"),
 		TLSCertFile:      os.Getenv("TLS_CERT_FILE"),
 		TLSKeyFile:       os.Getenv("TLS_KEY_FILE"),
+		WebPublicBase:    strings.TrimRight(os.Getenv("WEB_PUBLIC_BASE"), "/"),
 	}
 
 	ttl, err := parseDuration(envOrDefault("JWT_TTL", "24h"), 24*time.Hour)

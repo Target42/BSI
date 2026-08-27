@@ -84,6 +84,22 @@ func (s *Store) ListRequirements(ctx context.Context, bausteinID int64) ([]domai
 	return items, rows.Err()
 }
 
+func (s *Store) GetRequirement(ctx context.Context, id int64) (domain.Requirement, error) {
+	var r domain.Requirement
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, baustein_id, standard, external_id, baustein_external_id, title,
+		       COALESCE(text, ''), level, COALESCE(responsible_role, ''), withdrawn
+		FROM requirements WHERE id = $1`, id,
+	).Scan(
+		&r.ID, &r.BausteinID, &r.Standard, &r.ExternalID, &r.BausteinExternalID,
+		&r.Title, &r.Text, &r.Level, &r.ResponsibleRole, &r.Withdrawn,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Requirement{}, ErrNotFound
+	}
+	return r, err
+}
+
 func (s *Store) GetBaustein(ctx context.Context, bausteinID int64) (domain.Baustein, error) {
 	var b domain.Baustein
 	err := s.pool.QueryRow(ctx, `

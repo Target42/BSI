@@ -1,0 +1,135 @@
+{{define "project"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Project.Name}} · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p><a href="{{href "/"}}">Projekte</a></p>
+      <h1>{{.Project.Name}}</h1>
+      {{if .Project.Description}}<p class="lede">{{.Project.Description}}</p>{{end}}
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value">{{.Summary.ProgressPercent}}%</div>
+          <div class="stat-label">Fortschritt</div>
+          <div class="bar"><div class="bar-fill" style="width: {{.Summary.ProgressPercent}}%"></div></div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{{.Summary.OpenCount}}</div>
+          <div class="stat-label">Offen</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{{.Summary.FulfilledCount}}</div>
+          <div class="stat-label">Erfüllt</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{{.Summary.OverdueCount}}</div>
+          <div class="stat-label">Überfällig</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{{.Summary.MeasureCount}}</div>
+          <div class="stat-label">Maßnahmen</div>
+        </div>
+      </div>
+
+      <nav class="dash-nav" aria-label="Projektbereiche">
+        <a class="dash-card" href="{{href (printf "/projects/%d/report" .Project.ID)}}">
+          <span class="icon icon-report" aria-hidden="true"></span>
+          <span class="dash-card-title">Soll-Ist-Report</span>
+          <span class="dash-card-hint">Anforderungen, Status und CSV</span>
+        </a>
+        <a class="dash-card" href="{{href (printf "/projects/%d/cockpit" .Project.ID)}}">
+          <span class="icon icon-tasks" aria-hidden="true"></span>
+          <span class="dash-card-title">Maßnahmen-Cockpit</span>
+          <span class="dash-card-hint">Aufgaben, Fristen, Zuständige</span>
+        </a>
+        <a class="dash-card" href="{{href (printf "/projects/%d/members" .Project.ID)}}">
+          <span class="icon icon-users" aria-hidden="true"></span>
+          <span class="dash-card-title">Mitglieder</span>
+          <span class="dash-card-hint">Rollen und Zugriff im Projekt</span>
+        </a>
+      </nav>
+
+      <h2>Zielobjekte</h2>
+      {{if not .Targets}}
+        <p class="muted">Noch keine Zielobjekte in diesem Projekt.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Zielobjekt</th>
+                <th>Typ</th>
+                <th>Schutzbedarf</th>
+                <th>Fortschritt</th>
+                <th>Offen</th>
+                {{if .CanEdit}}<th></th>{{end}}
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Targets}}
+              <tr>
+                <td>
+                  <span style="padding-left: {{padLeft .Depth}}">
+                    <a href="{{href (printf "/projects/%d/targets/%d/edit" $.Project.ID .ID)}}">{{.Name}}</a>
+                  </span>
+                </td>
+                <td>{{.Type}}</td>
+                <td>{{if .ProtectionNeed}}{{.ProtectionNeed}}{{else}}—{{end}}</td>
+                <td>{{.Summary.ProgressPercent}}%</td>
+                <td>{{.Summary.OpenCount}}</td>
+                {{if $.CanEdit}}
+                <td>
+                  <a href="{{href (printf "/projects/%d/targets/%d/applicability" $.Project.ID .ID)}}">Anwendbarkeit</a>
+                  ·
+                  <a href="{{href (printf "/projects/%d/targets/%d/recommendations" $.Project.ID .ID)}}">Empfehlungen</a>
+                  {{if .ChildTypes}}
+                    ·
+                    <a href="{{href (printf "/projects/%d?addUnder=%d" $.Project.ID .ID)}}">Unterobjekt</a>
+                  {{end}}
+                </td>
+                {{end}}
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+
+      {{if and .CanEdit .AddUnder .AddTypes}}
+      <h2>Unterobjekt zu {{.AddUnderName}}</h2>
+      <form class="card" method="post" action="{{href (printf "/projects/%d/targets" .Project.ID)}}">
+        <input type="hidden" name="parentID" value="{{.AddUnder}}">
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" required>
+        </div>
+        <div class="field">
+          <label for="type">Typ</label>
+          <select id="type" name="type">
+            {{range .AddTypes}}
+            <option value="{{.}}">{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="field">
+          <label for="description">Beschreibung</label>
+          <textarea id="description" name="description" rows="3"></textarea>
+        </div>
+        <button class="btn" type="submit">Anlegen</button>
+      </form>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

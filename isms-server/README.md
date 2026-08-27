@@ -41,6 +41,8 @@ go run ./cmd/isms-server
 
 Beim ersten Start wird ein Admin-Benutzer angelegt (`admin@example.com` / `changeme`).
 
+**Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen, Zielobjekte, Baustein-Empfehlungen, Anwendbarkeit, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV. Administratoren legen Benutzer an; jeder ändert das eigene Passwort. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
+
 **Katalog:** Ist die Datenbank noch leer, importiert der Server automatisch die IT-Grundschutz-XML, wenn er sie findet. Suchreihenfolge:
 
 1. `CATALOG_XML_PATH` aus `.env`

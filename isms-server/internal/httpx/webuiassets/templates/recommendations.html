@@ -1,0 +1,96 @@
+{{define "recommendations"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Empfehlungen · {{.Target.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        /
+        <a href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">{{.Target.Name}}</a>
+        / Empfehlungen
+      </p>
+      <h1>Baustein-Empfehlungen</h1>
+      <p class="lede">{{.Target.Name}} · {{.Target.Type}} · {{.Target.ProtectionNeed}}</p>
+      {{if .Hint}}<div class="req-text">{{.Hint}}</div>{{end}}
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      {{if not .Recommendations}}
+        <p class="muted">Für diesen Zielobjekt-Typ sind keine Empfehlungen hinterlegt, oder der Katalog fehlt.</p>
+      {{else if .CanEdit}}
+      <form method="post" action="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Übernehmen</th>
+                <th>Baustein</th>
+                <th>Empfehlung</th>
+                <th>Vorschlag</th>
+                <th>Aktuell</th>
+                <th>Begründung</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Recommendations}}
+              <tr>
+                <td>
+                  {{if .Locked}}
+                    <span class="muted">gesetzt</span>
+                  {{else}}
+                    <input type="checkbox" name="apply" value="{{.BausteinID}}" {{if .Selected}}checked{{end}} aria-label="{{.ExternalID}} übernehmen">
+                  {{end}}
+                </td>
+                <td>{{.ExternalID}} {{.Title}}</td>
+                <td>{{.Tier}}</td>
+                <td><span class="{{statusClass .SuggestedStatus false}}">{{.SuggestedStatus}}</span></td>
+                <td>{{if .Current}}<span class="{{statusClass .Current false}}">{{.Current}}</span>{{else}}<span class="muted">ungesetzt</span>{{end}}</td>
+                <td>{{.Reason}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">Kern-Bausteine ohne bestehenden Status sind vorausgewählt. Bereits gesetzte Einträge bleiben unangetastet.</p>
+        <button class="btn" type="submit">Ausgewählte übernehmen</button>
+      </form>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Baustein</th>
+                <th>Empfehlung</th>
+                <th>Vorschlag</th>
+                <th>Aktuell</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Recommendations}}
+              <tr>
+                <td>{{.ExternalID}} {{.Title}}</td>
+                <td>{{.Tier}}</td>
+                <td>{{.SuggestedStatus}}</td>
+                <td>{{if .Current}}{{.Current}}{{else}}ungesetzt{{end}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">Übernehmen erfordert die Rolle Bearbeiter oder Besitzer.</p>
+      {{end}}
+      <p><a href="{{href (printf "/projects/%d/targets/%d/applicability" .Project.ID .Target.ID)}}">Zur Anwendbarkeit</a></p>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

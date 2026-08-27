@@ -1,0 +1,106 @@
+{{define "members"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mitglieder · {{.Project.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        / Mitglieder
+      </p>
+      <h1>Mitglieder</h1>
+      <p class="lede">Rollen: Besitzer, Bearbeiter, Leser. Neue Benutzer legt ein Administrator an.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      {{if not .Members}}
+        <p class="muted">Keine Mitglieder.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>E-Mail</th>
+                <th>Rolle</th>
+                {{if .CanOwn}}<th></th>{{end}}
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Members}}
+              {{$m := .}}
+              <tr>
+                <td>
+                  {{.DisplayName}}
+                  {{if eq .UserID $.CurrentUserID}}<span class="muted"> · Sie</span>{{end}}
+                </td>
+                <td>{{.Email}}</td>
+                <td>
+                  {{if and $.CanOwn (or (ne .Role "owner") (gt $.OwnerCount 1))}}
+                  <form class="inline-form" method="post" action="{{href (printf "/projects/%d/members/%d" $.Project.ID .UserID)}}">
+                    <select name="role" aria-label="Rolle von {{.DisplayName}}">
+                      {{range $.MemberRoles}}
+                      <option value="{{.}}" {{if eq . $m.Role}}selected{{end}}>{{roleLabel .}}</option>
+                      {{end}}
+                    </select>
+                    <button class="btn btn-small" type="submit">Speichern</button>
+                  </form>
+                  {{else}}
+                    {{roleLabel .Role}}
+                  {{end}}
+                </td>
+                {{if $.CanOwn}}
+                <td>
+                  {{if eq .UserID $.CurrentUserID}}
+                    <span class="muted">—</span>
+                  {{else if and (eq .Role "owner") (le $.OwnerCount 1)}}
+                    <span class="muted">letzter Besitzer</span>
+                  {{else}}
+                    <form class="inline-form" method="post" action="{{href (printf "/projects/%d/members/%d/remove" $.Project.ID .UserID)}}">
+                      <button class="btn btn-small btn-danger" type="submit">Entfernen</button>
+                    </form>
+                  {{end}}
+                </td>
+                {{end}}
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+
+      {{if .CanOwn}}
+      <h2>Mitglied hinzufügen</h2>
+      <form class="card" method="post" action="{{href (printf "/projects/%d/members" .Project.ID)}}">
+        <div class="form-grid">
+          <div class="field">
+            <label for="email">E-Mail (bestehender Benutzer)</label>
+            <input id="email" name="email" type="email" required value="{{.MemberEmail}}">
+          </div>
+          <div class="field">
+            <label for="role">Rolle</label>
+            <select id="role" name="role">
+              {{range .MemberRoles}}
+              <option value="{{.}}" {{if eq . "editor"}}selected{{end}}>{{roleLabel .}}</option>
+              {{end}}
+            </select>
+          </div>
+        </div>
+        <button class="btn" type="submit">Hinzufügen</button>
+      </form>
+      {{else}}
+        <p class="muted">Rollen ändern kann nur ein Besitzer.</p>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

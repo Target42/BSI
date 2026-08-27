@@ -115,6 +115,64 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+const SessionCookieName = "isms_session"
+
+func cookieSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func (s *Service) SetSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time, path string) {
+	if path == "" {
+		path = "/"
+	}
+	maxAge := int(time.Until(expires).Seconds())
+	if maxAge < 1 {
+		maxAge = 1
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    token,
+		Path:     path,
+		Expires:  expires,
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   cookieSecure(r),
+	})
+}
+
+func ClearSessionCookie(w http.ResponseWriter, path string) {
+	if path == "" {
+		path = "/"
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    "",
+		Path:     path,
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (s *Service) ClaimsFromCookie(r *http.Request) (*Claims, error) {
+	c, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		return nil, err
+	}
+	if c.Value == "" {
+		return nil, http.ErrNoCookie
+	}
+	return s.ParseToken(c.Value)
+}
+
+func ContextWithUser(ctx context.Context, claims *Claims) context.Context {
+	return context.WithValue(ctx, userContextKey, claims)
+}
+
 func UserFromContext(ctx context.Context) (*Claims, bool) {
 	claims, ok := ctx.Value(userContextKey).(*Claims)
 	return claims, ok

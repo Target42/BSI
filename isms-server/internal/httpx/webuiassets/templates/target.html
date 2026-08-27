@@ -1,0 +1,117 @@
+{{define "target"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Target.Name}} · {{.Project.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        / Zielobjekt
+      </p>
+      <h1>{{.Target.Name}}</h1>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      {{if .CanEdit}}
+      <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" required value="{{.Target.Name}}">
+        </div>
+        {{if gt .Target.ParentID 0}}
+        <div class="form-grid">
+          <div class="field">
+            <label for="parentID">Übergeordnet</label>
+            <select id="parentID" name="parentID">
+              {{range .ParentOptions}}
+              <option value="{{.ID}}" {{if eq .ID $.Target.ParentID}}selected{{end}}>{{.Name}} ({{.Type}})</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="type">Typ</label>
+            <select id="type" name="type">
+              {{range .AddTypes}}
+              <option value="{{.}}" {{if eq . $.Target.Type}}selected{{end}}>{{.}}</option>
+              {{end}}
+            </select>
+          </div>
+        </div>
+        <label class="check">
+          <input type="hidden" name="inherit" value="0">
+          <input type="checkbox" name="inherit" value="1" {{if .Target.InheritProtectionNeed}}checked{{end}}>
+          Schutzbedarf vom übergeordneten Objekt übernehmen
+        </label>
+        {{else}}
+        <p class="muted">Informationsverbund — Wurzel des Projekts, nicht verschiebbar.</p>
+        {{end}}
+        <h2>Schutzbedarf (C/I/A)</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label for="confidentiality">Vertraulichkeit</label>
+            <select id="confidentiality" name="confidentiality">
+              {{range .CiaLevels}}
+              <option value="{{.}}" {{if eq . $.Target.Confidentiality}}selected{{end}}>{{.}}</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="integrity">Integrität</label>
+            <select id="integrity" name="integrity">
+              {{range .CiaLevels}}
+              <option value="{{.}}" {{if eq . $.Target.Integrity}}selected{{end}}>{{.}}</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="availability">Verfügbarkeit</label>
+            <select id="availability" name="availability">
+              {{range .CiaLevels}}
+              <option value="{{.}}" {{if eq . $.Target.Availability}}selected{{end}}>{{.}}</option>
+              {{end}}
+            </select>
+          </div>
+        </div>
+        <p class="muted">Abgeleitet: {{if .Target.ProtectionNeed}}{{.Target.ProtectionNeed}}{{else}}—{{end}}</p>
+        <div class="field">
+          <label for="protectionNeedNote">Hinweis zum Schutzbedarf</label>
+          <input id="protectionNeedNote" name="protectionNeedNote" value="{{.Target.ProtectionNeedNote}}">
+        </div>
+        <div class="field">
+          <label for="description">Beschreibung</label>
+          <textarea id="description" name="description" rows="4">{{.Target.Description}}</textarea>
+        </div>
+        <button class="btn" type="submit">Speichern</button>
+      </form>
+      {{if gt .Target.ParentID 0}}
+      <form class="card danger-card" method="post" action="{{href (printf "/projects/%d/targets/%d/delete" .Project.ID .Target.ID)}}">
+        <p class="muted">Löschen entfernt auch alle Unterobjekte.</p>
+        <button class="btn btn-danger" type="submit">Zielobjekt löschen</button>
+      </form>
+      {{end}}
+      {{else}}
+      <div class="card">
+        <p>Typ: {{.Target.Type}}</p>
+        <p>Schutzbedarf: {{.Target.ProtectionNeed}}</p>
+        <p>C/I/A: {{.Target.Confidentiality}} / {{.Target.Integrity}} / {{.Target.Availability}}</p>
+        {{if .Target.Description}}<div class="req-text">{{.Target.Description}}</div>{{end}}
+      </div>
+      {{end}}
+      <p>
+        <a href="{{href (printf "/projects/%d/targets/%d/applicability" .Project.ID .Target.ID)}}">Baustein-Anwendbarkeit</a>
+        ·
+        <a href="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">Empfehlungen</a>
+      </p>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -54,7 +54,8 @@ func main() {
 	}
 
 	authService := auth.NewService(cfg.JWTSecret, cfg.JWTTTL)
-	server := httpx.NewServer(authService, store)
+	server := httpx.NewServer(authService, store, cfg.WebPublicBase)
+	slog.Info("serving embedded web UI", "public_base", cfg.WebPublicBase)
 
 	router := server.Router()
 	if cfg.TLSEnabled() {

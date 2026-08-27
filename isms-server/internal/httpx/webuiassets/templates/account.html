@@ -1,0 +1,39 @@
+{{define "account"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Konto · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <h1>Konto</h1>
+      <p class="lede">{{.DisplayName}} · {{.Email}}</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+      <form class="card" method="post" action="{{href "/account/password"}}">
+        <h2>Passwort ändern</h2>
+        <div class="field">
+          <label for="currentPassword">Aktuelles Passwort</label>
+          <input id="currentPassword" name="currentPassword" type="password" required autocomplete="current-password">
+        </div>
+        <div class="field">
+          <label for="newPassword">Neues Passwort</label>
+          <input id="newPassword" name="newPassword" type="password" required minlength="8" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label for="confirmPassword">Neues Passwort wiederholen</label>
+          <input id="confirmPassword" name="confirmPassword" type="password" required minlength="8" autocomplete="new-password">
+        </div>
+        <button class="btn" type="submit">Passwort speichern</button>
+      </form>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

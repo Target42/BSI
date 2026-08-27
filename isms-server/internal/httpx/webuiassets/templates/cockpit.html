@@ -1,0 +1,99 @@
+{{define "cockpit"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cockpit · {{.Project.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        / Cockpit
+      </p>
+      <h1>Maßnahmen-Cockpit</h1>
+      <p class="lede">Status leicht anpassen, einzelne Maßnahme vollständig bearbeiten. Der Verbund bleibt im Desktop-Client.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      <form class="toolbar" method="get" action="{{href (printf "/projects/%d/cockpit" .Project.ID)}}">
+        <div class="field">
+          <label for="q">Suche</label>
+          <input id="q" name="q" value="{{.Query}}" placeholder="Titel, Verantwortlich…">
+        </div>
+        <div class="field">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            {{range .StatusFilters}}
+            <option value="{{.}}" {{if eq . $.StatusFilter}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <label class="check">
+          <input type="checkbox" name="hideDone" value="1" {{if .HideDone}}checked{{end}}>
+          Erledigte ausblenden
+        </label>
+        <button class="btn" type="submit">Filtern</button>
+      </form>
+
+      {{if not .Measures}}
+        <p class="muted">Keine Maßnahmen für diesen Filter.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Maßnahme</th>
+                <th>Status</th>
+                <th>Verantwortlich</th>
+                <th>Frist</th>
+                {{if .CanEdit}}<th>Ändern</th>{{end}}
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Measures}}
+              {{$m := .}}
+              <tr>
+                <td><a href="{{href (printf "/projects/%d/measures/%d" $.Project.ID .ID)}}">{{.Title}}</a></td>
+                <td>
+                  <span class="{{statusClass .Status .Overdue}}">
+                    {{.Status}}{{if .Overdue}} · überfällig{{end}}
+                  </span>
+                </td>
+                <td>{{if .Responsible}}{{.Responsible}}{{else}}—{{end}}</td>
+                <td>{{formatDue .DueDate}}</td>
+                {{if $.CanEdit}}
+                <td>
+                  <form class="inline-form" method="post" action="{{href (printf "/projects/%d/measures/%d" $.Project.ID .ID)}}">
+                    <input type="hidden" name="version" value="{{.Version}}">
+                    <select name="status" aria-label="Status von {{.Title}}">
+                      {{range $.MeasureStatuses}}
+                      <option value="{{.}}" {{if eq . $m.Status}}selected{{end}}>{{.}}</option>
+                      {{end}}
+                    </select>
+                    <button class="btn btn-small" type="submit">Speichern</button>
+                  </form>
+                </td>
+                {{end}}
+                <td>
+                  <a href="{{href (printf "/projects/%d/measures/%d" $.Project.ID .ID)}}">Bearbeiten</a>
+                  ·
+                  <a href="{{href (printf "/projects/%d/targets/%d/requirements/%d" $.Project.ID .TargetObjectID .RequirementID)}}">Bewertung</a>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

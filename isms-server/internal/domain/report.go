@@ -1,19 +1,20 @@
 package domain
 
 type ReportRow struct {
-	TargetObjectID        int64  `json:"targetObjectId"`
-	TargetObjectName      string `json:"targetObjectName"`
-	BausteinExternalID    string `json:"bausteinExternalId"`
-	BausteinTitle         string `json:"bausteinTitle"`
-	RequirementExternalID string `json:"requirementExternalId"`
-	RequirementTitle      string `json:"requirementTitle"`
-	Level                 string `json:"level"`
-	Applicability         string `json:"applicability"`
-	Status                string `json:"status"`
-	Responsible           string `json:"responsible"`
+	TargetObjectID        int64   `json:"targetObjectId"`
+	TargetObjectName      string  `json:"targetObjectName"`
+	BausteinExternalID    string  `json:"bausteinExternalId"`
+	BausteinTitle         string  `json:"bausteinTitle"`
+	RequirementID         int64   `json:"requirementId"`
+	RequirementExternalID string  `json:"requirementExternalId"`
+	RequirementTitle      string  `json:"requirementTitle"`
+	Level                 string  `json:"level"`
+	Applicability         string  `json:"applicability"`
+	Status                string  `json:"status"`
+	Responsible           string  `json:"responsible"`
 	DueDate               *string `json:"dueDate,omitempty"`
-	MeasureCount          int    `json:"measureCount"`
-	Overdue               bool   `json:"overdue"`
+	MeasureCount          int     `json:"measureCount"`
+	Overdue               bool    `json:"overdue"`
 }
 
 type ReportSummary struct {

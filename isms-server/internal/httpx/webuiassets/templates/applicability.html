@@ -1,0 +1,96 @@
+{{define "applicability"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anwendbarkeit · {{.Target.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        /
+        <a href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">{{.Target.Name}}</a>
+        / Anwendbarkeit
+      </p>
+      <h1>Baustein-Anwendbarkeit</h1>
+      <p class="lede">{{.Target.Name}} · Katalog {{.Project.CatalogVersion}}. „Benötigt“ und „Möglicherweise“ erscheinen im Soll-Ist.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      <p class="row-actions">
+        <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">Empfehlungen</a>
+      </p>
+
+      <form class="toolbar" method="get" action="{{href (printf "/projects/%d/targets/%d/applicability" .Project.ID .Target.ID)}}">
+        <div class="field">
+          <label for="q">Suche</label>
+          <input id="q" name="q" value="{{.Query}}" placeholder="Kennung, Titel, Gruppe…">
+        </div>
+        <div class="field">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            {{range .StatusFilters}}
+            <option value="{{.}}" {{if eq . $.StatusFilter}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <button class="btn" type="submit">Filtern</button>
+      </form>
+
+      {{if not .ApplicabilityRows}}
+        <p class="muted">Keine Bausteine für diesen Filter. Fehlt der Katalog, einmal auf dem Server importieren.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Baustein</th>
+                <th>Gruppe</th>
+                <th>Status</th>
+                {{if .CanEdit}}<th></th>{{end}}
+              </tr>
+            </thead>
+            <tbody>
+              {{range .ApplicabilityRows}}
+              {{$row := .}}
+              <tr>
+                <td>{{.ExternalID}} {{.Title}}</td>
+                <td>{{if .GroupName}}{{.GroupName}}{{else}}—{{end}}</td>
+                <td>
+                  {{if .Status}}
+                    <span class="{{statusClass .Status false}}">{{.Status}}</span>
+                  {{else}}
+                    <span class="muted">ungesetzt</span>
+                  {{end}}
+                </td>
+                {{if $.CanEdit}}
+                <td>
+                  <form class="inline-form" method="post" action="{{href (printf "/projects/%d/targets/%d/applicability" $.Project.ID $.Target.ID)}}">
+                    <input type="hidden" name="bausteinID" value="{{.ID}}">
+                    <select name="status" aria-label="Anwendbarkeit {{.ExternalID}}">
+                      <option value="" {{if eq .Status ""}}selected{{end}}>Ungesetzt</option>
+                      {{range $.ApplicabilityStatuses}}
+                      <option value="{{.}}" {{if eq . $row.Status}}selected{{end}}>{{.}}</option>
+                      {{end}}
+                    </select>
+                    <button class="btn btn-small" type="submit">Speichern</button>
+                  </form>
+                </td>
+                {{end}}
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -300,6 +301,10 @@ func (h *TargetObjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TargetObjectHandler) validatePlacement(r *http.Request, projectID, parentID int64, childType string, objectID int64) error {
+	return validateTargetObjectPlacement(r.Context(), h.store, projectID, parentID, childType, objectID)
+}
+
+func validateTargetObjectPlacement(ctx context.Context, store *repository.Store, projectID, parentID int64, childType string, objectID int64) error {
 	if parentID == 0 {
 		if domain.NormalizeTargetObjectType(childType) != domain.TargetTypeScope {
 			return fmt.Errorf("ein Objekt ohne übergeordnetes Zielobjekt muss ein Informationsverbund sein")
@@ -309,7 +314,7 @@ func (h *TargetObjectHandler) validatePlacement(r *http.Request, projectID, pare
 	if objectID > 0 && parentID == objectID {
 		return fmt.Errorf("ein Zielobjekt kann nicht unter sich selbst eingehängt werden")
 	}
-	parent, err := h.store.GetTargetObject(r.Context(), parentID)
+	parent, err := store.GetTargetObject(ctx, parentID)
 	if err != nil {
 		return err
 	}
@@ -320,7 +325,7 @@ func (h *TargetObjectHandler) validatePlacement(r *http.Request, projectID, pare
 		return fmt.Errorf("dieser Zielobjekt-Typ ist unter %s nicht zulässig", parent.Type)
 	}
 	if objectID > 0 {
-		items, listErr := h.store.ListTargetObjects(r.Context(), projectID)
+		items, listErr := store.ListTargetObjects(ctx, projectID)
 		if listErr != nil {
 			return listErr
 		}

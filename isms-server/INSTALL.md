@@ -2,7 +2,7 @@
 
 Der Go-Server ist eine einzelne Binary. PostgreSQL muss laufen; der Server selbst braucht **kein Docker**.
 
-Das Arbeitsverzeichnis der Binary muss das Installationsverzeichnis sein (dort liegen `.env` bzw. die systemd-Env-Datei und `migrations/`).
+Das Arbeitsverzeichnis der Binary muss das Installationsverzeichnis sein (dort liegen `.env` bzw. die systemd-Env-Datei und `migrations/`). Die Web-Oberfläche steckt in der Binary.
 
 ---
 
@@ -209,5 +209,5 @@ psql -U postgres -f scripts/setup-local-db.sql
 
 - Logs Ubuntu: `journalctl -u isms-server`. Windows/NSSM: `%ProgramData%\ISMS\logs\`.
 - Katalog-Import nur beim **ersten** Start, wenn die DB noch leer ist. Später: Client **Datei → IT-Grundschutz XML importieren**.
-- HTTPS: Reverse Proxy (nginx) vor dem Server, Vorlage `deploy/nginx-isms.conf`. Der Go-Dienst nur lokal binden (`HTTP_ADDR=127.0.0.1:8080`), Client-URL `https://isms.<host>`. Ohne eigenen Hostnamen: `location /isms/` in den bestehenden vHost (Client dann `https://<host>/isms`). Dev-Zertifikat ohne Proxy: `scripts/generate-dev-cert.ps1` (siehe README).
+- HTTPS: Reverse Proxy (nginx) vor dem Server, Vorlage `deploy/nginx-isms.conf`. Der Go-Dienst nur lokal binden (`HTTP_ADDR=127.0.0.1:8080`), Client-URL `https://isms.<host>`. Ohne eigenen Hostnamen: `location /isms/` in den bestehenden vHost (Client dann `https://<host>/isms`, in `.env` `WEB_PUBLIC_BASE=/isms`). Dev-Zertifikat ohne Proxy: `scripts/generate-dev-cert.ps1` (siehe README).
 - Binary-Update Ubuntu: neu bauen, `sudo cp isms-server /opt/isms/isms-server && sudo systemctl restart isms-server`.

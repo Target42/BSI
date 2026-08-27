@@ -1,0 +1,73 @@
+{{define "users"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Benutzer · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <h1>Benutzer</h1>
+      <p class="lede">Konten für Sachbearbeitung, die keinen Desktop-Client starten kann.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      {{if not .Users}}
+        <p class="muted">Keine Benutzer.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>E-Mail</th>
+                <th>Recht</th>
+                <th>Angelegt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Users}}
+              <tr>
+                <td>{{.DisplayName}}</td>
+                <td>{{.Email}}</td>
+                <td>{{if .IsAdmin}}Administrator{{else}}Benutzer{{end}}</td>
+                <td>{{formatDate .CreatedAt}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+
+      <h2>Benutzer anlegen</h2>
+      <form class="card" method="post" action="{{href "/users"}}">
+        <div class="form-grid">
+          <div class="field">
+            <label for="email">E-Mail</label>
+            <input id="email" name="email" type="email" required>
+          </div>
+          <div class="field">
+            <label for="displayName">Anzeigename</label>
+            <input id="displayName" name="displayName" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="password">Passwort (mindestens 8 Zeichen)</label>
+          <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password">
+        </div>
+        <label class="check">
+          <input type="checkbox" name="isAdmin" value="1">
+          Administrator
+        </label>
+        <button class="btn" type="submit">Anlegen</button>
+      </form>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

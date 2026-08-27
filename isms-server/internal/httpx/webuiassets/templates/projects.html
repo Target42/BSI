@@ -1,0 +1,73 @@
+{{define "projects"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Projekte · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <h1>Projekte</h1>
+      <p class="lede">Verbund, Bewertungen und Maßnahmen im Browser — auch ohne Desktop-Client.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+      {{if not .Projects}}
+        <p class="muted">Noch keine Projekte. Legen Sie eines unten an.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Katalog</th>
+                <th>Rolle</th>
+                <th>Aktualisiert</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Projects}}
+              <tr>
+                <td>
+                  <a href="{{href (printf "/projects/%d" .ID)}}"><strong>{{.Name}}</strong></a>
+                  {{if .Description}}<div class="muted">{{.Description}}</div>{{end}}
+                </td>
+                <td>{{.CatalogVersion}}</td>
+                <td><span class="badge">{{roleLabel .Role}}</span></td>
+                <td>{{formatDate .UpdatedAt}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+
+      <h2>Projekt anlegen</h2>
+      <form class="card" method="post" action="{{href "/projects"}}">
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" required>
+        </div>
+        <div class="field">
+          <label for="description">Beschreibung</label>
+          <textarea id="description" name="description" rows="3"></textarea>
+        </div>
+        <div class="field">
+          <label for="catalogVersion">Katalogversion</label>
+          <select id="catalogVersion" name="catalogVersion">
+            {{range .CatalogVersions}}
+            <option value="{{.}}">{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <button class="btn" type="submit">Anlegen</button>
+      </form>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,95 @@
+{{define "report"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Soll-Ist · {{.Project.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        / Soll-Ist
+      </p>
+      <h1>Soll-Ist-Report</h1>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value">{{.Summary.ProgressPercent}}%</div>
+          <div class="stat-label">Fortschritt</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{{.Summary.TotalRequirements}}</div>
+          <div class="stat-label">Anforderungen</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{{.Summary.OpenCount}}</div>
+          <div class="stat-label">Offen</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{{.Summary.OverdueCount}}</div>
+          <div class="stat-label">Überfällig</div>
+        </div>
+      </div>
+
+      <form class="toolbar" method="get" action="{{href (printf "/projects/%d/report" .Project.ID)}}">
+        <div class="field">
+          <label for="q">Suche</label>
+          <input id="q" name="q" value="{{.Query}}" placeholder="Zielobjekt, Baustein, Anforderung…">
+        </div>
+        <div class="field">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            {{range .StatusFilters}}
+            <option value="{{.}}" {{if eq . $.StatusFilter}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <button class="btn" type="submit">Filtern</button>
+        {{if .CSVHref}}<a class="btn btn-secondary" href="{{.CSVHref}}">CSV herunterladen</a>{{end}}
+      </form>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Zielobjekt</th>
+              <th>Baustein</th>
+              <th>Anforderung</th>
+              <th>Stufe</th>
+              <th>Status</th>
+              <th>Verantwortlich</th>
+              <th>Frist</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Rows}}
+            <tr>
+              <td>{{.TargetObjectName}}</td>
+              <td>{{.BausteinExternalID}} {{.BausteinTitle}}</td>
+              <td><a href="{{href (printf "/projects/%d/targets/%d/requirements/%d" $.Project.ID .TargetObjectID .RequirementID)}}">{{.RequirementExternalID}} {{.RequirementTitle}}</a></td>
+              <td>{{.Level}}</td>
+              <td>
+                <span class="{{statusClass .Status .Overdue}}">
+                  {{.Status}}{{if .Overdue}} · überfällig{{end}}
+                </span>
+              </td>
+              <td>{{if .Responsible}}{{.Responsible}}{{else}}—{{end}}</td>
+              <td>{{formatDue .DueDate}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{if not .Rows}}<p class="muted">Keine Zeilen für diesen Filter.</p>{{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}
