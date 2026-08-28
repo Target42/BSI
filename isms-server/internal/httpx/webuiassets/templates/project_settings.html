@@ -1,0 +1,57 @@
+{{define "project_settings"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eigenschaften · {{.Project.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        / Eigenschaften
+      </p>
+      <h1>Projekteigenschaften</h1>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+      {{if .CanEdit}}
+      <form class="card" method="post" action="{{href (printf "/projects/%d/settings" .Project.ID)}}">
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" required value="{{.Project.Name}}">
+        </div>
+        <div class="field">
+          <label for="description">Beschreibung</label>
+          <textarea id="description" name="description" rows="4">{{.Project.Description}}</textarea>
+        </div>
+        <p class="muted">Katalogversion {{.Project.CatalogVersion}} (beim Anlegen festgelegt).</p>
+        <button class="btn" type="submit">Speichern</button>
+      </form>
+      {{else}}
+      <div class="card">
+        <p>{{.Project.Name}}</p>
+        {{if .Project.Description}}<div class="req-text">{{.Project.Description}}</div>{{end}}
+        <p class="muted">Katalogversion {{.Project.CatalogVersion}}</p>
+      </div>
+      {{end}}
+
+      {{if .CanOwn}}
+      <form class="card danger-card" method="post" action="{{href (printf "/projects/%d/delete" .Project.ID)}}">
+        <p>Löschen entfernt Zielobjekte, Bewertungen, Maßnahmen und Mitglieder unwiderruflich.</p>
+        <div class="field">
+          <label for="confirm">Projektname zur Bestätigung</label>
+          <input id="confirm" name="confirm" required autocomplete="off" placeholder="{{.Project.Name}}">
+        </div>
+        <button class="btn btn-danger" type="submit">Projekt löschen</button>
+      </form>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

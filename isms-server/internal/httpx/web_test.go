@@ -33,7 +33,7 @@ func TestEmbeddedWebUIServesPagesAndLeavesAPI(t *testing.T) {
 		t.Fatalf("GET / Location %q", loc)
 	}
 	assert(http.MethodGet, "/login", http.StatusOK, "Anmelden")
-	assert(http.MethodGet, "/ui/app.css", http.StatusOK, "--accent:")
+	assert(http.MethodGet, "/ui/app.css", http.StatusOK, "@media print")
 	assert(http.MethodGet, "/health", http.StatusOK, `"status":"ok"`)
 	assert(http.MethodGet, "/api/v1/projects", http.StatusUnauthorized, "")
 
@@ -47,7 +47,11 @@ func TestEmbeddedWebUIServesPagesAndLeavesAPI(t *testing.T) {
 		"/projects/1/targets/1/edit",
 		"/projects/1/targets/1/applicability",
 		"/projects/1/targets/1/recommendations",
+		"/projects/1/targets/1",
 		"/projects/1/report.csv",
+		"/projects/1/settings",
+		"/catalog",
+		"/catalog/bausteine/1",
 	} {
 		rec := assert(http.MethodGet, path, http.StatusSeeOther, "")
 		if loc := rec.Header().Get("Location"); loc != "/login" {

@@ -14,6 +14,8 @@
     <main class="main">
       <p>
         <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        /
+        <a href="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">{{.Target.Name}}</a>
         / Zielobjekt
       </p>
       <h1>{{.Target.Name}}</h1>
@@ -106,6 +108,8 @@
       </div>
       {{end}}
       <p>
+        <a href="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">Arbeitsplatz</a>
+        ·
         <a href="{{href (printf "/projects/%d/targets/%d/applicability" .Project.ID .Target.ID)}}">Baustein-Anwendbarkeit</a>
         ·
         <a href="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">Empfehlungen</a>

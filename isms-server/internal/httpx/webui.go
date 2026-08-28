@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
+	"github.com/Target42/BSI/isms-server/internal/catalog"
 	"github.com/Target42/BSI/isms-server/internal/domain"
 	"github.com/Target42/BSI/isms-server/internal/repository"
 	"github.com/Target42/BSI/isms-server/internal/service"
@@ -77,6 +78,7 @@ type webPage struct {
 	Assessment            domain.RequirementAssessment
 	AssessmentStatuses    []string
 	Requirement           domain.Requirement
+	Requirements          []domain.Requirement
 	Baustein              domain.Baustein
 	Target                domain.TargetObject
 	RelatedMeasures       []webMeasureRow
@@ -84,6 +86,37 @@ type webPage struct {
 	CSVHref               string
 	Hint                  string
 	Recommendations       []webRecommendation
+	SelectedVersion       string
+	Bausteine             []domain.Baustein
+	CatalogHits           []service.CatalogHit
+	CatalogTruncated      bool
+	HighlightID           int64
+	BausteinCount         int
+	RequirementCount      int
+	WorkBausteine         []webWorkBaustein
+	WorkReqs              []webWorkReq
+	HighlightRecs         bool
+	Inherited             bool
+	InheritedFrom         string
+	Deviation             string
+	PrintDate             string
+}
+
+type webWorkBaustein struct {
+	domain.Baustein
+	Status        string
+	Inherited     bool
+	SourceCaption string
+	Recommended   bool
+	RecommendTier string
+	OpenCount     int
+	TotalCount    int
+}
+
+type webWorkReq struct {
+	domain.Requirement
+	Status  string
+	Overdue bool
 }
 
 type webRecommendation struct {
@@ -106,7 +139,12 @@ type webTargetRow struct {
 
 type webApplicabilityRow struct {
 	domain.Baustein
-	Status string
+	Status        string
+	OwnStatus     string
+	Inherited     bool
+	SourceCaption string
+	Recommended   bool
+	RecommendTier string
 }
 
 type webMeasureRow struct {
@@ -140,6 +178,7 @@ func newWebUI(authService *auth.Service, store *repository.Store, reports *servi
 		"dueValue":    dueValue,
 		"statusClass": statusClass,
 		"padLeft":     padLeft,
+		"reqHTML":     reqHTML,
 	}).ParseFS(webUIAssets, "webuiassets/templates/*.html")
 	if err != nil {
 		panic("web ui templates: " + err.Error())
@@ -185,13 +224,22 @@ func (u *webUI) mount(r chi.Router) {
 		g.Post("/projects/{projectID}/members/{userID}", u.memberUpdate)
 		g.Post("/projects/{projectID}/members/{userID}/remove", u.memberRemove)
 		g.Post("/projects/{projectID}/targets", u.targetCreate)
+		g.Get("/projects/{projectID}/targets/{targetObjectID}", u.workplaceGet)
 		g.Get("/projects/{projectID}/targets/{targetObjectID}/edit", u.targetEditGet)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/edit", u.targetEditSave)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/delete", u.targetDelete)
 		g.Get("/projects/{projectID}/targets/{targetObjectID}/applicability", u.applicabilityGet)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/applicability", u.applicabilitySave)
+		g.Post("/projects/{projectID}/targets/{targetObjectID}/applicability/bulk", u.applicabilityBulk)
+		g.Post("/projects/{projectID}/targets/{targetObjectID}/assessments/bulk", u.assessmentsBulk)
 		g.Get("/projects/{projectID}/targets/{targetObjectID}/recommendations", u.recommendationsGet)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/recommendations", u.recommendationsApply)
+		g.Get("/projects/{projectID}/settings", u.projectSettingsGet)
+		g.Post("/projects/{projectID}/settings", u.projectSettingsSave)
+		g.Post("/projects/{projectID}/delete", u.projectDelete)
+		g.Get("/catalog", u.catalogGet)
+		g.Get("/catalog/bausteine/{bausteinID}", u.catalogBausteinGet)
+		g.Post("/catalog/import", u.catalogImport)
 		g.Post("/projects/{projectID}/measures/{measureID}", u.measureStatus)
 		g.Get("/projects/{projectID}/measures/{measureID}", u.measureEditGet)
 		g.Post("/projects/{projectID}/measures/{measureID}/edit", u.measureEditSave)
@@ -199,6 +247,7 @@ func (u *webUI) mount(r chi.Router) {
 		g.Get("/projects/{projectID}/targets/{targetObjectID}/requirements/{requirementID}", u.assessmentGet)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/requirements/{requirementID}", u.assessmentSave)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/requirements/{requirementID}/measures", u.measureCreate)
+		g.Post("/projects/{projectID}/targets/{targetObjectID}/deviation", u.deviationSave)
 		g.Get("/account", u.accountGet)
 		g.Post("/account/password", u.accountPassword)
 		g.Get("/users", u.usersGet)
@@ -285,8 +334,11 @@ func (u *webUI) projects(w http.ResponseWriter, r *http.Request) {
 		versions = []string{"2023"}
 	}
 	notice := ""
-	if r.URL.Query().Get("saved") == "created" {
+	switch r.URL.Query().Get("saved") {
+	case "created":
 		notice = "Projekt angelegt."
+	case "deleted":
+		notice = "Projekt gelöscht."
 	}
 	u.render(w, r, "projects", webPage{
 		DisplayName:     user.DisplayName,
@@ -342,6 +394,9 @@ func (u *webUI) projectHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("saved") == "1" {
 		page.Notice = "Zielobjekt gespeichert."
 	}
+	if r.URL.Query().Get("saved") == "settings" {
+		page.Notice = "Projekteigenschaften gespeichert."
+	}
 	if addUnder > 0 {
 		parent, found := domain.FindTargetByID(objects, addUnder)
 		if found && parent.ProjectID == project.ID {
@@ -384,6 +439,7 @@ func (u *webUI) report(w http.ResponseWriter, r *http.Request) {
 		StatusFilter:  status,
 		StatusFilters: webStatusFilters,
 		CSVHref:       u.reportCSVHref(project.ID, query, status),
+		PrintDate:     time.Now().Format("02.01.2006, 15:04"),
 	})
 }
 
@@ -716,6 +772,10 @@ func (u *webUI) measureCreate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if ctx.Inherited {
+		u.renderAssessment(w, r, user, project, true, ctx, "Maßnahmen zu geerbten Bausteinen gehören zum übergeordneten Zielobjekt.", "")
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		u.renderAssessment(w, r, user, project, true, ctx, "Ungültige Anfrage.", "")
 		return
@@ -887,6 +947,8 @@ func (u *webUI) assessmentGet(w http.ResponseWriter, r *http.Request) {
 		notice = "Maßnahme angelegt."
 	case "deleted":
 		notice = "Maßnahme gelöscht."
+	case "deviation":
+		notice = "Abweichungstext gespeichert."
 	}
 	u.renderAssessment(w, r, user, project, roleCanEdit(role), ctx, "", notice)
 }
@@ -898,6 +960,10 @@ func (u *webUI) assessmentSave(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, ok := u.loadAssessmentPage(w, r, project)
 	if !ok {
+		return
+	}
+	if ctx.Inherited {
+		u.renderAssessment(w, r, user, project, true, ctx, "Geerbte Bewertungen werden am übergeordneten Zielobjekt geändert.", "")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -937,11 +1003,14 @@ func (u *webUI) assessmentSave(w http.ResponseWriter, r *http.Request) {
 }
 
 type webAssessmentContext struct {
-	Target      domain.TargetObject
-	Requirement domain.Requirement
-	Baustein    domain.Baustein
-	Assessment  domain.RequirementAssessment
-	Measures    []webMeasureRow
+	Target        domain.TargetObject
+	Requirement   domain.Requirement
+	Baustein      domain.Baustein
+	Assessment    domain.RequirementAssessment
+	Measures      []webMeasureRow
+	Inherited     bool
+	InheritedFrom string
+	Deviation     string
 }
 
 func (u *webUI) loadAssessmentPage(w http.ResponseWriter, r *http.Request, project domain.Project) (webAssessmentContext, bool) {
@@ -970,22 +1039,49 @@ func (u *webUI) loadAssessmentPage(w http.ResponseWriter, r *http.Request, proje
 		http.Error(w, "Baustein konnte nicht geladen werden.", http.StatusInternalServerError)
 		return webAssessmentContext{}, false
 	}
-	assessment, err := u.store.GetAssessment(r.Context(), project.ID, target.ID, requirement.ID)
+	assessTargetID := target.ID
+	inherited := false
+	inheritedFrom := ""
+	deviation := ""
+	objects, err := u.store.ListTargetObjects(r.Context(), project.ID)
+	if err != nil {
+		http.Error(w, "Zielobjekte konnten nicht geladen werden.", http.StatusInternalServerError)
+		return webAssessmentContext{}, false
+	}
+	_, inheritedMap, err := u.inheritedMaps(r, project.ID, objects, target)
+	if err != nil {
+		http.Error(w, "Anwendbarkeit konnte nicht geladen werden.", http.StatusInternalServerError)
+		return webAssessmentContext{}, false
+	}
+	if item, ok := inheritedMap[baustein.ID]; ok {
+		inherited = true
+		inheritedFrom = item.SourceCaption
+		assessTargetID = item.SourceTargetID
+		deviation, err = u.store.GetDeviation(r.Context(), project.ID, target.ID, baustein.ID)
+		if err != nil {
+			http.Error(w, "Abweichungstext konnte nicht geladen werden.", http.StatusInternalServerError)
+			return webAssessmentContext{}, false
+		}
+	}
+	assessment, err := u.store.GetAssessment(r.Context(), project.ID, assessTargetID, requirement.ID)
 	if err != nil {
 		http.Error(w, "Bewertung konnte nicht geladen werden.", http.StatusInternalServerError)
 		return webAssessmentContext{}, false
 	}
-	items, err := u.store.ListMeasures(r.Context(), project.ID, target.ID, requirement.ID)
+	items, err := u.store.ListMeasures(r.Context(), project.ID, assessTargetID, requirement.ID)
 	if err != nil {
 		http.Error(w, "Maßnahmen konnten nicht geladen werden.", http.StatusInternalServerError)
 		return webAssessmentContext{}, false
 	}
 	return webAssessmentContext{
-		Target:      target,
-		Requirement: requirement,
-		Baustein:    baustein,
-		Assessment:  assessment,
-		Measures:    toMeasureRows(items),
+		Target:        target,
+		Requirement:   requirement,
+		Baustein:      baustein,
+		Assessment:    assessment,
+		Measures:      toMeasureRows(items),
+		Inherited:     inherited,
+		InheritedFrom: inheritedFrom,
+		Deviation:     deviation,
 	}, true
 }
 
@@ -1003,6 +1099,9 @@ func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *a
 		Target:             ctx.Target,
 		RelatedMeasures:    ctx.Measures,
 		MeasureStatuses:    webMeasureStatuses,
+		Inherited:          ctx.Inherited,
+		InheritedFrom:      ctx.InheritedFrom,
+		Deviation:          ctx.Deviation,
 	})
 }
 
@@ -1232,4 +1331,8 @@ func statusClass(status string, overdue bool) string {
 	default:
 		return "badge"
 	}
+}
+
+func reqHTML(text string) template.HTML {
+	return template.HTML(catalog.FormatRequirementHTML(text))
 }

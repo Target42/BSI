@@ -15,7 +15,7 @@
       <p>
         <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
         /
-        <a href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">{{.Target.Name}}</a>
+        <a href="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">{{.Target.Name}}</a>
         / Anwendbarkeit
       </p>
       <h1>Baustein-Anwendbarkeit</h1>
@@ -24,6 +24,7 @@
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
       <p class="row-actions">
+        <a class="btn" href="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">Arbeitsplatz</a>
         <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">Empfehlungen</a>
       </p>
 
@@ -40,8 +41,36 @@
             {{end}}
           </select>
         </div>
+        <input type="hidden" name="highlight" value="0">
+        <label class="check">
+          <input type="checkbox" name="highlight" value="1" {{if .HighlightRecs}}checked{{end}}>
+          Empfehlungen hervorheben
+        </label>
         <button class="btn" type="submit">Filtern</button>
       </form>
+
+      {{if and .CanEdit .ApplicabilityRows}}
+      <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/applicability/bulk" .Project.ID .Target.ID)}}">
+        <input type="hidden" name="q" value="{{.Query}}">
+        <input type="hidden" name="filter" value="{{.StatusFilter}}">
+        <input type="hidden" name="highlight" value="{{if .HighlightRecs}}1{{else}}0{{end}}">
+        <h2>Massenstatus</h2>
+        <p class="muted">Wirkt auf alle {{len .ApplicabilityRows}} gerade sichtbaren Zeilen (nach Suche und Filter). Einzelne Zeilen weiter unten einzeln speichern.</p>
+        <div class="form-grid">
+          <div class="field">
+            <label for="bulkStatus">Status</label>
+            <select id="bulkStatus" name="status" required>
+              <option value="">Status wählen…</option>
+              {{range .ApplicabilityStatuses}}
+              <option value="{{.}}">{{.}}</option>
+              {{end}}
+              <option value="Ungesetzt">Ungesetzt</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn" type="submit">Sichtbare setzen</button>
+      </form>
+      {{end}}
 
       {{if not .ApplicabilityRows}}
         <p class="muted">Keine Bausteine für diesen Filter. Fehlt der Katalog, einmal auf dem Server importieren.</p>
@@ -59,12 +88,17 @@
             <tbody>
               {{range .ApplicabilityRows}}
               {{$row := .}}
-              <tr>
-                <td>{{.ExternalID}} {{.Title}}</td>
+              <tr class="{{if and $.HighlightRecs .Recommended}}recommended{{end}}">
+                <td>
+                  <a href="{{href (printf "/catalog/bausteine/%d" .ID)}}">{{.ExternalID}} {{.Title}}</a>
+                  {{if .Recommended}}<span class="badge">{{.RecommendTier}}</span>{{end}}
+                  {{if .Inherited}}<div class="muted">↓ von {{.SourceCaption}}</div>{{end}}
+                </td>
                 <td>{{if .GroupName}}{{.GroupName}}{{else}}—{{end}}</td>
                 <td>
                   {{if .Status}}
                     <span class="{{statusClass .Status false}}">{{.Status}}</span>
+                    {{if and .Inherited (eq .OwnStatus "")}}<span class="muted">geerbt</span>{{end}}
                   {{else}}
                     <span class="muted">ungesetzt</span>
                   {{end}}
@@ -74,9 +108,9 @@
                   <form class="inline-form" method="post" action="{{href (printf "/projects/%d/targets/%d/applicability" $.Project.ID $.Target.ID)}}">
                     <input type="hidden" name="bausteinID" value="{{.ID}}">
                     <select name="status" aria-label="Anwendbarkeit {{.ExternalID}}">
-                      <option value="" {{if eq .Status ""}}selected{{end}}>Ungesetzt</option>
+                      <option value="" {{if eq .OwnStatus ""}}selected{{end}}>Ungesetzt</option>
                       {{range $.ApplicabilityStatuses}}
-                      <option value="{{.}}" {{if eq . $row.Status}}selected{{end}}>{{.}}</option>
+                      <option value="{{.}}" {{if eq . $row.OwnStatus}}selected{{end}}>{{.}}</option>
                       {{end}}
                     </select>
                     <button class="btn btn-small" type="submit">Speichern</button>

@@ -16,6 +16,7 @@
       <h1>{{.Project.Name}}</h1>
       {{if .Project.Description}}<p class="lede">{{.Project.Description}}</p>{{end}}
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
       <div class="stats">
         <div class="stat">
@@ -45,7 +46,7 @@
         <a class="dash-card" href="{{href (printf "/projects/%d/report" .Project.ID)}}">
           <span class="icon icon-report" aria-hidden="true"></span>
           <span class="dash-card-title">Soll-Ist-Report</span>
-          <span class="dash-card-hint">Anforderungen, Status und CSV</span>
+          <span class="dash-card-hint">Anforderungen, CSV und Druck</span>
         </a>
         <a class="dash-card" href="{{href (printf "/projects/%d/cockpit" .Project.ID)}}">
           <span class="icon icon-tasks" aria-hidden="true"></span>
@@ -56,6 +57,16 @@
           <span class="icon icon-users" aria-hidden="true"></span>
           <span class="dash-card-title">Mitglieder</span>
           <span class="dash-card-hint">Rollen und Zugriff im Projekt</span>
+        </a>
+        <a class="dash-card" href="{{href (printf "/projects/%d/settings" .Project.ID)}}">
+          <span class="icon icon-settings" aria-hidden="true"></span>
+          <span class="dash-card-title">Eigenschaften</span>
+          <span class="dash-card-hint">Name, Beschreibung{{if .CanOwn}}, Löschen{{end}}</span>
+        </a>
+        <a class="dash-card" href="{{href (printf "/catalog?version=%s" .Project.CatalogVersion)}}">
+          <span class="icon icon-book" aria-hidden="true"></span>
+          <span class="dash-card-title">Katalog</span>
+          <span class="dash-card-hint">Bausteine und Volltextsuche</span>
         </a>
       </nav>
 
@@ -80,7 +91,7 @@
               <tr>
                 <td>
                   <span style="padding-left: {{padLeft .Depth}}">
-                    <a href="{{href (printf "/projects/%d/targets/%d/edit" $.Project.ID .ID)}}">{{.Name}}</a>
+                    <a href="{{href (printf "/projects/%d/targets/%d" $.Project.ID .ID)}}">{{.Name}}</a>
                   </span>
                 </td>
                 <td>{{.Type}}</td>
@@ -89,9 +100,13 @@
                 <td>{{.Summary.OpenCount}}</td>
                 {{if $.CanEdit}}
                 <td>
+                  <a href="{{href (printf "/projects/%d/targets/%d" $.Project.ID .ID)}}">Arbeitsplatz</a>
+                  ·
                   <a href="{{href (printf "/projects/%d/targets/%d/applicability" $.Project.ID .ID)}}">Anwendbarkeit</a>
                   ·
                   <a href="{{href (printf "/projects/%d/targets/%d/recommendations" $.Project.ID .ID)}}">Empfehlungen</a>
+                  ·
+                  <a href="{{href (printf "/projects/%d/targets/%d/edit" $.Project.ID .ID)}}">Bearbeiten</a>
                   {{if .ChildTypes}}
                     ·
                     <a href="{{href (printf "/projects/%d?addUnder=%d" $.Project.ID .ID)}}">Unterobjekt</a>

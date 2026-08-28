@@ -1,0 +1,109 @@
+{{define "catalog"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Katalog · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <h1>IT-Grundschutz-Katalog</h1>
+      <p class="lede">Bausteine und Anforderungen nachschlagen. Anwendbarkeit setzen Sie am Zielobjekt.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      <form class="toolbar" method="get" action="{{href "/catalog"}}">
+        <div class="field">
+          <label for="q">Volltextsuche</label>
+          <input id="q" name="q" value="{{.Query}}" placeholder="Kennung, Titel, Anforderungstext…">
+        </div>
+        <div class="field">
+          <label for="version">Version</label>
+          <select id="version" name="version">
+            {{range .CatalogVersions}}
+            <option value="{{.}}" {{if eq . $.SelectedVersion}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <button class="btn" type="submit">Suchen</button>
+      </form>
+
+      {{if .Query}}
+        {{if .CatalogTruncated}}<p class="muted">Suche auf 200 Treffer begrenzt — bitte verfeinern.</p>{{end}}
+        {{if not .CatalogHits}}
+          <p class="muted">Keine Treffer für diese Suche.</p>
+        {{else}}
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kapitel</th>
+                  <th>Baustein</th>
+                  <th>Anforderung</th>
+                  <th>Fundstelle</th>
+                  <th>Auszug</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{range .CatalogHits}}
+                <tr>
+                  <td>{{if .GroupName}}{{.GroupName}}{{else}}—{{end}}</td>
+                  <td>
+                    <a href="{{href (printf "/catalog/bausteine/%d" .BausteinID)}}{{if .RequirementID}}?req={{.RequirementID}}{{end}}">{{.BausteinLabel}}</a>
+                  </td>
+                  <td>{{.RequirementLabel}}</td>
+                  <td>{{.MatchField}}</td>
+                  <td>{{reqHTML .Snippet}}</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+        {{end}}
+      {{else}}
+        {{if not .Bausteine}}
+          <p class="muted">Kein Katalog für Version {{.SelectedVersion}}. Administratoren können unten XML einspielen.</p>
+        {{else}}
+          <p class="muted">{{.BausteinCount}} Bausteine. Suche findet auch im Anforderungstext.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kapitel</th>
+                  <th>Baustein</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{range .Bausteine}}
+                <tr>
+                  <td>{{if .GroupName}}{{.GroupName}}{{else}}—{{end}}</td>
+                  <td><a href="{{href (printf "/catalog/bausteine/%d" .ID)}}">{{.ExternalID}} {{.Title}}</a></td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+        {{end}}
+      {{end}}
+
+      {{if .IsAdmin}}
+      <h2>Katalog einspielen</h2>
+      <form class="card" method="post" action="{{href "/catalog/import"}}" enctype="multipart/form-data">
+        <p class="muted">Ersetzt den IT-Grundschutz-Katalog auf dem Server (XML-Kompendium). Bestehende Projekte behalten ihre Katalogversion.</p>
+        <div class="field">
+          <label for="file">XML-Datei</label>
+          <input id="file" name="file" type="file" accept=".xml,application/xml,text/xml" required>
+        </div>
+        <button class="btn" type="submit">XML importieren</button>
+      </form>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -15,7 +15,7 @@
       <p>
         <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
         /
-        <a href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">{{.Target.Name}}</a>
+        <a href="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">{{.Target.Name}}</a>
         / Empfehlungen
       </p>
       <h1>Baustein-Empfehlungen</h1>

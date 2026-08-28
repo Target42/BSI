@@ -41,7 +41,7 @@ go run ./cmd/isms-server
 
 Beim ersten Start wird ein Admin-Benutzer angelegt (`admin@example.com` / `changeme`).
 
-**Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen, Zielobjekte, Baustein-Empfehlungen, Anwendbarkeit, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV. Administratoren legen Benutzer an; jeder ändert das eigene Passwort. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
+**Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen und pflegen, Zielobjekte, Arbeitsplatz (Bausteine/Anforderungen, Vererbung, Empfehlungen, Massenstatus), Katalog, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV und Druck. Administratoren legen Benutzer an und spielen den Katalog ein. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
 
 **Katalog:** Ist die Datenbank noch leer, importiert der Server automatisch die IT-Grundschutz-XML, wenn er sie findet. Suchreihenfolge:
 
@@ -55,7 +55,7 @@ Tipp für deine Umgebung — in `.env` eintragen:
 CATALOG_XML_PATH=D:\RADStudio\Delphi\BSI\xml\XML_Kompendium_2023.xml
 ```
 
-Manueller Import (Admin-API) bleibt für Updates verfügbar.
+Manueller Import bleibt für Updates: in der Web-UI **Katalog → XML importieren** (Administrator) oder die Admin-API.
 
 ### Alternative: Docker Compose
 

@@ -15,23 +15,27 @@
       <p>
         <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
         /
-        <a href="{{href (printf "/projects/%d/report" .Project.ID)}}">Soll-Ist</a>
+        <a href="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">{{.Target.Name}}</a>
         / Bewertung
       </p>
       <h1>{{.Requirement.ExternalID}} {{.Requirement.Title}}</h1>
       <p class="lede">
         {{.Target.Name}}
-        {{if .Baustein.Title}} · {{.Baustein.ExternalID}} {{.Baustein.Title}}{{end}}
+        {{if .Baustein.Title}} · <a href="{{href (printf "/catalog/bausteine/%d?req=%d" .Baustein.ID .Requirement.ID)}}">{{.Baustein.ExternalID}} {{.Baustein.Title}}</a>{{end}}
         {{if .Requirement.Level}} · Stufe {{.Requirement.Level}}{{end}}
       </p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
       {{if .Requirement.Text}}
-        <div class="req-text">{{.Requirement.Text}}</div>
+        <div class="req-text">{{reqHTML .Requirement.Text}}</div>
       {{end}}
 
-      {{if .CanEdit}}
+      {{if .Inherited}}
+        <div class="notice">Diese Bewertung stammt von {{.InheritedFrom}}. Status, Frist und Maßnahmen werden dort gepflegt.</div>
+      {{end}}
+
+      {{if and .CanEdit (not .Inherited)}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/requirements/%d" .Project.ID .Target.ID .Requirement.ID)}}">
         <input type="hidden" name="version" value="{{.Assessment.Version}}">
         <div class="form-grid">
@@ -63,13 +67,28 @@
       <div class="card">
         <p>
           Status:
-          <span class="{{statusClass .Assessment.Status false}}">{{.Assessment.Status}}</span>
+          <span class="{{statusClass .Assessment.Status false}}">{{if .Assessment.Status}}{{.Assessment.Status}}{{else}}Offen{{end}}</span>
         </p>
         <p>Verantwortlich: {{if .Assessment.Responsible}}{{.Assessment.Responsible}}{{else}}—{{end}}</p>
         <p>Frist: {{formatDue .Assessment.DueDate}}</p>
         {{if .Assessment.Note}}<div class="req-text">{{.Assessment.Note}}</div>{{end}}
-        <p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>
+        {{if not .Inherited}}<p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>{{end}}
       </div>
+      {{if and .Inherited .CanEdit}}
+      <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/deviation" .Project.ID .Target.ID)}}">
+        <input type="hidden" name="bausteinID" value="{{.Baustein.ID}}">
+        <input type="hidden" name="requirementID" value="{{.Requirement.ID}}">
+        <div class="field">
+          <label for="deviation">Abweichungstext</label>
+          <textarea id="deviation" name="deviation" rows="6">{{.Deviation}}</textarea>
+        </div>
+        <p class="muted">Nur ausfüllen, wenn die Bewertung vom übergeordneten Zielobjekt abweicht.</p>
+        <button class="btn" type="submit">Abweichung speichern</button>
+      </form>
+      {{else if and .Inherited .Deviation}}
+        <h2>Abweichungstext</h2>
+        <div class="req-text">{{.Deviation}}</div>
+      {{end}}
       {{end}}
 
       <h2>Maßnahmen zu dieser Anforderung</h2>
@@ -105,7 +124,7 @@
         <p class="muted"><a href="{{href (printf "/projects/%d/cockpit" .Project.ID)}}">Zum Maßnahmen-Cockpit</a></p>
       {{end}}
 
-      {{if .CanEdit}}
+      {{if and .CanEdit (not .Inherited)}}
       <h2>Neue Maßnahme</h2>
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/requirements/%d/measures" .Project.ID .Target.ID .Requirement.ID)}}">
         <div class="field">

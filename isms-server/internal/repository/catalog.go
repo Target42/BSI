@@ -84,6 +84,33 @@ func (s *Store) ListRequirements(ctx context.Context, bausteinID int64) ([]domai
 	return items, rows.Err()
 }
 
+func (s *Store) ListRequirementsByCatalog(ctx context.Context, standard, catalogVersion string) ([]domain.Requirement, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT r.id, r.baustein_id, r.standard, r.external_id, r.baustein_external_id, r.title,
+		       COALESCE(r.text, ''), r.level, COALESCE(r.responsible_role, ''), r.withdrawn
+		FROM requirements r
+		JOIN bausteine b ON b.id = r.baustein_id
+		WHERE b.standard = $1 AND b.catalog_version = $2
+		ORDER BY r.external_id`, standard, catalogVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []domain.Requirement
+	for rows.Next() {
+		var r domain.Requirement
+		if err := rows.Scan(
+			&r.ID, &r.BausteinID, &r.Standard, &r.ExternalID, &r.BausteinExternalID,
+			&r.Title, &r.Text, &r.Level, &r.ResponsibleRole, &r.Withdrawn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, r)
+	}
+	return items, rows.Err()
+}
+
 func (s *Store) GetRequirement(ctx context.Context, id int64) (domain.Requirement, error) {
 	var r domain.Requirement
 	err := s.pool.QueryRow(ctx, `

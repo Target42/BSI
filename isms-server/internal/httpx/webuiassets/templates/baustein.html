@@ -1,0 +1,73 @@
+{{define "baustein"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Baustein.ExternalID}} · Katalog</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/catalog?version=%s" .SelectedVersion)}}">Katalog</a>
+        {{if .SelectedVersion}} · Version {{.SelectedVersion}}{{end}}
+      </p>
+      <h1>{{.Baustein.ExternalID}} {{.Baustein.Title}}</h1>
+      {{if .Baustein.GroupName}}<p class="lede">{{.Baustein.GroupName}}</p>{{end}}
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+      <form class="toolbar" method="get" action="{{href (printf "/catalog/bausteine/%d" .Baustein.ID)}}">
+        {{if .HighlightID}}<input type="hidden" name="req" value="{{.HighlightID}}">{{end}}
+        <div class="field">
+          <label for="q">In diesem Baustein</label>
+          <input id="q" name="q" value="{{.Query}}" placeholder="Anforderung, Titel, Text…">
+        </div>
+        <button class="btn" type="submit">Filtern</button>
+      </form>
+
+      {{if not .Requirements}}
+        <p class="muted">Keine Anforderungen für diesen Filter.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Anforderung</th>
+                <th>Titel</th>
+                <th>Stufe</th>
+                <th>Rolle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Requirements}}
+              <tr class="{{if eq .ID $.HighlightID}}selected{{end}}">
+                <td>
+                  <a href="{{href (printf "/catalog/bausteine/%d" $.Baustein.ID)}}?req={{.ID}}{{if $.Query}}&amp;q={{urlquery $.Query}}{{end}}">{{.ExternalID}}</a>
+                </td>
+                <td>{{.Title}}</td>
+                <td>{{if .Level}}{{.Level}}{{else}}—{{end}}</td>
+                <td>{{if .ResponsibleRole}}{{.ResponsibleRole}}{{else}}—{{end}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+
+      {{if .Requirement.ID}}
+        <h2>{{.Requirement.ExternalID}} {{.Requirement.Title}}</h2>
+        {{if .Requirement.Text}}
+          <div class="req-text">{{reqHTML .Requirement.Text}}</div>
+        {{else}}
+          <p class="muted">Kein Anforderungstext hinterlegt.</p>
+        {{end}}
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

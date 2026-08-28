@@ -8,15 +8,19 @@
   <link rel="stylesheet" href="{{href "/ui/app.css"}}">
   <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
 </head>
-<body>
+<body class="page-report">
   <div class="app">
     {{template "header" .}}
     <main class="main">
-      <p>
+      <p class="no-print">
         <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
         / Soll-Ist
       </p>
       <h1>Soll-Ist-Report</h1>
+      <div class="print-only print-meta">
+        <p>{{.Project.Name}}{{if .Project.CatalogVersion}} · Katalog {{.Project.CatalogVersion}}{{end}} · gedruckt {{.PrintDate}}</p>
+        <p>{{if .Query}}Suche „{{.Query}}“ · {{end}}Filter {{.StatusFilter}} · {{len .Rows}} Zeilen</p>
+      </div>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 
       <div class="stats">
@@ -53,6 +57,7 @@
         </div>
         <button class="btn" type="submit">Filtern</button>
         {{if .CSVHref}}<a class="btn btn-secondary" href="{{.CSVHref}}">CSV herunterladen</a>{{end}}
+        <button class="btn btn-secondary" type="button" onclick="window.print()">Drucken</button>
       </form>
 
       <div class="table-wrap">

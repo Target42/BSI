@@ -389,27 +389,42 @@ func (u *webUI) renderApplicability(w http.ResponseWriter, r *http.Request, user
 		http.Error(w, "Katalog konnte nicht geladen werden.", http.StatusInternalServerError)
 		return
 	}
-	applied, err := u.store.ApplicabilityMap(r.Context(), project.ID, target.ID)
+	objects, err := u.store.ListTargetObjects(r.Context(), project.ID)
+	if err != nil {
+		http.Error(w, "Zielobjekte konnten nicht geladen werden.", http.StatusInternalServerError)
+		return
+	}
+	own, inherited, err := u.inheritedMaps(r, project.ID, objects, target)
 	if err != nil {
 		http.Error(w, "Anwendbarkeit konnte nicht geladen werden.", http.StatusInternalServerError)
 		return
 	}
+	recs := recommendationIndex(bausteine, target)
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		query = strings.TrimSpace(r.FormValue("q"))
+	}
 	status := r.URL.Query().Get("status")
 	if status == "" {
+		status = r.FormValue("filter")
+	}
+	if status == "" {
 		status = "Alle"
+	}
+	highlight := queryFlag(r, "highlight", false)
+	if r.Method == http.MethodPost && r.FormValue("highlight") == "1" {
+		highlight = true
 	}
 	needle := strings.ToLower(query)
 	rows := make([]webApplicabilityRow, 0, len(bausteine))
 	for _, b := range bausteine {
-		current := applied[b.ID]
-		if status == "Gesetzt" && current == "" {
-			continue
+		current := own[b.ID]
+		item, isInherited := inherited[b.ID]
+		display := current
+		if display == "" && isInherited {
+			display = item.Status
 		}
-		if status == "Ungesetzt" && current != "" {
-			continue
-		}
-		if status != "" && status != "Alle" && status != "Gesetzt" && status != "Ungesetzt" && current != status {
+		if !matchApplicabilityFilter(status, display, isInherited) {
 			continue
 		}
 		if needle != "" {
@@ -418,11 +433,30 @@ func (u *webUI) renderApplicability(w http.ResponseWriter, r *http.Request, user
 				continue
 			}
 		}
-		rows = append(rows, webApplicabilityRow{Baustein: b, Status: current})
+		rec := recs[b.ID]
+		rows = append(rows, webApplicabilityRow{
+			Baustein:      b,
+			Status:        display,
+			OwnStatus:     current,
+			Inherited:     isInherited,
+			SourceCaption: item.SourceCaption,
+			Recommended:   rec.BausteinID != 0,
+			RecommendTier: rec.Tier,
+		})
 	}
 	notice := ""
-	if errMsg == "" && r.URL.Query().Get("saved") == "1" {
-		notice = "Anwendbarkeit gespeichert."
+	if errMsg == "" {
+		switch r.URL.Query().Get("saved") {
+		case "1":
+			notice = "Anwendbarkeit gespeichert."
+		case "bulk":
+			n, _ := strconv.Atoi(r.URL.Query().Get("n"))
+			to := strings.TrimSpace(r.URL.Query().Get("to"))
+			if to == "" {
+				to = "ungesetzt"
+			}
+			notice = germanCount(n, "Baustein", "Bausteine") + " auf " + to + " gesetzt."
+		}
 	}
 	u.render(w, r, "applicability", webPage{
 		DisplayName:           user.DisplayName,
@@ -431,7 +465,8 @@ func (u *webUI) renderApplicability(w http.ResponseWriter, r *http.Request, user
 		Target:                target,
 		Query:                 query,
 		StatusFilter:          status,
-		StatusFilters:         []string{"Alle", "Gesetzt", "Ungesetzt", "Benötigt", "Möglicherweise", "Nicht relevant"},
+		StatusFilters:         []string{"Alle", "Gesetzt", "Ungesetzt", "Geerbt", "Benötigt", "Möglicherweise", "Nicht relevant"},
+		HighlightRecs:         highlight,
 		ApplicabilityRows:     rows,
 		ApplicabilityStatuses: webApplicabilityStatuses,
 		Error:                 errMsg,

@@ -1,0 +1,149 @@
+{{define "workplace"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Target.Name}} · {{.Project.Name}}</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p>
+        <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
+        / {{.Target.Name}}
+      </p>
+      <h1>{{.Target.Name}}</h1>
+      <p class="lede">{{.Target.Type}}{{if .Target.ProtectionNeed}} · {{.Target.ProtectionNeed}}{{end}}</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      <p class="row-actions">
+        <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/applicability" .Project.ID .Target.ID)}}">Anwendbarkeit</a>
+        <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">Empfehlungen</a>
+        <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">Bearbeiten</a>
+      </p>
+
+      <form class="toolbar" method="get" action="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">
+        {{if .HighlightID}}<input type="hidden" name="baustein" value="{{.HighlightID}}">{{end}}
+        <div class="field">
+          <label for="q">Suche</label>
+          <input id="q" name="q" value="{{.Query}}" placeholder="Baustein…">
+        </div>
+        <div class="field">
+          <label for="status">Anwendbarkeit</label>
+          <select id="status" name="status">
+            {{range .StatusFilters}}
+            <option value="{{.}}" {{if eq . $.StatusFilter}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <input type="hidden" name="highlight" value="0">
+        <label class="check">
+          <input type="checkbox" name="highlight" value="1" {{if .HighlightRecs}}checked{{end}}>
+          Empfehlungen hervorheben
+        </label>
+        <button class="btn" type="submit">Filtern</button>
+      </form>
+
+      {{if not .WorkBausteine}}
+        <p class="muted">Keine anwendbaren Bausteine. Zuerst Anwendbarkeit setzen oder Empfehlungen übernehmen.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Baustein</th>
+                <th>Status</th>
+                <th>Offen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .WorkBausteine}}
+              <tr class="{{if eq .ID $.HighlightID}}selected{{end}}{{if and $.HighlightRecs .Recommended}} recommended{{end}}">
+                <td>
+                  <a href="{{href (printf "/projects/%d/targets/%d" $.Project.ID $.Target.ID)}}?baustein={{.ID}}{{if $.Query}}&amp;q={{urlquery $.Query}}{{end}}{{if ne $.StatusFilter "Anwendbar"}}&amp;status={{urlquery $.StatusFilter}}{{end}}{{if not $.HighlightRecs}}&amp;highlight=0{{end}}">{{.ExternalID}} {{.Title}}</a>
+                  {{if .Recommended}}<span class="badge">{{.RecommendTier}}</span>{{end}}
+                  {{if .Inherited}}<div class="muted">↓ von {{.SourceCaption}}</div>{{end}}
+                </td>
+                <td>{{if .Status}}<span class="{{statusClass .Status false}}">{{.Status}}</span>{{else}}—{{end}}</td>
+                <td>{{.OpenCount}} / {{.TotalCount}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+
+      {{if .Baustein.ID}}
+        <h2>{{.Baustein.ExternalID}} {{.Baustein.Title}}</h2>
+        <p class="muted"><a href="{{href (printf "/catalog/bausteine/%d" .Baustein.ID)}}">Im Katalog anzeigen</a></p>
+        {{if not .WorkReqs}}
+          <p class="muted">Keine Anforderungen für den Schutzbedarf dieses Zielobjekts.</p>
+        {{else}}
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Anforderung</th>
+                  <th>Stufe</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{range .WorkReqs}}
+                <tr>
+                  <td>
+                    <a href="{{href (printf "/projects/%d/targets/%d/requirements/%d" $.Project.ID $.Target.ID .ID)}}">{{.ExternalID}} {{.Title}}</a>
+                  </td>
+                  <td>{{if .Level}}{{.Level}}{{else}}—{{end}}</td>
+                  <td>
+                    <span class="{{statusClass .Status .Overdue}}">
+                      {{.Status}}{{if .Overdue}} · überfällig{{end}}
+                    </span>
+                  </td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+        {{end}}
+        {{if and $.CanEdit (not $.Inherited) $.WorkReqs}}
+        <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/assessments/bulk" $.Project.ID $.Target.ID)}}">
+          <input type="hidden" name="bausteinID" value="{{$.Baustein.ID}}">
+          <input type="hidden" name="q" value="{{$.Query}}">
+          <input type="hidden" name="filter" value="{{$.StatusFilter}}">
+          <input type="hidden" name="highlight" value="{{if $.HighlightRecs}}1{{else}}0{{end}}">
+          <h2>Massenstatus</h2>
+          <p class="muted">Setzt den Bewertungsstatus der zutreffenden Anforderungen dieses Bausteins. Notiz, Frist und Verantwortliche bleiben.</p>
+          <div class="form-grid">
+            <div class="field">
+              <label for="bulkStatus">Status</label>
+              <select id="bulkStatus" name="status" required>
+                <option value="">Status wählen…</option>
+                {{range $.AssessmentStatuses}}
+                <option value="{{.}}">{{.}}</option>
+                {{end}}
+              </select>
+            </div>
+            <div class="field">
+              <label class="check" for="onlyOpen">
+                <input id="onlyOpen" type="checkbox" name="onlyOpen" value="1" checked>
+                Nur offene Anforderungen
+              </label>
+            </div>
+          </div>
+          <button class="btn" type="submit">{{len $.WorkReqs}} Anforderungen setzen</button>
+        </form>
+        {{else if and $.CanEdit $.Inherited}}
+        <p class="muted">Geerbter Baustein: Bewertungsstatus am übergeordneten Zielobjekt ändern.</p>
+        {{end}}
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}
