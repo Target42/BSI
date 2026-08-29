@@ -76,17 +76,6 @@ func (s *Store) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 	return isAdmin, err
 }
 
-func (s *Store) UpdatePasswordHash(ctx context.Context, userID int64, passwordHash string) error {
-	tag, err := s.pool.Exec(ctx, `UPDATE users SET password_hash = $2 WHERE id = $1`, userID, passwordHash)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
 func (s *Store) ListUsers(ctx context.Context) ([]domain.User, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, email, display_name, is_admin, created_at FROM users ORDER BY display_name, email`)

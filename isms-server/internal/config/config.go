@@ -49,7 +49,7 @@ func Load() (Config, error) {
 		TrustedProxies:   os.Getenv("TRUSTED_PROXIES"),
 	}
 
-	ttl, err := parseDuration(envOrDefault("JWT_TTL", "24h"), 24*time.Hour)
+	ttl, err := parseDuration(envOrDefault("JWT_TTL", "8h"), 8*time.Hour)
 	if err != nil {
 		return Config{}, fmt.Errorf("JWT_TTL: %w", err)
 	}

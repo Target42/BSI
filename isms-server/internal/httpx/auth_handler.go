@@ -54,7 +54,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.auth.CreateToken(user.ID, user.Email, user.DisplayName)
+	token, err := h.auth.CreateToken(user.ID, user.Email, user.DisplayName, user.TokenVersion)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "token creation failed")
 		return

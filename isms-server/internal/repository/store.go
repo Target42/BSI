@@ -45,9 +45,9 @@ func (s *Store) FindUserByEmail(ctx context.Context, email string) (domain.User,
 	var user domain.User
 	var passwordHash string
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, email, display_name, password_hash, created_at
+		SELECT id, email, display_name, password_hash, token_version, created_at
 		FROM users WHERE email = $1`, email,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &passwordHash, &user.CreatedAt)
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &passwordHash, &user.TokenVersion, &user.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, "", ErrNotFound
 	}
@@ -64,6 +64,28 @@ func (s *Store) UserByID(ctx context.Context, id int64) (domain.User, error) {
 		return domain.User{}, ErrNotFound
 	}
 	return user, err
+}
+
+func (s *Store) TokenVersion(ctx context.Context, userID int64) (int, error) {
+	var version int
+	err := s.pool.QueryRow(ctx, `SELECT token_version FROM users WHERE id = $1`, userID).Scan(&version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return version, err
+}
+
+func (s *Store) UpdatePasswordHash(ctx context.Context, userID int64, passwordHash string) (int, error) {
+	var version int
+	err := s.pool.QueryRow(ctx, `
+		UPDATE users SET password_hash = $2, token_version = token_version + 1
+		WHERE id = $1
+		RETURNING token_version`, userID, passwordHash,
+	).Scan(&version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return version, err
 }
 
 func (s *Store) ProjectRole(ctx context.Context, projectID, userID int64) (string, error) {

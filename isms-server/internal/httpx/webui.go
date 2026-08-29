@@ -302,6 +302,9 @@ func (u *webUI) cookieAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, err := u.auth.ClaimsFromCookie(r)
 		if err != nil {
+			if errors.Is(err, auth.ErrSessionRevoked) {
+				auth.ClearSessionCookie(w, u.cookiePath())
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -334,6 +337,8 @@ func (u *webUI) loginGet(w http.ResponseWriter, r *http.Request) {
 	if _, err := u.auth.ClaimsFromCookie(r); err == nil {
 		http.Redirect(w, r, u.href("/projects"), http.StatusSeeOther)
 		return
+	} else if errors.Is(err, auth.ErrSessionRevoked) {
+		auth.ClearSessionCookie(w, u.cookiePath())
 	}
 	u.render(w, r, "login", webPage{Title: "Anmelden", NextPath: safeNextPath(r.URL.Query().Get("next"))})
 }
@@ -361,7 +366,7 @@ func (u *webUI) loginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := u.auth.CreateToken(user.ID, user.Email, user.DisplayName)
+	token, err := u.auth.CreateToken(user.ID, user.Email, user.DisplayName, user.TokenVersion)
 	if err != nil {
 		u.render(w, r, "login", webPage{Email: email, NextPath: next, Error: "Anmeldung fehlgeschlagen."})
 		return

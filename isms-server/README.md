@@ -91,7 +91,7 @@ Umgebungsvariablen (optional `.env` im Verzeichnis `isms-server/`):
 | `DATABASE_URL` | `postgres://ismsserver:ismsserver@localhost:5432/isms?sslmode=disable` | PostgreSQL |
 | `HTTP_ADDR` | `:8080` | Listen-Adresse. Hinter nginx: `127.0.0.1:8098` |
 | `JWT_SECRET` | (Dev-Fallback) | Secret für JWT; **Pflicht in Produktion** (min. 32 Zeichen) |
-| `JWT_TTL` | `24h` | Token-Gültigkeit (`8h`, `30m`, …) |
+| `JWT_TTL` | `8h` | Token-Gültigkeit (`8h`, `30m`, …) |
 | `TLS_CERT_FILE` | — | TLS-Zertifikat, wenn der Go-Prozess selbst HTTPS spricht |
 | `TLS_KEY_FILE` | — | TLS-Schlüssel |
 | `TRUSTED_PROXIES` | — | CIDRs des Reverse-Proxy. In Produktion Alternative zu TLS am Go-Prozess |

@@ -3,11 +3,12 @@ package domain
 import "time"
 
 type User struct {
-	ID          int64     `json:"id"`
-	Email       string    `json:"email"`
-	DisplayName string    `json:"displayName"`
-	IsAdmin     bool      `json:"isAdmin"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID           int64     `json:"id"`
+	Email        string    `json:"email"`
+	DisplayName  string    `json:"displayName"`
+	IsAdmin      bool      `json:"isAdmin"`
+	TokenVersion int       `json:"-"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 type Project struct {

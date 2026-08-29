@@ -586,10 +586,17 @@ func (u *webUI) accountPassword(w http.ResponseWriter, r *http.Request) {
 		u.render(w, r, "account", webPage{DisplayName: user.DisplayName, Email: user.Email, Error: "Passwort konnte nicht gespeichert werden."})
 		return
 	}
-	if err := u.store.UpdatePasswordHash(r.Context(), user.UserID, newHash); err != nil {
+	version, err := u.store.UpdatePasswordHash(r.Context(), user.UserID, newHash)
+	if err != nil {
 		u.render(w, r, "account", webPage{DisplayName: user.DisplayName, Email: user.Email, Error: "Passwort konnte nicht gespeichert werden."})
 		return
 	}
+	token, err := u.auth.CreateToken(user.UserID, user.Email, user.DisplayName, version)
+	if err != nil {
+		u.render(w, r, "account", webPage{DisplayName: user.DisplayName, Email: user.Email, Error: "Passwort gespeichert, erneute Anmeldung fehlgeschlagen."})
+		return
+	}
+	u.auth.SetSessionCookie(w, r, token.AccessToken, token.ExpiresAt, u.cookiePath())
 	http.Redirect(w, r, u.href("/account?saved=1"), http.StatusSeeOther)
 }
 

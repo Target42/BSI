@@ -37,6 +37,9 @@ func NewServer(
 ) *Server {
 	limiter := newLoginLimiter()
 	reportService := service.NewReportService(store)
+	if store != nil && authService != nil {
+		authService.SetTokenVersions(store)
+	}
 	return &Server{
 		authService:       authService,
 		authHandler:       NewAuthHandler(store, authService),

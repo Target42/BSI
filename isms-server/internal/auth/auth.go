@@ -17,10 +17,13 @@ type TokenPair struct {
 	ExpiresAt   time.Time
 }
 
+var ErrSessionRevoked = errors.New("session revoked")
+
 type Claims struct {
-	UserID      int64  `json:"uid"`
-	Email       string `json:"email"`
-	DisplayName string `json:"displayName"`
+	UserID       int64  `json:"uid"`
+	Email        string `json:"email"`
+	DisplayName  string `json:"displayName"`
+	TokenVersion int    `json:"tv"`
 	jwt.RegisteredClaims
 }
 
@@ -29,16 +32,25 @@ type contextKey string
 const userContextKey contextKey = "user"
 const httpsContextKey contextKey = "forwardedHTTPS"
 
+type TokenVersionLookup interface {
+	TokenVersion(ctx context.Context, userID int64) (int, error)
+}
+
 type Service struct {
-	secret []byte
-	ttl    time.Duration
+	secret   []byte
+	ttl      time.Duration
+	versions TokenVersionLookup
 }
 
 func NewService(secret string, ttl time.Duration) *Service {
 	if ttl <= 0 {
-		ttl = 24 * time.Hour
+		ttl = 8 * time.Hour
 	}
 	return &Service{secret: []byte(secret), ttl: ttl}
+}
+
+func (s *Service) SetTokenVersions(lookup TokenVersionLookup) {
+	s.versions = lookup
 }
 
 func (s *Service) TokenTTL() time.Duration {
@@ -57,13 +69,14 @@ func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-func (s *Service) CreateToken(userID int64, email, displayName string) (TokenPair, error) {
+func (s *Service) CreateToken(userID int64, email, displayName string, tokenVersion int) (TokenPair, error) {
 	now := time.Now()
 	expiresAt := now.Add(s.ttl)
 	claims := Claims{
-		UserID:      userID,
-		Email:       email,
-		DisplayName: displayName,
+		UserID:       userID,
+		Email:        email,
+		DisplayName:  displayName,
+		TokenVersion: tokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   fmt.Sprintf("%d", userID),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -95,6 +108,21 @@ func (s *Service) ParseToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
+func (s *Service) Authenticate(ctx context.Context, tokenString string) (*Claims, error) {
+	claims, err := s.ParseToken(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	if s.versions == nil {
+		return claims, nil
+	}
+	version, err := s.versions.TokenVersion(ctx, claims.UserID)
+	if err != nil || version != claims.TokenVersion {
+		return nil, ErrSessionRevoked
+	}
+	return claims, nil
+}
+
 func (s *Service) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
@@ -102,10 +130,14 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 			http.Error(w, `{"error":"missing bearer token"}`, http.StatusUnauthorized)
 			return
 		}
-		claims, err := s.ParseToken(strings.TrimPrefix(header, "Bearer "))
+		claims, err := s.Authenticate(r.Context(), strings.TrimPrefix(header, "Bearer "))
 		if err != nil {
 			if errors.Is(err, jwt.ErrTokenExpired) {
 				http.Error(w, `{"error":"token_expired"}`, http.StatusUnauthorized)
+				return
+			}
+			if errors.Is(err, ErrSessionRevoked) {
+				http.Error(w, `{"error":"session_revoked"}`, http.StatusUnauthorized)
 				return
 			}
 			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
@@ -176,7 +208,7 @@ func (s *Service) ClaimsFromCookie(r *http.Request) (*Claims, error) {
 	if c.Value == "" {
 		return nil, http.ErrNoCookie
 	}
-	return s.ParseToken(c.Value)
+	return s.Authenticate(r.Context(), c.Value)
 }
 
 func ContextWithUser(ctx context.Context, claims *Claims) context.Context {
