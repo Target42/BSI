@@ -71,5 +71,5 @@ func (u *webUI) projectDelete(w http.ResponseWriter, r *http.Request) {
 		u.renderProjectSettings(w, r, user, project, role, "Projekt konnte nicht gelöscht werden.")
 		return
 	}
-	http.Redirect(w, r, u.href("/?saved=deleted"), http.StatusSeeOther)
+	http.Redirect(w, r, u.href("/projects?saved=deleted"), http.StatusSeeOther)
 }

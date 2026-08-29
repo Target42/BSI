@@ -12,7 +12,7 @@
   <div class="app">
     {{template "header" .}}
     <main class="main">
-      <p><a href="{{href "/"}}">Projekte</a></p>
+      <p><a href="{{href "/projects"}}">Projekte</a></p>
       <h1>{{.Project.Name}}</h1>
       {{if .Project.Description}}<p class="lede">{{.Project.Description}}</p>{{end}}
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
@@ -58,9 +58,9 @@
           <span class="dash-card-title">Mitglieder</span>
           <span class="dash-card-hint">Rollen und Zugriff im Projekt</span>
         </a>
-        <a class="dash-card" href="{{href (printf "/projects/%d/settings" .Project.ID)}}">
+        <a class="dash-card" href="{{href (printf "/projects/%d/edit" .Project.ID)}}">
           <span class="icon icon-settings" aria-hidden="true"></span>
-          <span class="dash-card-title">Eigenschaften</span>
+          <span class="dash-card-title">Bearbeiten</span>
           <span class="dash-card-hint">Name, Beschreibung{{if .CanOwn}}, Löschen{{end}}</span>
         </a>
         <a class="dash-card" href="{{href (printf "/catalog?version=%s" .Project.CatalogVersion)}}">

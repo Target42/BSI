@@ -90,6 +90,7 @@ type webPage struct {
 	Bausteine             []domain.Baustein
 	CatalogHits           []service.CatalogHit
 	CatalogTruncated      bool
+	CatalogGroups         []webCatalogGroup
 	HighlightID           int64
 	BausteinCount         int
 	RequirementCount      int
@@ -145,6 +146,12 @@ type webApplicabilityRow struct {
 	SourceCaption string
 	Recommended   bool
 	RecommendTier string
+}
+
+type webCatalogGroup struct {
+	Name      string
+	Bausteine []domain.Baustein
+	Hits      []service.CatalogHit
 }
 
 type webMeasureRow struct {
@@ -213,8 +220,10 @@ func (u *webUI) mount(r chi.Router) {
 
 	r.Group(func(g chi.Router) {
 		g.Use(u.cookieAuth)
-		g.Get("/", u.projects)
-		g.Post("/projects", u.projectCreate)
+		g.Get("/", u.home)
+		g.Get("/projects", u.projects)
+		g.Get("/projects/new", u.projectNewGet)
+		g.Post("/projects/new", u.projectCreate)
 		g.Get("/projects/{projectID}", u.projectHome)
 		g.Get("/projects/{projectID}/report", u.report)
 		g.Get("/projects/{projectID}/report.csv", u.reportCSV)
@@ -236,6 +245,8 @@ func (u *webUI) mount(r chi.Router) {
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/recommendations", u.recommendationsApply)
 		g.Get("/projects/{projectID}/settings", u.projectSettingsGet)
 		g.Post("/projects/{projectID}/settings", u.projectSettingsSave)
+		g.Get("/projects/{projectID}/edit", u.projectSettingsGet)
+		g.Post("/projects/{projectID}/edit", u.projectSettingsSave)
 		g.Post("/projects/{projectID}/delete", u.projectDelete)
 		g.Get("/catalog", u.catalogGet)
 		g.Get("/catalog/bausteine/{bausteinID}", u.catalogBausteinGet)
@@ -257,7 +268,7 @@ func (u *webUI) mount(r chi.Router) {
 
 func (u *webUI) serveCSS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(u.css)
 }
 
@@ -280,7 +291,7 @@ func (u *webUI) cookieAuth(next http.Handler) http.Handler {
 
 func (u *webUI) loginGet(w http.ResponseWriter, r *http.Request) {
 	if _, err := u.auth.ClaimsFromCookie(r); err == nil {
-		http.Redirect(w, r, u.href("/"), http.StatusSeeOther)
+		http.Redirect(w, r, u.href("/projects"), http.StatusSeeOther)
 		return
 	}
 	u.render(w, r, "login", webPage{Title: "Anmelden"})
@@ -310,12 +321,21 @@ func (u *webUI) loginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u.auth.SetSessionCookie(w, r, token.AccessToken, token.ExpiresAt, u.cookiePath())
-	http.Redirect(w, r, u.href("/"), http.StatusSeeOther)
+	http.Redirect(w, r, u.href("/projects"), http.StatusSeeOther)
 }
 
 func (u *webUI) logout(w http.ResponseWriter, r *http.Request) {
 	auth.ClearSessionCookie(w, u.cookiePath())
 	http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+}
+
+func (u *webUI) home(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+		return
+	}
+	u.render(w, r, "home", webPage{DisplayName: user.DisplayName})
 }
 
 func (u *webUI) projects(w http.ResponseWriter, r *http.Request) {
@@ -329,10 +349,6 @@ func (u *webUI) projects(w http.ResponseWriter, r *http.Request) {
 		u.render(w, r, "projects", webPage{DisplayName: user.DisplayName, Error: "Projekte konnten nicht geladen werden."})
 		return
 	}
-	versions, _ := u.store.ListCatalogVersions(r.Context())
-	if len(versions) == 0 {
-		versions = []string{"2023"}
-	}
 	notice := ""
 	switch r.URL.Query().Get("saved") {
 	case "created":
@@ -341,10 +357,9 @@ func (u *webUI) projects(w http.ResponseWriter, r *http.Request) {
 		notice = "Projekt gelöscht."
 	}
 	u.render(w, r, "projects", webPage{
-		DisplayName:     user.DisplayName,
-		Projects:        projects,
-		CatalogVersions: versions,
-		Notice:          notice,
+		DisplayName: user.DisplayName,
+		Projects:    projects,
+		Notice:      notice,
 	})
 }
 

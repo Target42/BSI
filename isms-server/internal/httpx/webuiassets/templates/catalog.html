@@ -33,60 +33,50 @@
         <button class="btn" type="submit">Suchen</button>
       </form>
 
-      {{if .Query}}
+      {{if and .Query (not .Error)}}
         {{if .CatalogTruncated}}<p class="muted">Suche auf 200 Treffer begrenzt — bitte verfeinern.</p>{{end}}
-        {{if not .CatalogHits}}
+        {{if not .CatalogGroups}}
           <p class="muted">Keine Treffer für diese Suche.</p>
         {{else}}
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Kapitel</th>
-                  <th>Baustein</th>
-                  <th>Anforderung</th>
-                  <th>Fundstelle</th>
-                  <th>Auszug</th>
-                </tr>
-              </thead>
-              <tbody>
-                {{range .CatalogHits}}
-                <tr>
-                  <td>{{if .GroupName}}{{.GroupName}}{{else}}—{{end}}</td>
-                  <td>
-                    <a href="{{href (printf "/catalog/bausteine/%d" .BausteinID)}}{{if .RequirementID}}?req={{.RequirementID}}{{end}}">{{.BausteinLabel}}</a>
-                  </td>
-                  <td>{{.RequirementLabel}}</td>
-                  <td>{{.MatchField}}</td>
-                  <td>{{reqHTML .Snippet}}</td>
-                </tr>
+          <div class="tree">
+            {{range .CatalogGroups}}
+            <details>
+              <summary>{{.Name}} <span class="tree-count">{{len .Hits}}</span></summary>
+              <ul>
+                {{range .Hits}}
+                <li>
+                  <a href="{{href (printf "/catalog/bausteine/%d" .BausteinID)}}{{if .RequirementID}}?req={{.RequirementID}}{{end}}">{{.BausteinLabel}}</a>
+                  {{if and .RequirementLabel (ne .RequirementLabel "—")}}
+                    <span class="muted">· {{.RequirementLabel}} · {{.MatchField}}</span>
+                  {{else if .MatchField}}
+                    <span class="muted">· {{.MatchField}}</span>
+                  {{end}}
+                  {{if .Snippet}}<div class="tree-snippet">{{reqHTML .Snippet}}</div>{{end}}
+                </li>
                 {{end}}
-              </tbody>
-            </table>
+              </ul>
+            </details>
+            {{end}}
           </div>
         {{end}}
       {{else}}
-        {{if not .Bausteine}}
+        {{if not .CatalogGroups}}
           <p class="muted">Kein Katalog für Version {{.SelectedVersion}}. Administratoren können unten XML einspielen.</p>
         {{else}}
-          <p class="muted">{{.BausteinCount}} Bausteine. Suche findet auch im Anforderungstext.</p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Kapitel</th>
-                  <th>Baustein</th>
-                </tr>
-              </thead>
-              <tbody>
+          <p class="muted">{{.BausteinCount}} Bausteine in {{len .CatalogGroups}} Kapiteln, wie im Desktop-Client. Kapitel auf- und zuklappen.</p>
+          <div class="tree">
+            {{range .CatalogGroups}}
+            <details>
+              <summary>{{.Name}} <span class="tree-count">{{len .Bausteine}}</span></summary>
+              <ul>
                 {{range .Bausteine}}
-                <tr>
-                  <td>{{if .GroupName}}{{.GroupName}}{{else}}—{{end}}</td>
-                  <td><a href="{{href (printf "/catalog/bausteine/%d" .ID)}}">{{.ExternalID}} {{.Title}}</a></td>
-                </tr>
+                <li>
+                  <a href="{{href (printf "/catalog/bausteine/%d" .ID)}}">{{.ExternalID}} {{.Title}}</a>
+                </li>
                 {{end}}
-              </tbody>
-            </table>
+              </ul>
+            </details>
+            {{end}}
           </div>
         {{end}}
       {{end}}

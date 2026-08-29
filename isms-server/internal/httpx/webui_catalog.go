@@ -64,6 +64,7 @@ func (u *webUI) renderCatalog(w http.ResponseWriter, r *http.Request, user *auth
 	}
 	if query != "" && utf8.RuneCountInString(query) < 2 {
 		page.Error = "Bitte mindestens zwei Zeichen suchen."
+		page.CatalogGroups = groupBausteine(bausteine)
 	} else if query != "" {
 		requirements, err := u.store.ListRequirementsByCatalog(r.Context(), webCatalogStandard, version)
 		if err != nil {
@@ -73,10 +74,51 @@ func (u *webUI) renderCatalog(w http.ResponseWriter, r *http.Request, user *auth
 		hits, truncated := service.SearchCatalog(bausteine, requirements, query, service.CatalogSearchLimit)
 		page.CatalogHits = hits
 		page.CatalogTruncated = truncated
+		page.CatalogGroups = groupCatalogHits(hits)
 		page.Bausteine = nil
 		page.RequirementCount = len(requirements)
+	} else {
+		page.CatalogGroups = groupBausteine(bausteine)
 	}
 	u.render(w, r, "catalog", page)
+}
+
+func groupBausteine(items []domain.Baustein) []webCatalogGroup {
+	order, buckets := []string{}, map[string][]domain.Baustein{}
+	for _, item := range items {
+		name := item.GroupName
+		if name == "" {
+			name = "Sonstige"
+		}
+		if _, seen := buckets[name]; !seen {
+			order = append(order, name)
+		}
+		buckets[name] = append(buckets[name], item)
+	}
+	out := make([]webCatalogGroup, 0, len(order))
+	for _, name := range order {
+		out = append(out, webCatalogGroup{Name: name, Bausteine: buckets[name]})
+	}
+	return out
+}
+
+func groupCatalogHits(hits []service.CatalogHit) []webCatalogGroup {
+	order, buckets := []string{}, map[string][]service.CatalogHit{}
+	for _, hit := range hits {
+		name := hit.GroupName
+		if name == "" {
+			name = "Sonstige"
+		}
+		if _, seen := buckets[name]; !seen {
+			order = append(order, name)
+		}
+		buckets[name] = append(buckets[name], hit)
+	}
+	out := make([]webCatalogGroup, 0, len(order))
+	for _, name := range order {
+		out = append(out, webCatalogGroup{Name: name, Hits: buckets[name]})
+	}
+	return out
 }
 
 func (u *webUI) catalogBausteinGet(w http.ResponseWriter, r *http.Request) {

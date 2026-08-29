@@ -16,8 +16,13 @@
       <p class="lede">Verbund, Bewertungen und Maßnahmen im Browser — auch ohne Desktop-Client.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+
+      <p class="row-actions">
+        <a class="btn" href="{{href "/projects/new"}}">Neues Projekt</a>
+      </p>
+
       {{if not .Projects}}
-        <p class="muted">Noch keine Projekte. Legen Sie eines unten an.</p>
+        <p class="muted">Noch keine Projekte.</p>
       {{else}}
         <div class="table-wrap">
           <table>
@@ -27,6 +32,7 @@
                 <th>Katalog</th>
                 <th>Rolle</th>
                 <th>Aktualisiert</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -39,33 +45,15 @@
                 <td>{{.CatalogVersion}}</td>
                 <td><span class="badge">{{roleLabel .Role}}</span></td>
                 <td>{{formatDate .UpdatedAt}}</td>
+                <td>
+                  <a href="{{href (printf "/projects/%d/edit" .ID)}}">Bearbeiten</a>
+                </td>
               </tr>
               {{end}}
             </tbody>
           </table>
         </div>
       {{end}}
-
-      <h2>Projekt anlegen</h2>
-      <form class="card" method="post" action="{{href "/projects"}}">
-        <div class="field">
-          <label for="name">Name</label>
-          <input id="name" name="name" required>
-        </div>
-        <div class="field">
-          <label for="description">Beschreibung</label>
-          <textarea id="description" name="description" rows="3"></textarea>
-        </div>
-        <div class="field">
-          <label for="catalogVersion">Katalogversion</label>
-          <select id="catalogVersion" name="catalogVersion">
-            {{range .CatalogVersions}}
-            <option value="{{.}}">{{.}}</option>
-            {{end}}
-          </select>
-        </div>
-        <button class="btn" type="submit">Anlegen</button>
-      </form>
     </main>
   </div>
 </body>

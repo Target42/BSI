@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,7 +33,7 @@ func TestEmbeddedWebUIServesPagesAndLeavesAPI(t *testing.T) {
 	if loc := rec.Header().Get("Location"); loc != "/login" {
 		t.Fatalf("GET / Location %q", loc)
 	}
-	assert(http.MethodGet, "/login", http.StatusOK, "Anmelden")
+	assert(http.MethodGet, "/login", http.StatusOK, "brand-mark")
 	assert(http.MethodGet, "/ui/app.css", http.StatusOK, "@media print")
 	assert(http.MethodGet, "/health", http.StatusOK, `"status":"ok"`)
 	assert(http.MethodGet, "/api/v1/projects", http.StatusUnauthorized, "")
@@ -49,6 +50,9 @@ func TestEmbeddedWebUIServesPagesAndLeavesAPI(t *testing.T) {
 		"/projects/1/targets/1/recommendations",
 		"/projects/1/targets/1",
 		"/projects/1/report.csv",
+		"/projects",
+		"/projects/new",
+		"/projects/1/edit",
 		"/projects/1/settings",
 		"/catalog",
 		"/catalog/bausteine/1",
@@ -83,6 +87,48 @@ func TestEmbeddedWebUIPublicBase(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `action="/isms/login"`) {
 		t.Fatalf("expected prefixed login action, body %s", rec.Body.String())
+	}
+}
+
+func TestHomeAndProjectPages(t *testing.T) {
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "")
+	var buf bytes.Buffer
+	if err := ui.tmpl.ExecuteTemplate(&buf, "home", webPage{}); err != nil {
+		t.Fatal(err)
+	}
+	home := buf.String()
+	for _, want := range []string{`class="brand-mark"`, `width="160"`, "Zu den Projekten", "IT-Grundschutz im Browser"} {
+		if !strings.Contains(home, want) {
+			t.Fatalf("home missing %q", want)
+		}
+	}
+	buf.Reset()
+	if err := ui.tmpl.ExecuteTemplate(&buf, "projects", webPage{}); err != nil {
+		t.Fatal(err)
+	}
+	list := buf.String()
+	if !strings.Contains(list, "/projects/new") {
+		t.Fatal("project list must link to create page")
+	}
+	if strings.Contains(list, `action="/projects"`) {
+		t.Fatal("create form must not sit on the project list")
+	}
+	buf.Reset()
+	if err := ui.tmpl.ExecuteTemplate(&buf, "project_new", webPage{
+		CatalogVersions: []string{"2023"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `action="/projects/new"`) {
+		t.Fatal("create page must post to /projects/new")
+	}
+	buf.Reset()
+	if err := ui.tmpl.ExecuteTemplate(&buf, "header", webPage{}); err != nil {
+		t.Fatal(err)
+	}
+	head := buf.String()
+	if !strings.Contains(head, `href="/"`) || !strings.Contains(head, `href="/projects"`) {
+		t.Fatalf("header must split ISMS and Projekte: %s", head)
 	}
 }
 

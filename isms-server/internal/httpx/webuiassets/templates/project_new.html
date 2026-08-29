@@ -1,0 +1,45 @@
+{{define "project_new"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Projekt anlegen · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <p><a href="{{href "/projects"}}">Projekte</a> / Anlegen</p>
+      <h1>Projekt anlegen</h1>
+      <p class="lede">Name und Katalogversion festlegen. Die Version lässt sich später nicht mehr ändern.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      <form class="card" method="post" action="{{href "/projects/new"}}">
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" required value="{{.Project.Name}}">
+        </div>
+        <div class="field">
+          <label for="description">Beschreibung</label>
+          <textarea id="description" name="description" rows="4">{{.Project.Description}}</textarea>
+        </div>
+        <div class="field">
+          <label for="catalogVersion">Katalogversion</label>
+          <select id="catalogVersion" name="catalogVersion">
+            {{range .CatalogVersions}}
+            <option value="{{.}}" {{if eq . $.Project.CatalogVersion}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit">Anlegen</button>
+          <a class="btn btn-secondary" href="{{href "/projects"}}">Abbrechen</a>
+        </div>
+      </form>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

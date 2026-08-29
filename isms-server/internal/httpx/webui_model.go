@@ -72,6 +72,31 @@ func (u *webUI) requireAdmin(w http.ResponseWriter, r *http.Request) (*auth.Clai
 	return user, true
 }
 
+func (u *webUI) projectNewGet(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+		return
+	}
+	u.renderProjectNew(w, r, user, domain.Project{}, "")
+}
+
+func (u *webUI) renderProjectNew(w http.ResponseWriter, r *http.Request, user *auth.Claims, draft domain.Project, errMsg string) {
+	versions, _ := u.store.ListCatalogVersions(r.Context())
+	if len(versions) == 0 {
+		versions = []string{"2023"}
+	}
+	if draft.CatalogVersion == "" {
+		draft.CatalogVersion = versions[0]
+	}
+	u.render(w, r, "project_new", webPage{
+		DisplayName:     user.DisplayName,
+		CatalogVersions: versions,
+		Project:         draft,
+		Error:           errMsg,
+	})
+}
+
 func (u *webUI) projectCreate(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -79,38 +104,27 @@ func (u *webUI) projectCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		u.renderProjectsError(w, r, user, "Ungültige Anfrage.")
+		u.renderProjectNew(w, r, user, domain.Project{}, "Ungültige Anfrage.")
 		return
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
+	desc := strings.TrimSpace(r.FormValue("description"))
+	version := strings.TrimSpace(r.FormValue("catalogVersion"))
+	draft := domain.Project{Name: name, Description: desc, CatalogVersion: version}
 	if name == "" {
-		u.renderProjectsError(w, r, user, "Name ist erforderlich.")
+		u.renderProjectNew(w, r, user, draft, "Name ist erforderlich.")
 		return
 	}
-	version := strings.TrimSpace(r.FormValue("catalogVersion"))
 	if version == "" {
 		version = "2023"
+		draft.CatalogVersion = version
 	}
-	project, err := u.store.CreateProject(r.Context(), user.UserID, name, strings.TrimSpace(r.FormValue("description")), version)
+	project, err := u.store.CreateProject(r.Context(), user.UserID, name, desc, version)
 	if err != nil {
-		u.renderProjectsError(w, r, user, "Projekt konnte nicht angelegt werden.")
+		u.renderProjectNew(w, r, user, draft, "Projekt konnte nicht angelegt werden.")
 		return
 	}
 	http.Redirect(w, r, u.href(fmt.Sprintf("/projects/%d", project.ID)), http.StatusSeeOther)
-}
-
-func (u *webUI) renderProjectsError(w http.ResponseWriter, r *http.Request, user *auth.Claims, errMsg string) {
-	projects, _ := u.store.ListProjects(r.Context(), user.UserID)
-	versions, _ := u.store.ListCatalogVersions(r.Context())
-	if len(versions) == 0 {
-		versions = []string{"2023"}
-	}
-	u.render(w, r, "projects", webPage{
-		DisplayName:     user.DisplayName,
-		Projects:        projects,
-		CatalogVersions: versions,
-		Error:           errMsg,
-	})
 }
 
 func (u *webUI) targetCreate(w http.ResponseWriter, r *http.Request) {

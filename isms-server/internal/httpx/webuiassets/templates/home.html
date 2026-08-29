@@ -1,0 +1,26 @@
+{{define "home"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="home">
+      <div class="home-logo">{{template "brand-mark"}}</div>
+      <h1 class="home-title">ISMS</h1>
+      <p class="lede">IT-Grundschutz im Browser — Verbund, Bewertung und Maßnahmen ohne Desktop-Client.</p>
+      <p class="row-actions">
+        <a class="btn" href="{{href "/projects"}}">Zu den Projekten</a>
+        <a class="btn btn-secondary" href="{{href "/catalog"}}">Katalog</a>
+      </p>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

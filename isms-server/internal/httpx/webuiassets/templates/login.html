@@ -11,6 +11,7 @@
 <body>
   <div class="login-wrap">
     <form class="card login-card" method="post" action="{{href "/login"}}">
+      {{template "brand-mark"}}
       <h1>ISMS</h1>
       <p class="lede">Anmelden, um Projekte, Fortschritt, Maßnahmen und Bewertungen zu sehen.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
