@@ -23,6 +23,7 @@
 
       {{if .CanEdit}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/edit" .Project.ID)}}">
+        {{template "csrf" .}}
         <div class="field">
           <label for="name">Name</label>
           <input id="name" name="name" required value="{{.Project.Name}}">
@@ -66,6 +67,7 @@
 
       {{if .CanOwn}}
       <form class="card danger-card" method="post" action="{{href (printf "/projects/%d/delete" .Project.ID)}}">
+        {{template "csrf" .}}
         <p>Löschen entfernt Zielobjekte, Bewertungen, Maßnahmen und Mitglieder unwiderruflich.</p>
         <div class="field">
           <label for="confirm">Projektname zur Bestätigung</label>

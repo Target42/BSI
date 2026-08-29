@@ -28,6 +28,7 @@
         <p class="muted">Für diesen Zielobjekt-Typ sind keine Empfehlungen hinterlegt, oder der Katalog fehlt.</p>
       {{else if .CanEdit}}
       <form method="post" action="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">
+        {{template "csrf" .}}
         <div class="table-wrap">
           <table>
             <thead>

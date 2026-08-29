@@ -26,6 +26,7 @@
 
       {{if .CanEdit}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/measures/%d/edit" .Project.ID .Measure.ID)}}">
+        {{template "csrf" .}}
         <input type="hidden" name="version" value="{{.Measure.Version}}">
         <div class="field">
           <label for="title">Titel</label>
@@ -59,6 +60,7 @@
         </div>
       </form>
       <form class="card danger-card" method="post" action="{{href (printf "/projects/%d/measures/%d/delete" .Project.ID .Measure.ID)}}">
+        {{template "csrf" .}}
         <p class="muted">Löschen entfernt die Maßnahme unwiderruflich.</p>
         <button class="btn btn-danger" type="submit">Maßnahme löschen</button>
       </form>

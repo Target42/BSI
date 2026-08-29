@@ -11,6 +11,7 @@
 <body>
   <div class="login-wrap">
     <form class="card login-card" method="post" action="{{href "/login"}}">
+      {{template "csrf" .}}
       {{template "brand-mark"}}
       <h1>ISMS</h1>
       <p class="lede">Anmelden, um private Projekte zu sehen oder zu bearbeiten. Öffentliche Projekte sind ohne Konto sichtbar.</p>

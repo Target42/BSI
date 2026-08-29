@@ -130,6 +130,7 @@
       {{if and .CanEdit .AddUnder .AddTypes}}
       <h2>Unterobjekt zu {{.AddUnderName}}</h2>
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets" .Project.ID)}}">
+        {{template "csrf" .}}
         <input type="hidden" name="parentID" value="{{.AddUnder}}">
         <div class="field">
           <label for="name">Name</label>

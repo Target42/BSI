@@ -84,6 +84,7 @@
       {{if .IsAdmin}}
       <h2>Katalog einspielen</h2>
       <form class="card" method="post" action="{{href "/catalog/import"}}" enctype="multipart/form-data">
+        {{template "csrf" .}}
         <p class="muted">Ersetzt den IT-Grundschutz-Katalog auf dem Server (XML-Kompendium). Bestehende Projekte behalten ihre Katalogversion.</p>
         <div class="field">
           <label for="file">XML-Datei</label>

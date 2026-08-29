@@ -67,7 +67,7 @@ func TestGermanCount(t *testing.T) {
 }
 
 func TestReportTemplatePrintControls(t *testing.T) {
-	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "")
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
 	var buf bytes.Buffer
 	err := ui.tmpl.ExecuteTemplate(&buf, "report", webPage{
 		Project:       domain.Project{Name: "Testverbund", CatalogVersion: "2023"},
@@ -82,7 +82,8 @@ func TestReportTemplatePrintControls(t *testing.T) {
 	body := buf.String()
 	for _, want := range []string{
 		"Drucken",
-		"window.print()",
+		"data-print",
+		"/ui/app.js",
 		"print-only",
 		"gedruckt 28.08.2026, 16:40",
 		"CSV herunterladen",
@@ -95,7 +96,7 @@ func TestReportTemplatePrintControls(t *testing.T) {
 }
 
 func TestBulkFormsRender(t *testing.T) {
-	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "")
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
 	var buf bytes.Buffer
 	if err := ui.tmpl.ExecuteTemplate(&buf, "applicability", webPage{
 		CanEdit:               true,
@@ -130,7 +131,7 @@ func TestBulkFormsRender(t *testing.T) {
 	}
 }
 
-func TestBulkPostsRedirectToLogin(t *testing.T) {
+func TestBulkPostsWithoutCSRFAreForbidden(t *testing.T) {
 	handler := NewServer(auth.NewService("test-secret", time.Hour), nil, "").Router()
 	for _, path := range []string{
 		"/projects/1/targets/1/applicability/bulk",
@@ -139,8 +140,26 @@ func TestBulkPostsRedirectToLogin(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s status %d want 403", path, rec.Code)
+		}
+	}
+}
+
+func TestBulkPostsWithCSRFRedirectToLogin(t *testing.T) {
+	handler := NewServer(auth.NewService("test-secret", time.Hour), nil, "").Router()
+	token, cookie := csrfFromLogin(t, handler)
+	for _, path := range []string{
+		"/projects/1/targets/1/applicability/bulk",
+		"/projects/1/targets/1/assessments/bulk",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("csrf_token="+token))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusSeeOther {
-			t.Fatalf("%s status %d", path, rec.Code)
+			t.Fatalf("%s status %d body %q", path, rec.Code, rec.Body.String())
 		}
 		if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/login") {
 			t.Fatalf("%s Location %q", path, loc)

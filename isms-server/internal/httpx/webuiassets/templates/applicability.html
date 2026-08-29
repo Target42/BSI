@@ -51,6 +51,7 @@
 
       {{if and .CanEdit .ApplicabilityRows}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/applicability/bulk" .Project.ID .Target.ID)}}">
+        {{template "csrf" .}}
         <input type="hidden" name="q" value="{{.Query}}">
         <input type="hidden" name="filter" value="{{.StatusFilter}}">
         <input type="hidden" name="highlight" value="{{if .HighlightRecs}}1{{else}}0{{end}}">
@@ -106,6 +107,7 @@
                 {{if $.CanEdit}}
                 <td>
                   <form class="inline-form" method="post" action="{{href (printf "/projects/%d/targets/%d/applicability" $.Project.ID $.Target.ID)}}">
+                    {{template "csrf" $}}
                     <input type="hidden" name="bausteinID" value="{{.ID}}">
                     <select name="status" aria-label="Anwendbarkeit {{.ExternalID}}">
                       <option value="" {{if eq .OwnStatus ""}}selected{{end}}>Ungesetzt</option>

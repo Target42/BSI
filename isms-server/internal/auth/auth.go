@@ -27,6 +27,7 @@ type Claims struct {
 type contextKey string
 
 const userContextKey contextKey = "user"
+const httpsContextKey contextKey = "forwardedHTTPS"
 
 type Service struct {
 	secret []byte
@@ -118,10 +119,19 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 const SessionCookieName = "isms_session"
 
 func cookieSecure(r *http.Request) bool {
+	return RequestIsHTTPS(r)
+}
+
+func RequestIsHTTPS(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	v, _ := r.Context().Value(httpsContextKey).(bool)
+	return v
+}
+
+func ContextWithHTTPS(ctx context.Context, https bool) context.Context {
+	return context.WithValue(ctx, httpsContextKey, https)
 }
 
 func (s *Service) SetSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time, path string) {

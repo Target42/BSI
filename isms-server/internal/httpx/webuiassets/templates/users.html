@@ -46,6 +46,7 @@
 
       <h2>Benutzer anlegen</h2>
       <form class="card" method="post" action="{{href "/users"}}">
+        {{template "csrf" .}}
         <div class="form-grid">
           <div class="field">
             <label for="email">E-Mail</label>

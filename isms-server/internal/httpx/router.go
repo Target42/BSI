@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +25,9 @@ type Server struct {
 	adminHandler      *AdminHandler
 	memberHandler     *MemberHandler
 	webUI             *webUI
+	limiter           *loginLimiter
+	trustedProxies    []*net.IPNet
+	production        bool
 }
 
 func NewServer(
@@ -31,6 +35,7 @@ func NewServer(
 	store *repository.Store,
 	publicBase string,
 ) *Server {
+	limiter := newLoginLimiter()
 	reportService := service.NewReportService(store)
 	return &Server{
 		authService:       authService,
@@ -43,16 +48,19 @@ func NewServer(
 		reportHandler:     NewReportHandler(store, reportService),
 		adminHandler:      NewAdminHandler(store),
 		memberHandler:     NewMemberHandler(store),
-		webUI:             newWebUI(authService, store, reportService, publicBase),
+		webUI:             newWebUI(authService, store, reportService, publicBase, limiter),
+		limiter:           limiter,
 	}
 }
 
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(s.clientIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(s.securityHeaders)
+	r.Use(s.csrfProtect)
 	r.Use(requestTimeout)
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -60,7 +68,7 @@ func (s *Server) Router() http.Handler {
 	})
 
 	r.Route("/api/v1", func(api chi.Router) {
-		api.Post("/auth/login", s.authHandler.Login)
+		api.With(s.limitLogin).Post("/auth/login", s.authHandler.Login)
 
 		api.Group(func(protected chi.Router) {
 			protected.Use(s.authService.Middleware)

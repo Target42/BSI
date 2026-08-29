@@ -71,6 +71,7 @@
                 {{if $.CanEdit}}
                 <td>
                   <form class="inline-form" method="post" action="{{href (printf "/projects/%d/measures/%d" $.Project.ID .ID)}}">
+                    {{template "csrf" $}}
                     <input type="hidden" name="version" value="{{.Version}}">
                     <select name="status" aria-label="Status von {{.Title}}">
                       {{range $.MeasureStatuses}}

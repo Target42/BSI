@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/bootstrap"
@@ -55,6 +56,12 @@ func main() {
 
 	authService := auth.NewService(cfg.JWTSecret, cfg.JWTTTL)
 	server := httpx.NewServer(authService, store, cfg.WebPublicBase)
+	proxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		slog.Error("TRUSTED_PROXIES", "error", err)
+		os.Exit(1)
+	}
+	server.SetRuntime(cfg.Environment == "production", proxies)
 	slog.Info("serving embedded web UI", "public_base", cfg.WebPublicBase)
 
 	router := server.Router()
@@ -62,12 +69,16 @@ func main() {
 		slog.Info("starting ISMS server with TLS", "addr", cfg.HTTPAddr, "jwt_ttl", cfg.JWTTTL.String())
 		err = http.ListenAndServeTLS(cfg.HTTPAddr, cfg.TLSCertFile, cfg.TLSKeyFile, router)
 	} else {
-		if cfg.Environment == "production" {
+		if cfg.Environment == "production" && strings.TrimSpace(cfg.TrustedProxies) == "" {
 			slog.Error("refusing to start without TLS in production")
 			os.Exit(1)
 		}
-		slog.Warn("TLS not configured, serving plain HTTP (development only)", "addr", cfg.HTTPAddr)
-		slog.Info("starting ISMS server", "addr", cfg.HTTPAddr, "jwt_ttl", cfg.JWTTTL.String())
+		if cfg.Environment == "production" {
+			slog.Info("TLS terminated by reverse proxy", "addr", cfg.HTTPAddr, "trusted_proxies", cfg.TrustedProxies, "jwt_ttl", cfg.JWTTTL.String())
+		} else {
+			slog.Warn("TLS not configured, serving plain HTTP (development only)", "addr", cfg.HTTPAddr)
+			slog.Info("starting ISMS server", "addr", cfg.HTTPAddr, "jwt_ttl", cfg.JWTTTL.String())
+		}
 		err = http.ListenAndServe(cfg.HTTPAddr, router)
 	}
 	if err != nil {

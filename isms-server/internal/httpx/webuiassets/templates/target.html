@@ -24,6 +24,7 @@
 
       {{if .CanEdit}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">
+        {{template "csrf" .}}
         <div class="field">
           <label for="name">Name</label>
           <input id="name" name="name" required value="{{.Target.Name}}">
@@ -95,6 +96,7 @@
       </form>
       {{if gt .Target.ParentID 0}}
       <form class="card danger-card" method="post" action="{{href (printf "/projects/%d/targets/%d/delete" .Project.ID .Target.ID)}}">
+        {{template "csrf" .}}
         <p class="muted">Löschen entfernt auch alle Unterobjekte.</p>
         <button class="btn btn-danger" type="submit">Zielobjekt löschen</button>
       </form>

@@ -37,6 +37,7 @@
 
       {{if and .CanEdit (not .Inherited)}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/requirements/%d" .Project.ID .Target.ID .Requirement.ID)}}">
+        {{template "csrf" .}}
         <input type="hidden" name="version" value="{{.Assessment.Version}}">
         <div class="form-grid">
           <div class="field">
@@ -76,6 +77,7 @@
       </div>
       {{if and .Inherited .CanEdit}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/deviation" .Project.ID .Target.ID)}}">
+        {{template "csrf" .}}
         <input type="hidden" name="bausteinID" value="{{.Baustein.ID}}">
         <input type="hidden" name="requirementID" value="{{.Requirement.ID}}">
         <div class="field">
@@ -127,6 +129,7 @@
       {{if and .CanEdit (not .Inherited)}}
       <h2>Neue Maßnahme</h2>
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/requirements/%d/measures" .Project.ID .Target.ID .Requirement.ID)}}">
+        {{template "csrf" .}}
         <div class="field">
           <label for="measureTitle">Titel</label>
           <input id="measureTitle" name="title" required>

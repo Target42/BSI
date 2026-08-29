@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ type Config struct {
 	CatalogVersion   string
 	CatalogXMLPath   string
 	WebPublicBase    string
+	TrustedProxies   string
 }
 
 func Load() (Config, error) {
@@ -44,6 +46,7 @@ func Load() (Config, error) {
 		TLSCertFile:      os.Getenv("TLS_CERT_FILE"),
 		TLSKeyFile:       os.Getenv("TLS_KEY_FILE"),
 		WebPublicBase:    strings.TrimRight(os.Getenv("WEB_PUBLIC_BASE"), "/"),
+		TrustedProxies:   os.Getenv("TRUSTED_PROXIES"),
 	}
 
 	ttl, err := parseDuration(envOrDefault("JWT_TTL", "24h"), 24*time.Hour)
@@ -73,8 +76,15 @@ func (c Config) Validate() error {
 	if c.JWTSecret == devJWTSecret {
 		return fmt.Errorf("JWT_SECRET must be explicitly set in production")
 	}
-	if c.TLSCertFile == "" || c.TLSKeyFile == "" {
-		return fmt.Errorf("TLS_CERT_FILE and TLS_KEY_FILE are required in production")
+	if c.TLSEnabled() {
+		return nil
+	}
+	proxies, err := ParseTrustedProxies(c.TrustedProxies)
+	if err != nil {
+		return fmt.Errorf("TRUSTED_PROXIES: %w", err)
+	}
+	if len(proxies) == 0 {
+		return fmt.Errorf("TLS_CERT_FILE and TLS_KEY_FILE are required in production, or set TRUSTED_PROXIES when nginx terminates TLS")
 	}
 	return nil
 }
@@ -99,4 +109,35 @@ func parseDuration(raw string, fallback time.Duration) (time.Duration, error) {
 		return duration, nil
 	}
 	return 0, fmt.Errorf("invalid duration %q (examples: 8h, 30m, 24h)", raw)
+}
+
+func ParseTrustedProxies(raw string) ([]*net.IPNet, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	var nets []*net.IPNet
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if !strings.Contains(part, "/") {
+			ip := net.ParseIP(part)
+			if ip == nil {
+				return nil, fmt.Errorf("invalid proxy address %q", part)
+			}
+			bits := 128
+			if ip.To4() != nil {
+				bits = 32
+			}
+			part = fmt.Sprintf("%s/%d", ip.String(), bits)
+		}
+		_, network, err := net.ParseCIDR(part)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy CIDR %q: %w", part, err)
+		}
+		nets = append(nets, network)
+	}
+	return nets, nil
 }

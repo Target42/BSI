@@ -46,6 +46,7 @@
                 <td>
                   {{if and $.CanOwn (or (ne .Role "owner") (gt $.OwnerCount 1))}}
                   <form class="inline-form" method="post" action="{{href (printf "/projects/%d/members/%d" $.Project.ID .UserID)}}">
+                    {{template "csrf" $}}
                     <select name="role" aria-label="Rolle von {{.DisplayName}}">
                       {{range $.MemberRoles}}
                       <option value="{{.}}" {{if eq . $m.Role}}selected{{end}}>{{roleLabel .}}</option>
@@ -65,6 +66,7 @@
                     <span class="muted">letzter Besitzer</span>
                   {{else}}
                     <form class="inline-form" method="post" action="{{href (printf "/projects/%d/members/%d/remove" $.Project.ID .UserID)}}">
+                      {{template "csrf" $}}
                       <button class="btn btn-small btn-danger" type="submit">Entfernen</button>
                     </form>
                   {{end}}
@@ -80,6 +82,7 @@
       {{if .CanOwn}}
       <h2>Mitglied hinzufügen</h2>
       <form class="card" method="post" action="{{href (printf "/projects/%d/members" .Project.ID)}}">
+        {{template "csrf" .}}
         <div class="form-grid">
           <div class="field">
             <label for="email">E-Mail (bestehender Benutzer)</label>

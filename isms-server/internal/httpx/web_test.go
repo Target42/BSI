@@ -97,7 +97,7 @@ func TestEmbeddedWebUIPublicBase(t *testing.T) {
 }
 
 func TestHomeAndProjectPages(t *testing.T) {
-	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "")
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
 	var buf bytes.Buffer
 	if err := ui.tmpl.ExecuteTemplate(&buf, "home", webPage{}); err != nil {
 		t.Fatal(err)

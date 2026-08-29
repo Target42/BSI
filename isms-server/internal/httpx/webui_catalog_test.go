@@ -27,7 +27,7 @@ func TestGroupBausteineKeepsChapterOrder(t *testing.T) {
 }
 
 func TestCatalogTemplateRendersTree(t *testing.T) {
-	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "")
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
 	var buf bytes.Buffer
 	err := ui.tmpl.ExecuteTemplate(&buf, "catalog", webPage{
 		CatalogGroups: []webCatalogGroup{

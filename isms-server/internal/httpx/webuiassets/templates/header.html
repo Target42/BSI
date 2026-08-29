@@ -10,6 +10,7 @@
     {{if .LoggedIn}}
     <a href="{{href "/account"}}"><span class="icon icon-user" aria-hidden="true"></span> {{.DisplayName}}</a>
     <form method="post" action="{{href "/logout"}}">
+      {{template "csrf" .}}
       <button class="btn btn-ghost" type="submit"><span class="icon icon-logout" aria-hidden="true"></span> Abmelden</button>
     </form>
     {{else}}

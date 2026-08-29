@@ -39,6 +39,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "email and password required")
 		return
 	}
+	if h.store == nil {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
 
 	user, passwordHash, err := h.store.FindUserByEmail(r.Context(), req.Email)
 	if err != nil {

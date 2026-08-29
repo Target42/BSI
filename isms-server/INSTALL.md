@@ -100,7 +100,7 @@ Secret erzeugen:
 openssl rand -base64 48
 ```
 
-`ENV=production` erzwingt TLS (`TLS_CERT_FILE`, `TLS_KEY_FILE`) und ein gesetztes `JWT_SECRET`. Im internen LAN reicht meist `ENV=development` plus starkes Secret.
+`ENV=production` erzwingt ein gesetztes `JWT_SECRET` und entweder TLS am Go-Prozess (`TLS_CERT_FILE` / `TLS_KEY_FILE`) oder TLS am nginx mit `TRUSTED_PROXIES`. DuckDNS-Beispiel: `deploy/nginx-isms.conf` plus `deploy/isms.env.nginx.example`.
 
 Katalog-XML nach `/opt/isms/catalog/` legen (das Skript im nächsten Schritt legt den Ordner an) oder `CATALOG_XML_PATH` auf den tatsächlichen Pfad setzen.
 
@@ -161,6 +161,27 @@ sudo systemctl disable --now isms-server   # stoppen und Autostart aus
 Im Login: **Mit Server verbinden**, URL `http://<ubuntu-host>:8080`.  
 Erster Admin: `ADMIN_EMAIL` / `ADMIN_PASSWORD` aus `/etc/isms/isms.env`.
 
+### 9. Öffentlich: DuckDNS + nginx
+
+Wie beim Wahlhelfer: Let's Encrypt am Host-nginx, Go nur auf localhost. Port **8098**, weil 8080 oft schon belegt ist.
+
+1. DuckDNS-A-Record (z. B. `isms.duckdns.org`) auf die öffentliche IP; Router **80** und **443** zum nginx-Host.
+2. In `deploy/nginx-isms.conf` und unten den Hostnamen ersetzen, falls er nicht `isms.duckdns.org` ist.
+3. Env nach `deploy/isms.env.nginx.example` (`HTTP_ADDR=127.0.0.1:8098`, `TRUSTED_PROXIES=127.0.0.1,::1`, `ENV=production`, starkes `JWT_SECRET` und `ADMIN_PASSWORD`).
+4. nginx und Zertifikat:
+
+```bash
+sudo cp deploy/nginx-isms.conf /etc/nginx/sites-available/isms
+sudo ln -sf /etc/nginx/sites-available/isms /etc/nginx/sites-enabled/isms
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d isms.duckdns.org
+```
+
+5. Firewall: `80/tcp` und `443/tcp` öffnen, **8098 nicht** nach außen. Health-Check intern: `curl -s http://127.0.0.1:8098/health`.
+6. Client-URL: `https://isms.duckdns.org`.
+
+Go und nginx müssen auf **derselben Maschine** laufen (`127.0.0.1`). Läuft ISMS auf einem anderen Rechner, in der nginx-`upstream`-Zeile die LAN-IP eintragen und `TRUSTED_PROXIES` auf die nginx-Adresse setzen.
+
 ---
 
 ## Windows: als Dienst
@@ -209,5 +230,5 @@ psql -U postgres -f scripts/setup-local-db.sql
 
 - Logs Ubuntu: `journalctl -u isms-server`. Windows/NSSM: `%ProgramData%\ISMS\logs\`.
 - Katalog-Import nur beim **ersten** Start, wenn die DB noch leer ist. Später: Client **Datei → IT-Grundschutz XML importieren**.
-- HTTPS: Reverse Proxy (nginx) vor dem Server, Vorlage `deploy/nginx-isms.conf`. Der Go-Dienst nur lokal binden (`HTTP_ADDR=127.0.0.1:8080`), Client-URL `https://isms.<host>`. Ohne eigenen Hostnamen: `location /isms/` in den bestehenden vHost (Client dann `https://<host>/isms`, in `.env` `WEB_PUBLIC_BASE=/isms`). Dev-Zertifikat ohne Proxy: `scripts/generate-dev-cert.ps1` (siehe README).
+- HTTPS: Reverse Proxy (nginx) vor dem Server, Vorlage `deploy/nginx-isms.conf` (DuckDNS + Certbot, Backend `127.0.0.1:8098`). Env: `deploy/isms.env.nginx.example`. Der Go-Dienst nur lokal binden (`HTTP_ADDR=127.0.0.1:8098`), `TRUSTED_PROXIES=127.0.0.1,::1`, Client-URL `https://isms.duckdns.org`. Ohne eigenen Hostnamen: `location /isms/` in den bestehenden vHost (Client dann `https://<host>/isms`, in `.env` `WEB_PUBLIC_BASE=/isms`). Dev-Zertifikat ohne Proxy: `scripts/generate-dev-cert.ps1` (siehe README).
 - Binary-Update Ubuntu: neu bauen, `sudo cp isms-server /opt/isms/isms-server && sudo systemctl restart isms-server`.

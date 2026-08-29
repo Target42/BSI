@@ -17,6 +17,7 @@
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
       <form class="card" method="post" action="{{href "/account/password"}}">
+        {{template "csrf" .}}
         <h2>Passwort ändern</h2>
         <div class="field">
           <label for="currentPassword">Aktuelles Passwort</label>

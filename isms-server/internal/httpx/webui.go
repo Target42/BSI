@@ -19,7 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-//go:embed webuiassets/app.css webuiassets/favicon.svg webuiassets/templates/*.html
+//go:embed webuiassets/app.css webuiassets/app.js webuiassets/favicon.svg webuiassets/templates/*.html
 var webUIAssets embed.FS
 
 var webStatusFilters = []string{"Alle", "Offen", "Teilweise", "Erfüllt", "Entfällt", "Überfällig"}
@@ -38,7 +38,9 @@ type webUI struct {
 	base    string
 	tmpl    *template.Template
 	css     []byte
+	js      []byte
 	favicon []byte
+	limiter *loginLimiter
 }
 
 type webPage struct {
@@ -104,6 +106,7 @@ type webPage struct {
 	Deviation             string
 	PrintDate             string
 	NextPath              string
+	CSRFToken             string
 }
 
 type webWorkBaustein struct {
@@ -162,22 +165,28 @@ type webMeasureRow struct {
 	Overdue bool
 }
 
-func newWebUI(authService *auth.Service, store *repository.Store, reports *service.ReportService, publicBase string) *webUI {
+func newWebUI(authService *auth.Service, store *repository.Store, reports *service.ReportService, publicBase string, limiter *loginLimiter) *webUI {
 	u := &webUI{
 		auth:    authService,
 		store:   store,
 		reports: reports,
 		base:    strings.TrimRight(publicBase, "/"),
+		limiter: limiter,
 	}
 	css, err := webUIAssets.ReadFile("webuiassets/app.css")
 	if err != nil {
 		panic("web ui css: " + err.Error())
+	}
+	js, err := webUIAssets.ReadFile("webuiassets/app.js")
+	if err != nil {
+		panic("web ui js: " + err.Error())
 	}
 	favicon, err := webUIAssets.ReadFile("webuiassets/favicon.svg")
 	if err != nil {
 		panic("web ui favicon: " + err.Error())
 	}
 	u.css = css
+	u.js = js
 	u.favicon = favicon
 
 	tmpl, err := template.New("webui").Funcs(template.FuncMap{
@@ -217,9 +226,10 @@ func (u *webUI) cookiePath() string {
 
 func (u *webUI) mount(r chi.Router) {
 	r.Get("/ui/app.css", u.serveCSS)
+	r.Get("/ui/app.js", u.serveJS)
 	r.Get("/ui/favicon.svg", u.serveFavicon)
 	r.Get("/login", u.loginGet)
-	r.Post("/login", u.loginPost)
+	r.With(u.limitLogin).Post("/login", u.loginPost)
 	r.Post("/logout", u.logout)
 
 	r.Group(func(g chi.Router) {
@@ -276,6 +286,12 @@ func (u *webUI) serveCSS(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(u.css)
 }
 
+func (u *webUI) serveJS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(u.js)
+}
+
 func (u *webUI) serveFavicon(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
@@ -291,6 +307,10 @@ func (u *webUI) cookieAuth(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(auth.ContextWithUser(r.Context(), claims)))
 	})
+}
+
+func (u *webUI) limitLogin(next http.Handler) http.Handler {
+	return u.limiter.Middleware(next)
 }
 
 func safeNextPath(raw string) string {
@@ -328,6 +348,10 @@ func (u *webUI) loginPost(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	if email == "" || password == "" {
 		u.render(w, r, "login", webPage{Email: email, NextPath: next, Error: "E-Mail und Passwort sind erforderlich."})
+		return
+	}
+	if u.store == nil {
+		u.render(w, r, "login", webPage{Email: email, NextPath: next, Error: "E-Mail oder Passwort ist falsch."})
 		return
 	}
 
@@ -1220,6 +1244,9 @@ func (u *webUI) writeAccessError(w http.ResponseWriter, err error) {
 
 func (u *webUI) render(w http.ResponseWriter, r *http.Request, name string, data webPage) {
 	if r != nil {
+		if data.CSRFToken == "" {
+			data.CSRFToken = csrfTokenFromContext(r.Context())
+		}
 		if user, ok := auth.UserFromContext(r.Context()); ok {
 			data.LoggedIn = true
 			if data.DisplayName == "" {

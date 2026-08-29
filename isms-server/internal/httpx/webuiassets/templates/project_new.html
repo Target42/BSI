@@ -17,6 +17,7 @@
       <p class="lede">Name, Katalogversion und Sichtbarkeit festlegen. Die Version lässt sich später nicht mehr ändern.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       <form class="card" method="post" action="{{href "/projects/new"}}">
+        {{template "csrf" .}}
         <div class="field">
           <label for="name">Name</label>
           <input id="name" name="name" required value="{{.Project.Name}}">
