@@ -3,7 +3,7 @@ object ProjectForm: TProjectForm
   Top = 0
   BorderStyle = bsDialog
   Caption = 'Projekt'
-  ClientHeight = 240
+  ClientHeight = 330
   ClientWidth = 420
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -38,28 +38,40 @@ object ProjectForm: TProjectForm
     Left = 16
     Top = 82
     Width = 388
-    Height = 110
+    Height = 90
     ScrollBars = ssVertical
     TabOrder = 1
   end
+  object rgVisibility: TRadioGroup
+    Left = 16
+    Top = 180
+    Width = 388
+    Height = 100
+    Caption = 'Sichtbarkeit'
+    ItemIndex = 0
+    Items.Strings = (
+      'Privat '#8212' nur Projektmitglieder'
+      #214'ffentlich '#8212' ohne Anmeldung sichtbar')
+    TabOrder = 2
+  end
   object btnOk: TButton
     Left = 228
-    Top = 200
+    Top = 290
     Width = 85
     Height = 30
     Caption = 'OK'
     Default = True
-    TabOrder = 2
+    TabOrder = 3
     OnClick = btnOkClick
   end
   object btnCancel: TButton
     Left = 319
-    Top = 200
+    Top = 290
     Width = 85
     Height = 30
     Cancel = True
     Caption = 'Abbrechen'
     ModalResult = 2
-    TabOrder = 3
+    TabOrder = 4
   end
 end

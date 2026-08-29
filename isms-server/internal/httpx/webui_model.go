@@ -75,10 +75,10 @@ func (u *webUI) requireAdmin(w http.ResponseWriter, r *http.Request) (*auth.Clai
 func (u *webUI) projectNewGet(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
-		http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+		u.redirectLogin(w, r)
 		return
 	}
-	u.renderProjectNew(w, r, user, domain.Project{}, "")
+	u.renderProjectNew(w, r, user, domain.Project{Visibility: domain.VisibilityPrivate}, "")
 }
 
 func (u *webUI) renderProjectNew(w http.ResponseWriter, r *http.Request, user *auth.Claims, draft domain.Project, errMsg string) {
@@ -88,6 +88,9 @@ func (u *webUI) renderProjectNew(w http.ResponseWriter, r *http.Request, user *a
 	}
 	if draft.CatalogVersion == "" {
 		draft.CatalogVersion = versions[0]
+	}
+	if draft.Visibility == "" {
+		draft.Visibility = domain.VisibilityPrivate
 	}
 	u.render(w, r, "project_new", webPage{
 		DisplayName:     user.DisplayName,
@@ -110,7 +113,8 @@ func (u *webUI) projectCreate(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	desc := strings.TrimSpace(r.FormValue("description"))
 	version := strings.TrimSpace(r.FormValue("catalogVersion"))
-	draft := domain.Project{Name: name, Description: desc, CatalogVersion: version}
+	visibility := domain.NormalizeVisibility(r.FormValue("visibility"))
+	draft := domain.Project{Name: name, Description: desc, CatalogVersion: version, Visibility: visibility}
 	if name == "" {
 		u.renderProjectNew(w, r, user, draft, "Name ist erforderlich.")
 		return
@@ -119,7 +123,7 @@ func (u *webUI) projectCreate(w http.ResponseWriter, r *http.Request) {
 		version = "2023"
 		draft.CatalogVersion = version
 	}
-	project, err := u.store.CreateProject(r.Context(), user.UserID, name, desc, version)
+	project, err := u.store.CreateProject(r.Context(), user.UserID, name, desc, version, visibility)
 	if err != nil {
 		u.renderProjectNew(w, r, user, draft, "Projekt konnte nicht angelegt werden.")
 		return

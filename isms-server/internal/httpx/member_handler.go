@@ -38,7 +38,7 @@ func (h *MemberHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid project id")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "viewer"); err != nil {
+	if _, err := h.store.RequireProjectMember(r.Context(), projectID, user, "viewer"); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}

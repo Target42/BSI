@@ -29,38 +29,44 @@ func TestEmbeddedWebUIServesPagesAndLeavesAPI(t *testing.T) {
 		return rec
 	}
 
-	rec := assert(http.MethodGet, "/", http.StatusSeeOther, "")
-	if loc := rec.Header().Get("Location"); loc != "/login" {
-		t.Fatalf("GET / Location %q", loc)
+	rec := assert(http.MethodGet, "/", http.StatusOK, "Zu den Projekten")
+	if !strings.Contains(rec.Body.String(), "Anmelden") {
+		t.Fatalf("GET / must offer login, body %q", rec.Body.String())
 	}
 	assert(http.MethodGet, "/login", http.StatusOK, "brand-mark")
 	assert(http.MethodGet, "/ui/app.css", http.StatusOK, "@media print")
 	assert(http.MethodGet, "/health", http.StatusOK, `"status":"ok"`)
 	assert(http.MethodGet, "/api/v1/projects", http.StatusUnauthorized, "")
+	assert(http.MethodGet, "/projects", http.StatusOK, "Projekte")
+
+	for _, path := range []string{
+		"/projects/1/members",
+		"/account",
+		"/users",
+		"/projects/new",
+		"/catalog",
+		"/catalog/bausteine/1",
+	} {
+		rec := assert(http.MethodGet, path, http.StatusSeeOther, "")
+		if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/login") {
+			t.Fatalf("GET %s Location %q", path, loc)
+		}
+	}
 
 	for _, path := range []string{
 		"/projects/1/cockpit",
 		"/projects/1/targets/1/requirements/1",
-		"/projects/1/members",
 		"/projects/1/measures/1",
-		"/account",
-		"/users",
 		"/projects/1/targets/1/edit",
 		"/projects/1/targets/1/applicability",
 		"/projects/1/targets/1/recommendations",
 		"/projects/1/targets/1",
 		"/projects/1/report.csv",
-		"/projects",
-		"/projects/new",
 		"/projects/1/edit",
 		"/projects/1/settings",
-		"/catalog",
-		"/catalog/bausteine/1",
+		"/projects/1",
 	} {
-		rec := assert(http.MethodGet, path, http.StatusSeeOther, "")
-		if loc := rec.Header().Get("Location"); loc != "/login" {
-			t.Fatalf("GET %s Location %q", path, loc)
-		}
+		assert(http.MethodGet, path, http.StatusNotFound, "")
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/does-not-exist", nil)
@@ -103,7 +109,7 @@ func TestHomeAndProjectPages(t *testing.T) {
 		}
 	}
 	buf.Reset()
-	if err := ui.tmpl.ExecuteTemplate(&buf, "projects", webPage{}); err != nil {
+	if err := ui.tmpl.ExecuteTemplate(&buf, "projects", webPage{LoggedIn: true}); err != nil {
 		t.Fatal(err)
 	}
 	list := buf.String()
@@ -129,6 +135,12 @@ func TestHomeAndProjectPages(t *testing.T) {
 	head := buf.String()
 	if !strings.Contains(head, `href="/"`) || !strings.Contains(head, `href="/projects"`) {
 		t.Fatalf("header must split ISMS and Projekte: %s", head)
+	}
+	if !strings.Contains(head, "Anmelden") {
+		t.Fatalf("anonymous header must offer login: %s", head)
+	}
+	if strings.Contains(head, "Abmelden") {
+		t.Fatalf("anonymous header must not offer logout: %s", head)
 	}
 }
 
@@ -169,5 +181,22 @@ func TestFlattenTargetsKeepsTreeOrder(t *testing.T) {
 	}
 	if got[1].Summary.OpenCount != 4 {
 		t.Fatalf("progress: %+v", got[1].Summary)
+	}
+}
+
+func TestSafeNextPath(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"/projects/3", "/projects/3"},
+		{"//evil.example", ""},
+		{"https://evil.example", ""},
+		{"projects", ""},
+	}
+	for _, tc := range tests {
+		if got := safeNextPath(tc.in); got != tc.want {
+			t.Fatalf("safeNextPath(%q)=%q want %q", tc.in, got, tc.want)
+		}
 	}
 }

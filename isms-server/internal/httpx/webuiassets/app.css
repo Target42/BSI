@@ -219,6 +219,38 @@ label {
 
 .field { margin-bottom: 14px; }
 
+fieldset.field {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+}
+
+fieldset.field legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.choice label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+.choice input[type="radio"] {
+  width: auto;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
 input, select, textarea {
   width: 100%;
   padding: 8px 10px;

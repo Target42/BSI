@@ -13,7 +13,8 @@ type
   public
     constructor Create(AClient: TApiClient);
     function LoadProjects: TArray<TProject>; override;
-    function CreateProject(const AName, ADescription, ACatalogVersion: string): TProject; override;
+    function CreateProject(const AName, ADescription, ACatalogVersion: string;
+      const AVisibility: string = 'private'): TProject; override;
     function UpdateProject(const AProject: TProject): Boolean; override;
     function DeleteProject(AProjectId: Integer): Boolean; override;
     function LoadAssessment(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TRequirementAssessment; override;
@@ -57,7 +58,7 @@ begin
 end;
 
 function THttpProjectRepository.CreateProject(const AName, ADescription,
-  ACatalogVersion: string): TProject;
+  ACatalogVersion: string; const AVisibility: string): TProject;
 var
   Body: TJSONObject;
   Doc: TJSONValue;
@@ -69,6 +70,7 @@ begin
     Body.AddPair('name', AName);
     Body.AddPair('description', ADescription);
     Body.AddPair('catalogVersion', ACatalogVersion);
+    Body.AddPair('visibility', NormalizeProjectVisibility(AVisibility));
     Doc := FClient.PostJson('/api/v1/projects', Body, Status);
     try
       if (Status <> 201) or not (Doc is TJSONObject) then
@@ -96,6 +98,7 @@ begin
   try
     Body.AddPair('name', AProject.Name);
     Body.AddPair('description', AProject.Description);
+    Body.AddPair('visibility', NormalizeProjectVisibility(AProject.Visibility));
     Doc := FClient.PatchJson(Format('/api/v1/projects/%d', [AProject.Id]), Body, Status);
     try
       if Status <> 200 then

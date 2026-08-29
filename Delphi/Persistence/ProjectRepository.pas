@@ -13,7 +13,8 @@ type
   public
     constructor Create(AConnection: TFDConnection);
     function LoadProjects: TArray<TProject>; override;
-    function CreateProject(const AName, ADescription, ACatalogVersion: string): TProject; override;
+    function CreateProject(const AName, ADescription, ACatalogVersion: string;
+      const AVisibility: string = 'private'): TProject; override;
     function UpdateProject(const AProject: TProject): Boolean; override;
     function DeleteProject(AProjectId: Integer): Boolean; override;
     function LoadAssessment(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TRequirementAssessment; override;
@@ -62,7 +63,8 @@ begin
   Result := List;
 end;
 
-function TProjectRepository.CreateProject(const AName, ADescription, ACatalogVersion: string): TProject;
+function TProjectRepository.CreateProject(const AName, ADescription,
+  ACatalogVersion: string; const AVisibility: string): TProject;
 var
   Q: TFDQuery;
   NowUtc: TDateTime;
@@ -85,6 +87,7 @@ begin
     Result.Name := AName;
     Result.Description := ADescription;
     Result.CatalogVersion := ACatalogVersion;
+    Result.Visibility := NormalizeProjectVisibility(AVisibility);
     Result.CreatedAt := NowUtc;
     Result.UpdatedAt := NowUtc;
   except

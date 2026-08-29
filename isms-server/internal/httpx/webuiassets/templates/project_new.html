@@ -14,7 +14,7 @@
     <main class="main">
       <p><a href="{{href "/projects"}}">Projekte</a> / Anlegen</p>
       <h1>Projekt anlegen</h1>
-      <p class="lede">Name und Katalogversion festlegen. Die Version lässt sich später nicht mehr ändern.</p>
+      <p class="lede">Name, Katalogversion und Sichtbarkeit festlegen. Die Version lässt sich später nicht mehr ändern.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       <form class="card" method="post" action="{{href "/projects/new"}}">
         <div class="field">
@@ -33,6 +33,19 @@
             {{end}}
           </select>
         </div>
+        <fieldset class="field">
+          <legend>Sichtbarkeit</legend>
+          <div class="choice">
+            <label>
+              <input type="radio" name="visibility" value="private" {{if ne .Project.Visibility "public"}}checked{{end}}>
+              <span><strong>Privat</strong> — nur Mitglieder des Projekts sehen es.</span>
+            </label>
+            <label>
+              <input type="radio" name="visibility" value="public" {{if eq .Project.Visibility "public"}}checked{{end}}>
+              <span><strong>Öffentlich</strong> — sichtbar ohne Konto, Änderungen nur durch Mitglieder.</span>
+            </label>
+          </div>
+        </fieldset>
         <div class="form-actions">
           <button class="btn" type="submit">Anlegen</button>
           <a class="btn btn-secondary" href="{{href "/projects"}}">Abbrechen</a>

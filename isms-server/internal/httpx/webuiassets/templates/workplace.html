@@ -24,7 +24,7 @@
       <p class="row-actions">
         <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/applicability" .Project.ID .Target.ID)}}">Anwendbarkeit</a>
         <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">Empfehlungen</a>
-        <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">Bearbeiten</a>
+        {{if .CanEdit}}<a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">Bearbeiten</a>{{end}}
       </p>
 
       <form class="toolbar" method="get" action="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">

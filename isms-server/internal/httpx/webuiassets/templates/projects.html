@@ -17,12 +17,16 @@
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
+      {{if .LoggedIn}}
       <p class="row-actions">
         <a class="btn" href="{{href "/projects/new"}}">Neues Projekt</a>
       </p>
+      {{else}}
+      <p class="muted">Ohne Anmeldung sind nur öffentliche Projekte sichtbar. <a href="{{href "/login"}}">Anmelden</a>, um eigene Projekte zu sehen oder anzulegen.</p>
+      {{end}}
 
       {{if not .Projects}}
-        <p class="muted">Noch keine Projekte.</p>
+        <p class="muted">{{if .LoggedIn}}Noch keine Projekte.{{else}}Keine öffentlichen Projekte.{{end}}</p>
       {{else}}
         <div class="table-wrap">
           <table>
@@ -30,9 +34,10 @@
               <tr>
                 <th>Name</th>
                 <th>Katalog</th>
+                <th>Sichtbarkeit</th>
                 <th>Rolle</th>
                 <th>Aktualisiert</th>
-                <th></th>
+                {{if .LoggedIn}}<th></th>{{end}}
               </tr>
             </thead>
             <tbody>
@@ -43,11 +48,14 @@
                   {{if .Description}}<div class="muted">{{.Description}}</div>{{end}}
                 </td>
                 <td>{{.CatalogVersion}}</td>
-                <td><span class="badge">{{roleLabel .Role}}</span></td>
+                <td><span class="badge">{{visibilityLabel .Visibility}}</span></td>
+                <td>{{if .IsMember}}<span class="badge">{{roleLabel .Role}}</span>{{else}}<span class="muted">Gast</span>{{end}}</td>
                 <td>{{formatDate .UpdatedAt}}</td>
+                {{if $.LoggedIn}}
                 <td>
-                  <a href="{{href (printf "/projects/%d/edit" .ID)}}">Bearbeiten</a>
+                  {{if .IsMember}}<a href="{{href (printf "/projects/%d/edit" .ID)}}">Bearbeiten</a>{{end}}
                 </td>
+                {{end}}
               </tr>
               {{end}}
             </tbody>

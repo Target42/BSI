@@ -31,6 +31,23 @@
           <label for="description">Beschreibung</label>
           <textarea id="description" name="description" rows="4">{{.Project.Description}}</textarea>
         </div>
+        {{if .CanOwn}}
+        <fieldset class="field">
+          <legend>Sichtbarkeit</legend>
+          <div class="choice">
+            <label>
+              <input type="radio" name="visibility" value="private" {{if ne .Project.Visibility "public"}}checked{{end}}>
+              <span><strong>Privat</strong> — nur Mitglieder des Projekts sehen es.</span>
+            </label>
+            <label>
+              <input type="radio" name="visibility" value="public" {{if eq .Project.Visibility "public"}}checked{{end}}>
+              <span><strong>Öffentlich</strong> — sichtbar ohne Konto, Änderungen nur durch Mitglieder.</span>
+            </label>
+          </div>
+        </fieldset>
+        {{else}}
+        <p class="muted">Sichtbarkeit: {{visibilityLabel .Project.Visibility}}. Nur der Besitzer kann das ändern.</p>
+        {{end}}
         <p class="muted">Katalogversion {{.Project.CatalogVersion}} (beim Anlegen festgelegt).</p>
         <div class="form-actions">
           <button class="btn" type="submit">Speichern</button>
@@ -41,6 +58,7 @@
       <div class="card">
         <p>{{.Project.Name}}</p>
         {{if .Project.Description}}<div class="req-text">{{.Project.Description}}</div>{{end}}
+        <p class="muted">Sichtbarkeit: {{visibilityLabel .Project.Visibility}}</p>
         <p class="muted">Katalogversion {{.Project.CatalogVersion}}</p>
         <p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>
       </div>

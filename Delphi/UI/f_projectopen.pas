@@ -83,8 +83,12 @@ begin
   end;
 
   if ARemote and (Trim(AProject.Role) <> '') then
-
-    Result := Result + Format('  [%s]', [ProjectMemberRoleLabel(AProject.Role)]);
+  begin
+    if AProject.IsMember then
+      Result := Result + Format('  [%s]', [ProjectMemberRoleLabel(AProject.Role)])
+    else if ProjectIsPublic(AProject) then
+      Result := Result + '  [' + ProjectVisibilityLabel('public') + ']';
+  end;
 
 end;
 

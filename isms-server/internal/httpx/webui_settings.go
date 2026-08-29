@@ -19,9 +19,10 @@ func (u *webUI) projectSettingsGet(w http.ResponseWriter, r *http.Request) {
 
 func (u *webUI) renderProjectSettings(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, role, errMsg string) {
 	u.render(w, r, "project_settings", webPage{
-		DisplayName: user.DisplayName,
+		DisplayName: displayName(user),
 		CanEdit:     roleCanEdit(role),
 		CanOwn:      roleCanOwn(role),
+		IsMember:    project.IsMember,
 		Project:     project,
 		Error:       errMsg,
 	})
@@ -45,6 +46,7 @@ func (u *webUI) projectSettingsSave(w http.ResponseWriter, r *http.Request) {
 		ID:          project.ID,
 		Name:        name,
 		Description: strings.TrimSpace(r.FormValue("description")),
+		Visibility:  visibilityForSave(project, role, r.FormValue("visibility")),
 	})
 	if err != nil {
 		u.renderProjectSettings(w, r, user, project, role, "Projekt konnte nicht gespeichert werden.")
@@ -72,4 +74,11 @@ func (u *webUI) projectDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, u.href("/projects?saved=deleted"), http.StatusSeeOther)
+}
+
+func visibilityForSave(project domain.Project, role, formValue string) string {
+	if roleCanOwn(role) {
+		return domain.NormalizeVisibility(formValue)
+	}
+	return domain.NormalizeVisibility(project.Visibility)
 }

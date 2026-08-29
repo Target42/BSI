@@ -21,7 +21,8 @@ type
   TProjectRepositoryBase = class
   public
     function LoadProjects: TArray<TProject>; virtual; abstract;
-    function CreateProject(const AName, ADescription, ACatalogVersion: string): TProject; virtual; abstract;
+    function CreateProject(const AName, ADescription, ACatalogVersion: string;
+      const AVisibility: string = 'private'): TProject; virtual; abstract;
     function UpdateProject(const AProject: TProject): Boolean; virtual; abstract;
     function DeleteProject(AProjectId: Integer): Boolean; virtual; abstract;
     function LoadAssessment(AProjectId, ATargetObjectId, ARequirementDbId: Integer): TRequirementAssessment; virtual; abstract;

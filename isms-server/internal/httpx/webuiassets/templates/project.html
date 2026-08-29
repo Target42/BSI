@@ -15,6 +15,7 @@
       <p><a href="{{href "/projects"}}">Projekte</a></p>
       <h1>{{.Project.Name}}</h1>
       {{if .Project.Description}}<p class="lede">{{.Project.Description}}</p>{{end}}
+      <p class="muted">{{visibilityLabel .Project.Visibility}}{{if not .IsMember}} · öffentliche Ansicht{{end}}</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
@@ -53,21 +54,27 @@
           <span class="dash-card-title">Maßnahmen-Cockpit</span>
           <span class="dash-card-hint">Aufgaben, Fristen, Zuständige</span>
         </a>
+        {{if .IsMember}}
         <a class="dash-card" href="{{href (printf "/projects/%d/members" .Project.ID)}}">
           <span class="icon icon-users" aria-hidden="true"></span>
           <span class="dash-card-title">Mitglieder</span>
           <span class="dash-card-hint">Rollen und Zugriff im Projekt</span>
         </a>
+        {{end}}
+        {{if or .CanEdit .CanOwn .IsMember}}
         <a class="dash-card" href="{{href (printf "/projects/%d/edit" .Project.ID)}}">
           <span class="icon icon-settings" aria-hidden="true"></span>
           <span class="dash-card-title">Bearbeiten</span>
-          <span class="dash-card-hint">Name, Beschreibung{{if .CanOwn}}, Löschen{{end}}</span>
+          <span class="dash-card-hint">Name, Beschreibung{{if .CanOwn}}, Sichtbarkeit, Löschen{{end}}</span>
         </a>
+        {{end}}
+        {{if .LoggedIn}}
         <a class="dash-card" href="{{href (printf "/catalog?version=%s" .Project.CatalogVersion)}}">
           <span class="icon icon-book" aria-hidden="true"></span>
           <span class="dash-card-title">Katalog</span>
           <span class="dash-card-hint">Bausteine und Volltextsuche</span>
         </a>
+        {{end}}
       </nav>
 
       <h2>Zielobjekte</h2>

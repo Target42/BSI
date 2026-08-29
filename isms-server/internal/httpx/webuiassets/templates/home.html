@@ -17,8 +17,38 @@
       <p class="lede">IT-Grundschutz im Browser — Verbund, Bewertung und Maßnahmen ohne Desktop-Client.</p>
       <p class="row-actions">
         <a class="btn" href="{{href "/projects"}}">Zu den Projekten</a>
+        {{if .LoggedIn}}
         <a class="btn btn-secondary" href="{{href "/catalog"}}">Katalog</a>
+        {{else}}
+        <a class="btn btn-secondary" href="{{href "/login"}}">Anmelden</a>
+        {{end}}
       </p>
+      {{if and (not .LoggedIn) .Projects}}
+      <h2>Öffentliche Projekte</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Katalog</th>
+              <th>Aktualisiert</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Projects}}
+            <tr>
+              <td>
+                <a href="{{href (printf "/projects/%d" .ID)}}"><strong>{{.Name}}</strong></a>
+                {{if .Description}}<div class="muted">{{.Description}}</div>{{end}}
+              </td>
+              <td>{{.CatalogVersion}}</td>
+              <td>{{formatDate .UpdatedAt}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{end}}
     </main>
   </div>
 </body>

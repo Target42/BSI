@@ -3,14 +3,18 @@
   <a class="brand" href="{{href "/"}}"><span class="icon icon-shield" aria-hidden="true"></span> ISMS</a>
   <nav class="header-nav">
     <a href="{{href "/projects"}}"><span class="icon icon-folder" aria-hidden="true"></span> Projekte</a>
-    <a href="{{href "/catalog"}}"><span class="icon icon-book" aria-hidden="true"></span> Katalog</a>
+    {{if .LoggedIn}}<a href="{{href "/catalog"}}"><span class="icon icon-book" aria-hidden="true"></span> Katalog</a>{{end}}
     {{if .IsAdmin}}<a href="{{href "/users"}}"><span class="icon icon-users" aria-hidden="true"></span> Benutzer</a>{{end}}
   </nav>
   <div class="header-meta">
+    {{if .LoggedIn}}
     <a href="{{href "/account"}}"><span class="icon icon-user" aria-hidden="true"></span> {{.DisplayName}}</a>
     <form method="post" action="{{href "/logout"}}">
       <button class="btn btn-ghost" type="submit"><span class="icon icon-logout" aria-hidden="true"></span> Abmelden</button>
     </form>
+    {{else}}
+    <a href="{{href "/login"}}"><span class="icon icon-user" aria-hidden="true"></span> Anmelden</a>
+    {{end}}
   </div>
 </header>
 {{end}}

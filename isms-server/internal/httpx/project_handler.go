@@ -22,11 +22,13 @@ type createProjectRequest struct {
 	Name           string `json:"name"`
 	Description    string `json:"description"`
 	CatalogVersion string `json:"catalogVersion"`
+	Visibility     string `json:"visibility"`
 }
 
 type updateProjectRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Visibility  *string `json:"visibility"`
 }
 
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +66,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.CatalogVersion == "" {
 		req.CatalogVersion = "2023"
 	}
-	project, err := h.store.CreateProject(r.Context(), user.UserID, req.Name, req.Description, req.CatalogVersion)
+	project, err := h.store.CreateProject(r.Context(), user.UserID, req.Name, req.Description, req.CatalogVersion, req.Visibility)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "create project failed")
 		return
@@ -83,19 +85,12 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid project id")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "viewer"); err != nil {
-		if mapRepoError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "access check failed")
-		return
-	}
-	project, err := h.store.GetProject(r.Context(), projectID)
+	project, _, err := h.store.LoadAccessibleProject(r.Context(), projectID, user, "viewer", false)
 	if err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get project failed")
+		writeError(w, http.StatusInternalServerError, "access check failed")
 		return
 	}
 	writeJSON(w, http.StatusOK, project)
@@ -112,7 +107,8 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid project id")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+	current, role, err := h.store.LoadAccessibleProject(r.Context(), projectID, user, "editor", true)
+	if err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -124,10 +120,15 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	visibility := current.Visibility
+	if req.Visibility != nil && role == "owner" {
+		visibility = *req.Visibility
+	}
 	project, err := h.store.UpdateProject(r.Context(), domain.Project{
 		ID:          projectID,
 		Name:        req.Name,
 		Description: req.Description,
+		Visibility:  visibility,
 	})
 	if err != nil {
 		if mapRepoError(w, err) {

@@ -118,7 +118,9 @@ begin
   Result.Name := JsonStringValue(AObj, 'name');
   Result.Description := JsonStringValue(AObj, 'description');
   Result.CatalogVersion := JsonStringValue(AObj, 'catalogVersion');
+  Result.Visibility := NormalizeProjectVisibility(JsonStringValue(AObj, 'visibility'));
   Result.Role := JsonStringValue(AObj, 'role');
+  Result.IsMember := JsonBoolValue(AObj, 'isMember');
   Result.CreatedAt := ParseDateTimeValue(AObj.GetValue('createdAt'));
   Result.UpdatedAt := ParseDateTimeValue(AObj.GetValue('updatedAt'));
 end;

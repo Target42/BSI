@@ -13,8 +13,9 @@
     <form class="card login-card" method="post" action="{{href "/login"}}">
       {{template "brand-mark"}}
       <h1>ISMS</h1>
-      <p class="lede">Anmelden, um Projekte, Fortschritt, Maßnahmen und Bewertungen zu sehen.</p>
+      <p class="lede">Anmelden, um private Projekte zu sehen oder zu bearbeiten. Öffentliche Projekte sind ohne Konto sichtbar.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .NextPath}}<input type="hidden" name="next" value="{{.NextPath}}">{{end}}
       <div class="field">
         <label for="email">E-Mail</label>
         <input id="email" name="email" type="email" autocomplete="username" required value="{{.Email}}">

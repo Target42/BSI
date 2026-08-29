@@ -41,7 +41,7 @@ go run ./cmd/isms-server
 
 Beim ersten Start wird ein Admin-Benutzer angelegt (`admin@example.com` / `changeme`).
 
-**Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen und pflegen, Zielobjekte, Arbeitsplatz (Bausteine/Anforderungen, Vererbung, Empfehlungen, Massenstatus), Katalog, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV und Druck. Administratoren legen Benutzer an und spielen den Katalog ein. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
+**Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Öffentliche Projekte sind ohne Anmeldung sichtbar (nur Lesen). Private Projekte und Schreiben brauchen ein Konto und Mitgliedschaft. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen und pflegen, Zielobjekte, Arbeitsplatz (Bausteine/Anforderungen, Vererbung, Empfehlungen, Massenstatus), Katalog, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV und Druck. Administratoren legen Benutzer an und spielen den Katalog ein. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
 
 **Katalog:** Ist die Datenbank noch leer, importiert der Server automatisch die IT-Grundschutz-XML, wenn er sie findet. Suchreihenfolge:
 
@@ -176,10 +176,11 @@ Voraussetzungen: PostgreSQL läuft, Server gestartet (`go run ./cmd/isms-server`
 - [ ] Client B: ebenfalls ändern → Konfliktmeldung, Server-Version wird geladen
 - [ ] Optional: Maßnahme in beiden bearbeiten → gleiches Verhalten bei Maßnahmen
 
-### 4. Rollen
+### 4. Rollen und Sichtbarkeit
 
+- [ ] Öffentlich: ohne Anmeldung sichtbar (nur Lesen); Privat: nur Mitglieder
 - [ ] Leser: kann Projekt öffnen, aber nicht speichern (HTTP 403)
-- [ ] Besitzer: kann Mitglieder verwalten; Bearbeiter: kann Bewertungen ändern
+- [ ] Besitzer: kann Mitglieder und Sichtbarkeit verwalten; Bearbeiter: kann Bewertungen ändern
 
 ### 5. Admin
 

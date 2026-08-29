@@ -148,3 +148,43 @@ func TestCanInheritAssessments(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveProjectRole(t *testing.T) {
+	tests := []struct {
+		member     string
+		visibility string
+		minRole    string
+		wantRole   string
+		ok         bool
+	}{
+		{"owner", VisibilityPrivate, RoleViewer, "owner", true},
+		{"editor", VisibilityPrivate, RoleEditor, "editor", true},
+		{"viewer", VisibilityPrivate, RoleEditor, "viewer", false},
+		{"", VisibilityPrivate, RoleViewer, "", false},
+		{"", VisibilityPublic, RoleViewer, RoleViewer, true},
+		{"", VisibilityPublic, RoleEditor, "", false},
+		{"viewer", VisibilityPublic, RoleViewer, "viewer", true},
+		{"viewer", VisibilityPublic, RoleEditor, "viewer", false},
+		{"", "PUBLIC", RoleViewer, RoleViewer, true},
+		{"", "", RoleViewer, "", false},
+	}
+	for _, tc := range tests {
+		got, ok := ResolveProjectRole(tc.member, tc.visibility, tc.minRole)
+		if ok != tc.ok || got != tc.wantRole {
+			t.Fatalf("member=%q vis=%q min=%q: got (%q, %v) want (%q, %v)",
+				tc.member, tc.visibility, tc.minRole, got, ok, tc.wantRole, tc.ok)
+		}
+	}
+}
+
+func TestNormalizeVisibility(t *testing.T) {
+	if got := NormalizeVisibility("public"); got != VisibilityPublic {
+		t.Fatalf("got %q", got)
+	}
+	if got := NormalizeVisibility("Privat"); got != VisibilityPrivate {
+		t.Fatalf("got %q", got)
+	}
+	if got := VisibilityLabel("public"); got != "Öffentlich" {
+		t.Fatalf("label %q", got)
+	}
+}

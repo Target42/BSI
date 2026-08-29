@@ -20,7 +20,9 @@ type
     Name: string;
     Description: string;
     CatalogVersion: string;
+    Visibility: string;
     Role: string;
+    IsMember: Boolean;
     CreatedAt: TDateTime;
     UpdatedAt: TDateTime;
   end;
@@ -291,6 +293,9 @@ function DefaultCockpitFilter: TCockpitFilter;
 
 function ProjectMemberRoleLabel(const ARole: string): string;
 function ProjectMemberRoleOptions: TArray<string>;
+function NormalizeProjectVisibility(const AValue: string): string;
+function ProjectIsPublic(const AProject: TProject): Boolean;
+function ProjectVisibilityLabel(const AValue: string): string;
 
 function AssessmentSaveOk(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
 function AssessmentSaveConflict(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
@@ -951,6 +956,25 @@ end;
 function ProjectMemberRoleOptions: TArray<string>;
 begin
   Result := TArray<string>.Create('owner', 'editor', 'viewer');
+end;
+
+function NormalizeProjectVisibility(const AValue: string): string;
+begin
+  if SameText(Trim(AValue), 'public') then
+    Exit('public');
+  Result := 'private';
+end;
+
+function ProjectIsPublic(const AProject: TProject): Boolean;
+begin
+  Result := NormalizeProjectVisibility(AProject.Visibility) = 'public';
+end;
+
+function ProjectVisibilityLabel(const AValue: string): string;
+begin
+  if NormalizeProjectVisibility(AValue) = 'public' then
+    Exit(#$00D6'ffentlich');
+  Result := 'Privat';
 end;
 
 function AssessmentSaveOk(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;

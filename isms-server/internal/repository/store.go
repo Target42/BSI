@@ -79,36 +79,112 @@ func (s *Store) ProjectRole(ctx context.Context, projectID, userID int64) (strin
 }
 
 func (s *Store) RequireProjectRole(ctx context.Context, projectID int64, user *auth.Claims, minRole string) (string, error) {
-	role, err := s.ProjectRole(ctx, projectID, user.UserID)
+	access, err := s.projectAccess(ctx, projectID, user, minRole, true)
 	if err != nil {
 		return "", err
 	}
-	if roleRank(role) < roleRank(minRole) {
-		return role, ErrForbidden
-	}
-	return role, nil
+	return access.Role, nil
 }
 
-func roleRank(role string) int {
-	switch role {
-	case "owner":
-		return 3
-	case "editor":
-		return 2
-	case "viewer":
-		return 1
-	default:
-		return 0
+func (s *Store) RequireProjectMember(ctx context.Context, projectID int64, user *auth.Claims, minRole string) (string, error) {
+	access, err := s.projectAccess(ctx, projectID, user, minRole, false)
+	if err != nil {
+		return "", err
 	}
+	return access.Role, nil
+}
+
+func (s *Store) LoadAccessibleProject(ctx context.Context, projectID int64, user *auth.Claims, minRole string, membersOnly bool) (domain.Project, string, error) {
+	access, err := s.projectAccess(ctx, projectID, user, minRole, !membersOnly)
+	if err != nil {
+		return domain.Project{}, "", err
+	}
+	project, err := s.GetProject(ctx, projectID)
+	if err != nil {
+		return domain.Project{}, "", err
+	}
+	project.Role = access.Role
+	project.IsMember = access.IsMember
+	return project, access.Role, nil
+}
+
+type projectAccessResult struct {
+	Role       string
+	IsMember   bool
+	Visibility string
+}
+
+func (s *Store) projectAccess(ctx context.Context, projectID int64, user *auth.Claims, minRole string, allowPublic bool) (projectAccessResult, error) {
+	var userID int64
+	if user != nil {
+		userID = user.UserID
+	}
+	var visibility, memberRole string
+	err := s.pool.QueryRow(ctx, `
+		SELECT p.visibility,
+		       COALESCE((
+		           SELECT pm.role FROM project_members pm
+		           WHERE pm.project_id = p.id AND pm.user_id = $2
+		       ), '')
+		FROM projects p
+		WHERE p.id = $1`, projectID, userID,
+	).Scan(&visibility, &memberRole)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return projectAccessResult{}, ErrNotFound
+	}
+	if err != nil {
+		return projectAccessResult{}, err
+	}
+
+	result := projectAccessResult{Role: memberRole, IsMember: memberRole != "", Visibility: visibility}
+	if !allowPublic {
+		if memberRole == "" || domain.RoleRank(memberRole) < domain.RoleRank(minRole) {
+			return result, ErrForbidden
+		}
+		return result, nil
+	}
+	role, ok := domain.ResolveProjectRole(memberRole, visibility, minRole)
+	if !ok {
+		return result, ErrForbidden
+	}
+	result.Role = role
+	return result, nil
+}
+
+const projectColumns = `id, name, description, catalog_version, visibility, created_at, updated_at`
+
+func scanProject(scanner interface {
+	Scan(dest ...any) error
+}, extra ...any) (domain.Project, error) {
+	var p domain.Project
+	dest := []any{&p.ID, &p.Name, &p.Description, &p.CatalogVersion, &p.Visibility, &p.CreatedAt, &p.UpdatedAt}
+	dest = append(dest, extra...)
+	err := scanner.Scan(dest...)
+	if p.Visibility == "" {
+		p.Visibility = domain.VisibilityPrivate
+	}
+	return p, err
 }
 
 func (s *Store) ListProjects(ctx context.Context, userID int64) ([]domain.Project, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT p.id, p.name, p.description, p.catalog_version, p.created_at, p.updated_at, pm.role
+	query := `
+		SELECT p.id, p.name, p.description, p.catalog_version, p.visibility, p.created_at, p.updated_at,
+		       'viewer' AS role, FALSE AS is_member
 		FROM projects p
-		JOIN project_members pm ON pm.project_id = p.id
-		WHERE pm.user_id = $1
-		ORDER BY p.updated_at DESC`, userID)
+		WHERE p.visibility = 'public'
+		ORDER BY p.updated_at DESC`
+	args := []any{}
+	if userID > 0 {
+		query = `
+			SELECT p.id, p.name, p.description, p.catalog_version, p.visibility, p.created_at, p.updated_at,
+			       COALESCE(pm.role, 'viewer') AS role, (pm.user_id IS NOT NULL) AS is_member
+			FROM projects p
+			LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
+			WHERE pm.user_id IS NOT NULL OR p.visibility = 'public'
+			ORDER BY p.updated_at DESC`
+		args = []any{userID}
+	}
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -116,16 +192,21 @@ func (s *Store) ListProjects(ctx context.Context, userID int64) ([]domain.Projec
 
 	var projects []domain.Project
 	for rows.Next() {
-		var p domain.Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CatalogVersion, &p.CreatedAt, &p.UpdatedAt, &p.Role); err != nil {
+		var role string
+		var isMember bool
+		p, err := scanProject(rows, &role, &isMember)
+		if err != nil {
 			return nil, err
 		}
+		p.Role = role
+		p.IsMember = isMember
 		projects = append(projects, p)
 	}
 	return projects, rows.Err()
 }
 
-func (s *Store) CreateProject(ctx context.Context, userID int64, name, description, catalogVersion string) (domain.Project, error) {
+func (s *Store) CreateProject(ctx context.Context, userID int64, name, description, catalogVersion, visibility string) (domain.Project, error) {
+	visibility = domain.NormalizeVisibility(visibility)
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return domain.Project{}, err
@@ -134,11 +215,11 @@ func (s *Store) CreateProject(ctx context.Context, userID int64, name, descripti
 
 	var project domain.Project
 	err = tx.QueryRow(ctx, `
-		INSERT INTO projects (name, description, catalog_version)
-		VALUES ($1, $2, $3)
-		RETURNING id, name, description, catalog_version, created_at, updated_at`,
-		name, description, catalogVersion,
-	).Scan(&project.ID, &project.Name, &project.Description, &project.CatalogVersion, &project.CreatedAt, &project.UpdatedAt)
+		INSERT INTO projects (name, description, catalog_version, visibility)
+		VALUES ($1, $2, $3, $4)
+		RETURNING `+projectColumns,
+		name, description, catalogVersion, visibility,
+	).Scan(&project.ID, &project.Name, &project.Description, &project.CatalogVersion, &project.Visibility, &project.CreatedAt, &project.UpdatedAt)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -162,29 +243,34 @@ func (s *Store) CreateProject(ctx context.Context, userID int64, name, descripti
 		return domain.Project{}, err
 	}
 	project.Role = "owner"
+	project.IsMember = true
 	return project, nil
 }
 
 func (s *Store) GetProject(ctx context.Context, projectID int64) (domain.Project, error) {
 	var p domain.Project
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, description, catalog_version, created_at, updated_at
+		SELECT `+projectColumns+`
 		FROM projects WHERE id = $1`, projectID,
-	).Scan(&p.ID, &p.Name, &p.Description, &p.CatalogVersion, &p.CreatedAt, &p.UpdatedAt)
+	).Scan(&p.ID, &p.Name, &p.Description, &p.CatalogVersion, &p.Visibility, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Project{}, ErrNotFound
+	}
+	if p.Visibility == "" {
+		p.Visibility = domain.VisibilityPrivate
 	}
 	return p, err
 }
 
 func (s *Store) UpdateProject(ctx context.Context, project domain.Project) (domain.Project, error) {
+	project.Visibility = domain.NormalizeVisibility(project.Visibility)
 	err := s.pool.QueryRow(ctx, `
 		UPDATE projects
-		SET name = $2, description = $3, updated_at = now()
+		SET name = $2, description = $3, visibility = $4, updated_at = now()
 		WHERE id = $1
-		RETURNING id, name, description, catalog_version, created_at, updated_at`,
-		project.ID, project.Name, project.Description,
-	).Scan(&project.ID, &project.Name, &project.Description, &project.CatalogVersion, &project.CreatedAt, &project.UpdatedAt)
+		RETURNING `+projectColumns,
+		project.ID, project.Name, project.Description, project.Visibility,
+	).Scan(&project.ID, &project.Name, &project.Description, &project.CatalogVersion, &project.Visibility, &project.CreatedAt, &project.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Project{}, ErrNotFound
 	}

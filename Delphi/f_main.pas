@@ -1757,9 +1757,10 @@ var
   P: TProject;
   Scope: TTargetObject;
 begin
-  if not TProjectForm.ExecuteCreate(P) then
+  if not TProjectForm.ExecuteCreate(P, FContext.IsRemote) then
     Exit;
-  P := FContext.ProjectRepository.CreateProject(P.Name, P.Description, FContext.CatalogVersion);
+  P := FContext.ProjectRepository.CreateProject(P.Name, P.Description, FContext.CatalogVersion,
+    P.Visibility);
   if P.Id = 0 then
   begin
     MessageDlg('Projekt konnte nicht erstellt werden: ' + FContext.ProjectRepository.LastError,
@@ -1836,7 +1837,7 @@ begin
   if not HasActiveProject then
     Exit;
   P := FActiveProject;
-  if not TProjectForm.ExecuteEdit(P) then
+  if not TProjectForm.ExecuteEdit(P, FContext.IsRemote) then
     Exit;
   if not FContext.ProjectRepository.UpdateProject(P) then
   begin

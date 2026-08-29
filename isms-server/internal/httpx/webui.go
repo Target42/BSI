@@ -49,6 +49,8 @@ type webPage struct {
 	Email                 string
 	CanEdit               bool
 	CanOwn                bool
+	LoggedIn              bool
+	IsMember              bool
 	IsAdmin               bool
 	CurrentUserID         int64
 	OwnerCount            int
@@ -101,6 +103,7 @@ type webPage struct {
 	InheritedFrom         string
 	Deviation             string
 	PrintDate             string
+	NextPath              string
 }
 
 type webWorkBaustein struct {
@@ -178,14 +181,15 @@ func newWebUI(authService *auth.Service, store *repository.Store, reports *servi
 	u.favicon = favicon
 
 	tmpl, err := template.New("webui").Funcs(template.FuncMap{
-		"href":        u.href,
-		"roleLabel":   roleLabel,
-		"formatDate":  formatWebDate,
-		"formatDue":   formatDueDate,
-		"dueValue":    dueValue,
-		"statusClass": statusClass,
-		"padLeft":     padLeft,
-		"reqHTML":     reqHTML,
+		"href":            u.href,
+		"roleLabel":       roleLabel,
+		"visibilityLabel": domain.VisibilityLabel,
+		"formatDate":      formatWebDate,
+		"formatDue":       formatDueDate,
+		"dueValue":        dueValue,
+		"statusClass":     statusClass,
+		"padLeft":         padLeft,
+		"reqHTML":         reqHTML,
 	}).ParseFS(webUIAssets, "webuiassets/templates/*.html")
 	if err != nil {
 		panic("web ui templates: " + err.Error())
@@ -282,11 +286,28 @@ func (u *webUI) cookieAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, err := u.auth.ClaimsFromCookie(r)
 		if err != nil {
-			http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+			next.ServeHTTP(w, r)
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(auth.ContextWithUser(r.Context(), claims)))
 	})
+}
+
+func safeNextPath(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") || strings.Contains(raw, "://") {
+		return ""
+	}
+	return raw
+}
+
+func (u *webUI) redirectLogin(w http.ResponseWriter, r *http.Request) {
+	next := r.URL.RequestURI()
+	target := u.href("/login")
+	if next != "" && next != "/login" && !strings.HasPrefix(next, "/login?") {
+		target += "?next=" + url.QueryEscape(next)
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 func (u *webUI) loginGet(w http.ResponseWriter, r *http.Request) {
@@ -294,7 +315,7 @@ func (u *webUI) loginGet(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, u.href("/projects"), http.StatusSeeOther)
 		return
 	}
-	u.render(w, r, "login", webPage{Title: "Anmelden"})
+	u.render(w, r, "login", webPage{Title: "Anmelden", NextPath: safeNextPath(r.URL.Query().Get("next"))})
 }
 
 func (u *webUI) loginPost(w http.ResponseWriter, r *http.Request) {
@@ -302,51 +323,72 @@ func (u *webUI) loginPost(w http.ResponseWriter, r *http.Request) {
 		u.render(w, r, "login", webPage{Error: "Ungültige Anfrage."})
 		return
 	}
+	next := safeNextPath(r.FormValue("next"))
 	email := strings.TrimSpace(r.FormValue("email"))
 	password := r.FormValue("password")
 	if email == "" || password == "" {
-		u.render(w, r, "login", webPage{Email: email, Error: "E-Mail und Passwort sind erforderlich."})
+		u.render(w, r, "login", webPage{Email: email, NextPath: next, Error: "E-Mail und Passwort sind erforderlich."})
 		return
 	}
 
 	user, passwordHash, err := u.store.FindUserByEmail(r.Context(), email)
 	if err != nil || !auth.CheckPassword(passwordHash, password) {
-		u.render(w, r, "login", webPage{Email: email, Error: "E-Mail oder Passwort ist falsch."})
+		u.render(w, r, "login", webPage{Email: email, NextPath: next, Error: "E-Mail oder Passwort ist falsch."})
 		return
 	}
 
 	token, err := u.auth.CreateToken(user.ID, user.Email, user.DisplayName)
 	if err != nil {
-		u.render(w, r, "login", webPage{Email: email, Error: "Anmeldung fehlgeschlagen."})
+		u.render(w, r, "login", webPage{Email: email, NextPath: next, Error: "Anmeldung fehlgeschlagen."})
 		return
 	}
 	u.auth.SetSessionCookie(w, r, token.AccessToken, token.ExpiresAt, u.cookiePath())
-	http.Redirect(w, r, u.href("/projects"), http.StatusSeeOther)
+	if next == "" {
+		next = "/projects"
+	}
+	http.Redirect(w, r, u.href(next), http.StatusSeeOther)
 }
 
 func (u *webUI) logout(w http.ResponseWriter, r *http.Request) {
 	auth.ClearSessionCookie(w, u.cookiePath())
-	http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+	http.Redirect(w, r, u.href("/"), http.StatusSeeOther)
 }
 
 func (u *webUI) home(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
-		return
+	user, loggedIn := auth.UserFromContext(r.Context())
+	page := webPage{}
+	if loggedIn {
+		page.DisplayName = user.DisplayName
 	}
-	u.render(w, r, "home", webPage{DisplayName: user.DisplayName})
+	if u.store != nil && !loggedIn {
+		projects, err := u.store.ListProjects(r.Context(), 0)
+		if err != nil {
+			page.Error = "Öffentliche Projekte konnten nicht geladen werden."
+		} else {
+			page.Projects = projects
+		}
+	}
+	u.render(w, r, "home", page)
 }
 
 func (u *webUI) projects(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+	user, loggedIn := auth.UserFromContext(r.Context())
+	page := webPage{}
+	if loggedIn {
+		page.DisplayName = user.DisplayName
+	}
+	if u.store == nil {
+		u.render(w, r, "projects", page)
 		return
 	}
-	projects, err := u.store.ListProjects(r.Context(), user.UserID)
+	userID := int64(0)
+	if loggedIn {
+		userID = user.UserID
+	}
+	projects, err := u.store.ListProjects(r.Context(), userID)
 	if err != nil {
-		u.render(w, r, "projects", webPage{DisplayName: user.DisplayName, Error: "Projekte konnten nicht geladen werden."})
+		page.Error = "Projekte konnten nicht geladen werden."
+		u.render(w, r, "projects", page)
 		return
 	}
 	notice := ""
@@ -356,11 +398,9 @@ func (u *webUI) projects(w http.ResponseWriter, r *http.Request) {
 	case "deleted":
 		notice = "Projekt gelöscht."
 	}
-	u.render(w, r, "projects", webPage{
-		DisplayName: user.DisplayName,
-		Projects:    projects,
-		Notice:      notice,
-	})
+	page.Projects = projects
+	page.Notice = notice
+	u.render(w, r, "projects", page)
 }
 
 func (u *webUI) projectHome(w http.ResponseWriter, r *http.Request) {
@@ -395,9 +435,10 @@ func (u *webUI) projectHome(w http.ResponseWriter, r *http.Request) {
 	rows := flattenTargets(objects, progressByTarget)
 	addUnder, _ := strconv.ParseInt(r.URL.Query().Get("addUnder"), 10, 64)
 	page := webPage{
-		DisplayName: user.DisplayName,
+		DisplayName: displayName(user),
 		CanEdit:     roleCanEdit(role),
 		CanOwn:      roleCanOwn(role),
+		IsMember:    project.IsMember,
 		Project:     project,
 		Summary:     summary,
 		Targets:     rows,
@@ -598,7 +639,7 @@ func (u *webUI) measureStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *webUI) members(w http.ResponseWriter, r *http.Request) {
-	user, project, role, ok := u.projectAccess(w, r, "viewer")
+	user, project, role, ok := u.projectMemberAccess(w, r, "viewer")
 	if !ok {
 		return
 	}
@@ -1120,10 +1161,30 @@ func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *a
 	})
 }
 
+func displayName(user *auth.Claims) string {
+	if user == nil {
+		return ""
+	}
+	return user.DisplayName
+}
+
 func (u *webUI) projectAccess(w http.ResponseWriter, r *http.Request, minRole string) (*auth.Claims, domain.Project, string, bool) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+	return u.loadProjectAccess(w, r, minRole, false)
+}
+
+func (u *webUI) projectMemberAccess(w http.ResponseWriter, r *http.Request, minRole string) (*auth.Claims, domain.Project, string, bool) {
+	return u.loadProjectAccess(w, r, minRole, true)
+}
+
+func (u *webUI) loadProjectAccess(w http.ResponseWriter, r *http.Request, minRole string, membersOnly bool) (*auth.Claims, domain.Project, string, bool) {
+	user, loggedIn := auth.UserFromContext(r.Context())
+	needsLogin := membersOnly || domain.RoleRank(minRole) > domain.RoleRank(domain.RoleViewer)
+	if needsLogin && !loggedIn {
+		u.redirectLogin(w, r)
+		return nil, domain.Project{}, "", false
+	}
+	if u.store == nil {
+		http.NotFound(w, r)
 		return nil, domain.Project{}, "", false
 	}
 	projectID, err := strconv.ParseInt(chi.URLParam(r, "projectID"), 10, 64)
@@ -1131,15 +1192,17 @@ func (u *webUI) projectAccess(w http.ResponseWriter, r *http.Request, minRole st
 		http.NotFound(w, r)
 		return nil, domain.Project{}, "", false
 	}
-	role, err := u.store.RequireProjectRole(r.Context(), projectID, user, minRole)
+	project, role, err := u.store.LoadAccessibleProject(r.Context(), projectID, user, minRole, membersOnly)
 	if err != nil {
+		if errors.Is(err, repository.ErrForbidden) && !loggedIn {
+			u.redirectLogin(w, r)
+			return nil, domain.Project{}, "", false
+		}
 		u.writeAccessError(w, err)
 		return nil, domain.Project{}, "", false
 	}
-	project, err := u.store.GetProject(r.Context(), projectID)
-	if err != nil {
-		u.writeAccessError(w, err)
-		return nil, domain.Project{}, "", false
+	if user == nil {
+		user = &auth.Claims{}
 	}
 	return user, project, role, true
 }
@@ -1156,11 +1219,17 @@ func (u *webUI) writeAccessError(w http.ResponseWriter, err error) {
 }
 
 func (u *webUI) render(w http.ResponseWriter, r *http.Request, name string, data webPage) {
-	if r != nil && u.store != nil {
+	if r != nil {
 		if user, ok := auth.UserFromContext(r.Context()); ok {
-			admin, err := u.store.IsAdmin(r.Context(), user.UserID)
-			if err == nil {
-				data.IsAdmin = admin
+			data.LoggedIn = true
+			if data.DisplayName == "" {
+				data.DisplayName = user.DisplayName
+			}
+			if u.store != nil {
+				admin, err := u.store.IsAdmin(r.Context(), user.UserID)
+				if err == nil {
+					data.IsAdmin = admin
+				}
 			}
 		}
 	}

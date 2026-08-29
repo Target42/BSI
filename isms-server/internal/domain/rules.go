@@ -16,6 +16,13 @@ const (
 	NeedNormal   = "Normal (Basis + Standard)"
 	NeedElevated = "Erhöht (Basis + Standard + Erhöht)"
 	NeedBasis    = "Basis-Anforderungen"
+
+	VisibilityPublic  = "public"
+	VisibilityPrivate = "private"
+
+	RoleOwner  = "owner"
+	RoleEditor = "editor"
+	RoleViewer = "viewer"
 )
 
 // RequirementLevelApplies mirrors ProtectionNeed logic from the Qt client.
@@ -229,4 +236,46 @@ func ResolveInheritedProtectionNeeds(items []TargetObject) {
 		}
 		ApplyTargetObjectProtectionNeed(&items[i], &parent)
 	}
+}
+
+func NormalizeVisibility(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), VisibilityPublic) {
+		return VisibilityPublic
+	}
+	return VisibilityPrivate
+}
+
+func VisibilityLabel(value string) string {
+	if NormalizeVisibility(value) == VisibilityPublic {
+		return "Öffentlich"
+	}
+	return "Privat"
+}
+
+func RoleRank(role string) int {
+	switch role {
+	case RoleOwner:
+		return 3
+	case RoleEditor:
+		return 2
+	case RoleViewer:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// ResolveProjectRole decides whether a caller may act with minRole.
+// memberRole is empty when the caller is not in project_members.
+func ResolveProjectRole(memberRole, visibility, minRole string) (role string, ok bool) {
+	if memberRole != "" && RoleRank(memberRole) >= RoleRank(minRole) {
+		return memberRole, true
+	}
+	if RoleRank(minRole) <= RoleRank(RoleViewer) && NormalizeVisibility(visibility) == VisibilityPublic {
+		if memberRole != "" {
+			return memberRole, true
+		}
+		return RoleViewer, true
+	}
+	return memberRole, false
 }

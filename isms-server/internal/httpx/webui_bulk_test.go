@@ -142,7 +142,7 @@ func TestBulkPostsRedirectToLogin(t *testing.T) {
 		if rec.Code != http.StatusSeeOther {
 			t.Fatalf("%s status %d", path, rec.Code)
 		}
-		if loc := rec.Header().Get("Location"); loc != "/login" {
+		if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/login") {
 			t.Fatalf("%s Location %q", path, loc)
 		}
 	}
