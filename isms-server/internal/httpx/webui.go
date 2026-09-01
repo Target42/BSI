@@ -107,6 +107,9 @@ type webPage struct {
 	PrintDate             string
 	NextPath              string
 	CSRFToken             string
+	Tasks                 []webTaskRow
+	TaskOverdueCount      int
+	Mine                  bool
 }
 
 type webWorkBaustein struct {
@@ -165,6 +168,12 @@ type webMeasureRow struct {
 	Overdue bool
 }
 
+type webTaskRow struct {
+	domain.AssignedTask
+	Overdue bool
+	Path    string
+}
+
 func newWebUI(authService *auth.Service, store *repository.Store, reports *service.ReportService, publicBase string, limiter *loginLimiter) *webUI {
 	u := &webUI{
 		auth:    authService,
@@ -190,15 +199,16 @@ func newWebUI(authService *auth.Service, store *repository.Store, reports *servi
 	u.favicon = favicon
 
 	tmpl, err := template.New("webui").Funcs(template.FuncMap{
-		"href":            u.href,
-		"roleLabel":       roleLabel,
-		"visibilityLabel": domain.VisibilityLabel,
-		"formatDate":      formatWebDate,
-		"formatDue":       formatDueDate,
-		"dueValue":        dueValue,
-		"statusClass":     statusClass,
-		"padLeft":         padLeft,
-		"reqHTML":         reqHTML,
+		"href":              u.href,
+		"roleLabel":         roleLabel,
+		"visibilityLabel":   domain.VisibilityLabel,
+		"formatDate":        formatWebDate,
+		"formatDue":         formatDueDate,
+		"dueValue":          dueValue,
+		"statusClass":       statusClass,
+		"padLeft":           padLeft,
+		"reqHTML":           reqHTML,
+		"responsibleLegacy": responsibleLegacy,
 	}).ParseFS(webUIAssets, "webuiassets/templates/*.html")
 	if err != nil {
 		panic("web ui templates: " + err.Error())
@@ -335,7 +345,7 @@ func (u *webUI) redirectLogin(w http.ResponseWriter, r *http.Request) {
 
 func (u *webUI) loginGet(w http.ResponseWriter, r *http.Request) {
 	if _, err := u.auth.ClaimsFromCookie(r); err == nil {
-		http.Redirect(w, r, u.href("/projects"), http.StatusSeeOther)
+		http.Redirect(w, r, u.href("/"), http.StatusSeeOther)
 		return
 	} else if errors.Is(err, auth.ErrSessionRevoked) {
 		auth.ClearSessionCookie(w, u.cookiePath())
@@ -373,7 +383,7 @@ func (u *webUI) loginPost(w http.ResponseWriter, r *http.Request) {
 	}
 	u.auth.SetSessionCookie(w, r, token.AccessToken, token.ExpiresAt, u.cookiePath())
 	if next == "" {
-		next = "/projects"
+		next = "/"
 	}
 	http.Redirect(w, r, u.href(next), http.StatusSeeOther)
 }
@@ -388,8 +398,20 @@ func (u *webUI) home(w http.ResponseWriter, r *http.Request) {
 	page := webPage{}
 	if loggedIn {
 		page.DisplayName = user.DisplayName
-	}
-	if u.store != nil && !loggedIn {
+		if u.store != nil {
+			items, err := u.store.ListAssignedTasks(r.Context(), user.UserID)
+			if err != nil {
+				page.Error = "Aufgaben konnten nicht geladen werden."
+			} else {
+				page.Tasks = toTaskRows(items)
+				for _, task := range page.Tasks {
+					if task.Overdue {
+						page.TaskOverdueCount++
+					}
+				}
+			}
+		}
+	} else if u.store != nil {
 		projects, err := u.store.ListProjects(r.Context(), 0)
 		if err != nil {
 			page.Error = "Öffentliche Projekte konnten nicht geladen werden."
@@ -593,7 +615,11 @@ func (u *webUI) renderCockpit(w http.ResponseWriter, r *http.Request, user *auth
 		status = "Alle"
 	}
 	hideDone := r.URL.Query().Get("hideDone") == "1"
+	mine := r.URL.Query().Get("mine") == "1"
 	filtered := filterMeasures(items, query, status, hideDone)
+	if mine {
+		filtered = filterMeasuresMine(filtered, user.UserID, user.DisplayName, user.Email)
+	}
 	notice := ""
 	if errMsg == "" && r.URL.Query().Get("saved") == "1" {
 		notice = "Maßnahme gespeichert."
@@ -608,6 +634,7 @@ func (u *webUI) renderCockpit(w http.ResponseWriter, r *http.Request, user *auth
 		StatusFilter:    status,
 		StatusFilters:   webMeasureStatusFilters,
 		HideDone:        hideDone,
+		Mine:            mine,
 		Measures:        filtered,
 		MeasureStatuses: webMeasureStatuses,
 	})
@@ -647,13 +674,14 @@ func (u *webUI) measureStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	version, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("version")))
 	_, err = u.store.UpdateMeasure(r.Context(), domain.Measure{
-		ID:          measure.ID,
-		Title:       measure.Title,
-		Description: measure.Description,
-		Responsible: measure.Responsible,
-		DueDate:     measure.DueDate,
-		Status:      status,
-		Version:     version,
+		ID:                measure.ID,
+		Title:             measure.Title,
+		Description:       measure.Description,
+		Responsible:       measure.Responsible,
+		ResponsibleUserID: measure.ResponsibleUserID,
+		DueDate:           measure.DueDate,
+		Status:            status,
+		Version:           version,
 	})
 	if err != nil {
 		if errors.Is(err, repository.ErrVersionConflict) {
@@ -878,15 +906,21 @@ func (u *webUI) measureCreate(w http.ResponseWriter, r *http.Request) {
 		u.renderAssessment(w, r, user, project, true, ctx, "Ungültiger Maßnahmenstatus.", "")
 		return
 	}
+	responsibleUserID, responsible, err := u.formResponsible(r, project.ID, 0, "")
+	if err != nil {
+		u.renderAssessment(w, r, user, project, true, ctx, "Ungültige Zuweisung.", "")
+		return
+	}
 	if _, err := u.store.CreateMeasure(r.Context(), domain.Measure{
-		ProjectID:      project.ID,
-		TargetObjectID: ctx.Target.ID,
-		RequirementID:  ctx.Requirement.ID,
-		Title:          title,
-		Description:    strings.TrimSpace(r.FormValue("description")),
-		Responsible:    strings.TrimSpace(r.FormValue("responsible")),
-		DueDate:        parseDueDate(r.FormValue("dueDate")),
-		Status:         status,
+		ProjectID:         project.ID,
+		TargetObjectID:    ctx.Target.ID,
+		RequirementID:     ctx.Requirement.ID,
+		Title:             title,
+		Description:       strings.TrimSpace(r.FormValue("description")),
+		Responsible:       responsible,
+		ResponsibleUserID: responsibleUserID,
+		DueDate:           parseDueDate(r.FormValue("dueDate")),
+		Status:            status,
 	}); err != nil {
 		u.renderAssessment(w, r, user, project, true, ctx, "Maßnahme konnte nicht angelegt werden.", "")
 		return
@@ -933,15 +967,21 @@ func (u *webUI) measureEditSave(w http.ResponseWriter, r *http.Request) {
 		u.renderMeasure(w, r, user, project, true, measure, "Ungültiger Maßnahmenstatus.", "")
 		return
 	}
+	responsibleUserID, responsible, err := u.formResponsible(r, project.ID, measure.ResponsibleUserID, measure.Responsible)
+	if err != nil {
+		u.renderMeasure(w, r, user, project, true, measure, "Ungültige Zuweisung.", "")
+		return
+	}
 	version, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("version")))
 	updated, err := u.store.UpdateMeasure(r.Context(), domain.Measure{
-		ID:          measure.ID,
-		Title:       title,
-		Description: strings.TrimSpace(r.FormValue("description")),
-		Responsible: strings.TrimSpace(r.FormValue("responsible")),
-		DueDate:     parseDueDate(r.FormValue("dueDate")),
-		Status:      status,
-		Version:     version,
+		ID:                measure.ID,
+		Title:             title,
+		Description:       strings.TrimSpace(r.FormValue("description")),
+		Responsible:       responsible,
+		ResponsibleUserID: responsibleUserID,
+		DueDate:           parseDueDate(r.FormValue("dueDate")),
+		Status:            status,
+		Version:           version,
 	})
 	if err != nil {
 		if errors.Is(err, repository.ErrVersionConflict) {
@@ -994,11 +1034,17 @@ func (u *webUI) loadProjectMeasure(w http.ResponseWriter, r *http.Request, proje
 }
 
 func (u *webUI) renderMeasure(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, canEdit bool, measure domain.Measure, errMsg, notice string) {
+	members, err := u.editMembers(r, project.ID, canEdit)
+	if err != nil {
+		http.Error(w, "Mitglieder konnten nicht geladen werden.", http.StatusInternalServerError)
+		return
+	}
 	u.render(w, r, "measure", webPage{
 		DisplayName:     user.DisplayName,
 		CanEdit:         canEdit,
 		Project:         project,
 		Measure:         measure,
+		Members:         members,
 		MeasureStatuses: webMeasureStatuses,
 		Error:           errMsg,
 		Notice:          notice,
@@ -1060,16 +1106,22 @@ func (u *webUI) assessmentSave(w http.ResponseWriter, r *http.Request) {
 		u.renderAssessment(w, r, user, project, true, ctx, "Ungültiger Bewertungsstatus.", "")
 		return
 	}
+	responsibleUserID, responsible, err := u.formResponsible(r, project.ID, ctx.Assessment.ResponsibleUserID, ctx.Assessment.Responsible)
+	if err != nil {
+		u.renderAssessment(w, r, user, project, true, ctx, "Ungültige Zuweisung.", "")
+		return
+	}
 	version, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("version")))
 	saved, err := u.store.SaveAssessment(r.Context(), domain.RequirementAssessment{
-		ProjectID:      project.ID,
-		TargetObjectID: ctx.Target.ID,
-		RequirementID:  ctx.Requirement.ID,
-		Status:         status,
-		Note:           strings.TrimSpace(r.FormValue("note")),
-		Responsible:    strings.TrimSpace(r.FormValue("responsible")),
-		DueDate:        parseDueDate(r.FormValue("dueDate")),
-		Version:        version,
+		ProjectID:         project.ID,
+		TargetObjectID:    ctx.Target.ID,
+		RequirementID:     ctx.Requirement.ID,
+		Status:            status,
+		Note:              strings.TrimSpace(r.FormValue("note")),
+		Responsible:       responsible,
+		ResponsibleUserID: responsibleUserID,
+		DueDate:           parseDueDate(r.FormValue("dueDate")),
+		Version:           version,
 	})
 	if err != nil {
 		if errors.Is(err, repository.ErrVersionConflict) {
@@ -1171,6 +1223,11 @@ func (u *webUI) loadAssessmentPage(w http.ResponseWriter, r *http.Request, proje
 }
 
 func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, canEdit bool, ctx webAssessmentContext, errMsg, notice string) {
+	members, err := u.editMembers(r, project.ID, canEdit && !ctx.Inherited)
+	if err != nil {
+		http.Error(w, "Mitglieder konnten nicht geladen werden.", http.StatusInternalServerError)
+		return
+	}
 	u.render(w, r, "assessment", webPage{
 		DisplayName:        user.DisplayName,
 		CanEdit:            canEdit,
@@ -1183,6 +1240,7 @@ func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *a
 		Baustein:           ctx.Baustein,
 		Target:             ctx.Target,
 		RelatedMeasures:    ctx.Measures,
+		Members:            members,
 		MeasureStatuses:    webMeasureStatuses,
 		Inherited:          ctx.Inherited,
 		InheritedFrom:      ctx.InheritedFrom,
@@ -1254,6 +1312,7 @@ func (u *webUI) render(w http.ResponseWriter, r *http.Request, name string, data
 		}
 		if user, ok := auth.UserFromContext(r.Context()); ok {
 			data.LoggedIn = true
+			data.CurrentUserID = user.UserID
 			if data.DisplayName == "" {
 				data.DisplayName = user.DisplayName
 			}
@@ -1367,6 +1426,82 @@ func parseDueDate(raw string) *string {
 		return nil
 	}
 	return &raw
+}
+
+var errInvalidResponsible = errors.New("invalid responsible")
+
+func (u *webUI) formResponsible(r *http.Request, projectID, currentUserID int64, currentText string) (int64, string, error) {
+	raw := strings.TrimSpace(r.FormValue("responsibleUserID"))
+	switch raw {
+	case "":
+		return 0, "", nil
+	case "legacy":
+		return u.store.ResolveProjectResponsible(r.Context(), projectID, currentUserID, currentText)
+	default:
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			return 0, "", errInvalidResponsible
+		}
+		resolvedID, label, err := u.store.ResolveProjectResponsible(r.Context(), projectID, id, "")
+		if err != nil {
+			return 0, "", err
+		}
+		if resolvedID == 0 {
+			return 0, "", errInvalidResponsible
+		}
+		return resolvedID, label, nil
+	}
+}
+
+func (u *webUI) editMembers(r *http.Request, projectID int64, canEdit bool) ([]repository.ProjectMember, error) {
+	if !canEdit || u.store == nil {
+		return nil, nil
+	}
+	return u.store.ListProjectMembers(r.Context(), projectID)
+}
+
+func filterMeasuresMine(items []webMeasureRow, userID int64, name, email string) []webMeasureRow {
+	out := make([]webMeasureRow, 0, len(items))
+	for _, item := range items {
+		if domain.AssignedTo(item.ResponsibleUserID, item.Responsible, userID, name, email) {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func toTaskRows(items []domain.AssignedTask) []webTaskRow {
+	out := make([]webTaskRow, 0, len(items))
+	for _, item := range items {
+		out = append(out, webTaskRow{
+			AssignedTask: item,
+			Overdue:      taskOverdue(item.Status, item.DueDate),
+			Path:         taskPath(item),
+		})
+	}
+	return out
+}
+
+func taskPath(item domain.AssignedTask) string {
+	if item.MeasureID > 0 {
+		return fmt.Sprintf("/projects/%d/measures/%d", item.ProjectID, item.MeasureID)
+	}
+	return fmt.Sprintf("/projects/%d/targets/%d/requirements/%d", item.ProjectID, item.TargetObjectID, item.RequirementID)
+}
+
+func taskOverdue(status string, due *string) bool {
+	if due == nil || *due == "" {
+		return false
+	}
+	switch status {
+	case "Erledigt", "Erfüllt", "Entfällt":
+		return false
+	}
+	return *due < time.Now().Format("2006-01-02")
+}
+
+func responsibleLegacy(userID int64, text string, members []repository.ProjectMember) string {
+	return domain.ResponsibleLegacy(userID, text, repository.NamedPeople(members))
 }
 
 func roleCanEdit(role string) bool {

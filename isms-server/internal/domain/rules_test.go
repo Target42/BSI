@@ -188,3 +188,54 @@ func TestNormalizeVisibility(t *testing.T) {
 		t.Fatalf("label %q", got)
 	}
 }
+
+func TestResolveResponsible(t *testing.T) {
+	people := []NamedPerson{
+		{ID: 2, DisplayName: "Anna ISB", Email: "anna@example.com"},
+		{ID: 7, DisplayName: "Bernd Netz", Email: "bernd@example.com"},
+	}
+	id, label := ResolveResponsible(people, 7, "ignored")
+	if id != 7 || label != "Bernd Netz" {
+		t.Fatalf("by id: %d %q", id, label)
+	}
+	id, label = ResolveResponsible(people, 0, "anna@example.com")
+	if id != 2 || label != "Anna ISB" {
+		t.Fatalf("by email: %d %q", id, label)
+	}
+	id, label = ResolveResponsible(people, 0, "Externer")
+	if id != 0 || label != "Externer" {
+		t.Fatalf("legacy text: %d %q", id, label)
+	}
+	id, label = ResolveResponsible(people, 99, "")
+	if id != 0 || label != "" {
+		t.Fatalf("unknown id: %d %q", id, label)
+	}
+}
+
+func TestAssignedTo(t *testing.T) {
+	if !AssignedTo(4, "Anna", 4, "Anna ISB", "anna@example.com") {
+		t.Fatal("user id should match")
+	}
+	if AssignedTo(4, "Anna", 9, "Anna ISB", "anna@example.com") {
+		t.Fatal("other user id must not match even if text looks similar")
+	}
+	if !AssignedTo(0, "anna@example.com", 4, "Anna ISB", "anna@example.com") {
+		t.Fatal("legacy email should match")
+	}
+	if AssignedTo(0, "IT", 4, "Anna ISB", "anna@example.com") {
+		t.Fatal("unrelated free text must not match")
+	}
+}
+
+func TestResponsibleLegacy(t *testing.T) {
+	people := []NamedPerson{{ID: 2, DisplayName: "Anna ISB", Email: "anna@example.com"}}
+	if got := ResponsibleLegacy(2, "Anna ISB", people); got != "" {
+		t.Fatalf("member assignment should not be legacy: %q", got)
+	}
+	if got := ResponsibleLegacy(0, "Externer", people); got != "Externer" {
+		t.Fatalf("free text: %q", got)
+	}
+	if got := ResponsibleLegacy(9, "Anna ISB", people); got != "Anna ISB" {
+		t.Fatalf("removed member: %q", got)
+	}
+}

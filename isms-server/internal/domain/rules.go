@@ -279,3 +279,51 @@ func ResolveProjectRole(memberRole, visibility, minRole string) (role string, ok
 	}
 	return memberRole, false
 }
+
+// ResolveResponsible maps a member id or free-text name/email onto a project member.
+// Unknown text is kept as-is so older Delphi entries remain visible.
+func ResolveResponsible(people []NamedPerson, userID int64, text string) (int64, string) {
+	if userID > 0 {
+		for _, person := range people {
+			if person.ID == userID {
+				return person.ID, person.DisplayName
+			}
+		}
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, ""
+	}
+	for _, person := range people {
+		if strings.EqualFold(person.DisplayName, text) || strings.EqualFold(person.Email, text) {
+			return person.ID, person.DisplayName
+		}
+	}
+	return 0, text
+}
+
+func AssignedTo(userID int64, text string, meID int64, myName, myEmail string) bool {
+	if userID > 0 {
+		return userID == meID
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	return strings.EqualFold(text, strings.TrimSpace(myName)) || strings.EqualFold(text, strings.TrimSpace(myEmail))
+}
+
+func ResponsibleLegacy(userID int64, text string, people []NamedPerson) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if userID > 0 {
+		for _, person := range people {
+			if person.ID == userID {
+				return ""
+			}
+		}
+	}
+	return text
+}

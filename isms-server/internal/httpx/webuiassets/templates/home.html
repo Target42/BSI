@@ -4,26 +4,82 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ISMS</title>
+  <title>{{if .LoggedIn}}Meine Aufgaben · {{end}}ISMS</title>
   <link rel="stylesheet" href="{{href "/ui/app.css"}}">
   <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
 </head>
 <body>
   <div class="app">
     {{template "header" .}}
+    {{if .LoggedIn}}
+    <main class="main">
+      <h1>Meine Aufgaben</h1>
+      <p class="lede">Offene Bewertungen und Maßnahmen, die Ihnen zugewiesen sind — über alle Projekte.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value">{{len .Tasks}}</div>
+          <div class="stat-label">Offen</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{{.TaskOverdueCount}}</div>
+          <div class="stat-label">Überfällig</div>
+        </div>
+      </div>
+
+      {{if not .Tasks}}
+        <p class="muted">Keine offenen Aufgaben. Zuweisungen stehen an der Bewertung und an der Maßnahme, als Projektmitglied.</p>
+      {{else}}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Aufgabe</th>
+                <th>Art</th>
+                <th>Projekt</th>
+                <th>Zielobjekt</th>
+                <th>Status</th>
+                <th>Frist</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Tasks}}
+              <tr>
+                <td>
+                  <a href="{{href .Path}}">{{.Title}}</a>
+                  {{if gt .MeasureID 0}}{{if .RequirementLabel}}<div class="muted">{{.RequirementLabel}}</div>{{end}}{{end}}
+                </td>
+                <td>{{.Kind}}</td>
+                <td><a href="{{href (printf "/projects/%d" .ProjectID)}}">{{.ProjectName}}</a></td>
+                <td>{{.TargetName}}</td>
+                <td>
+                  <span class="{{statusClass .Status .Overdue}}">
+                    {{.Status}}{{if .Overdue}} · überfällig{{end}}
+                  </span>
+                </td>
+                <td>{{formatDue .DueDate}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+      <p class="row-actions">
+        <a class="btn" href="{{href "/projects"}}">Zu den Projekten</a>
+        <a class="btn btn-secondary" href="{{href "/catalog"}}">Katalog</a>
+      </p>
+    </main>
+    {{else}}
     <main class="home">
       <div class="home-logo">{{template "brand-mark"}}</div>
       <h1 class="home-title">ISMS</h1>
       <p class="lede">IT-Grundschutz im Browser — Verbund, Bewertung und Maßnahmen ohne Desktop-Client.</p>
       <p class="row-actions">
         <a class="btn" href="{{href "/projects"}}">Zu den Projekten</a>
-        {{if .LoggedIn}}
-        <a class="btn btn-secondary" href="{{href "/catalog"}}">Katalog</a>
-        {{else}}
         <a class="btn btn-secondary" href="{{href "/login"}}">Anmelden</a>
-        {{end}}
       </p>
-      {{if and (not .LoggedIn) .Projects}}
+      {{if .Projects}}
       <h2>Öffentliche Projekte</h2>
       <div class="table-wrap">
         <table>
@@ -50,6 +106,7 @@
       </div>
       {{end}}
     </main>
+    {{end}}
   </div>
 </body>
 </html>

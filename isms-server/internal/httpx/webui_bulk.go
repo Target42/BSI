@@ -220,14 +220,15 @@ func (u *webUI) assessmentsBulk(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		current := assessments[id]
 		if _, err := u.store.SaveAssessment(r.Context(), domain.RequirementAssessment{
-			ProjectID:      project.ID,
-			TargetObjectID: target.ID,
-			RequirementID:  id,
-			Status:         status,
-			Note:           current.Note,
-			Responsible:    current.Responsible,
-			DueDate:        current.DueDate,
-			Version:        0,
+			ProjectID:         project.ID,
+			TargetObjectID:    target.ID,
+			RequirementID:     id,
+			Status:            status,
+			Note:              current.Note,
+			Responsible:       current.Responsible,
+			ResponsibleUserID: current.ResponsibleUserID,
+			DueDate:           current.DueDate,
+			Version:           0,
 		}); err != nil {
 			u.renderWorkplace(w, r, user, project, true, target, "Bewertungen konnten nicht gespeichert werden.")
 			return

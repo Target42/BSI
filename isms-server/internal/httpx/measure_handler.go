@@ -20,20 +20,22 @@ func NewMeasureHandler(store *repository.Store) *MeasureHandler {
 }
 
 type createMeasureRequest struct {
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	Responsible string  `json:"responsible"`
-	DueDate     *string `json:"dueDate"`
-	Status      string  `json:"status"`
+	Title             string  `json:"title"`
+	Description       string  `json:"description"`
+	Responsible       string  `json:"responsible"`
+	ResponsibleUserID int64   `json:"responsibleUserId"`
+	DueDate           *string `json:"dueDate"`
+	Status            string  `json:"status"`
 }
 
 type updateMeasureRequest struct {
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	Responsible string  `json:"responsible"`
-	DueDate     *string `json:"dueDate"`
-	Status      string  `json:"status"`
-	Version     int     `json:"version"`
+	Title             string  `json:"title"`
+	Description       string  `json:"description"`
+	Responsible       string  `json:"responsible"`
+	ResponsibleUserID int64   `json:"responsibleUserId"`
+	DueDate           *string `json:"dueDate"`
+	Status            string  `json:"status"`
+	Version           int     `json:"version"`
 }
 
 func (h *MeasureHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -125,15 +127,22 @@ func (h *MeasureHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	responsibleUserID, responsible, err := h.store.ResolveProjectResponsible(r.Context(), projectID, req.ResponsibleUserID, req.Responsible)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "create measure failed")
+		return
+	}
+
 	item, err := h.store.CreateMeasure(r.Context(), domain.Measure{
-		ProjectID:      projectID,
-		TargetObjectID: targetObjectID,
-		RequirementID:  requirementID,
-		Title:          req.Title,
-		Description:    req.Description,
-		Responsible:    req.Responsible,
-		DueDate:        req.DueDate,
-		Status:         req.Status,
+		ProjectID:         projectID,
+		TargetObjectID:    targetObjectID,
+		RequirementID:     requirementID,
+		Title:             req.Title,
+		Description:       req.Description,
+		Responsible:       responsible,
+		ResponsibleUserID: responsibleUserID,
+		DueDate:           req.DueDate,
+		Status:            req.Status,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "create measure failed")
@@ -179,14 +188,21 @@ func (h *MeasureHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	responsibleUserID, responsible, err := h.store.ResolveProjectResponsible(r.Context(), projectID, req.ResponsibleUserID, req.Responsible)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "update measure failed")
+		return
+	}
+
 	item, err := h.store.UpdateMeasure(r.Context(), domain.Measure{
-		ID:          measureID,
-		Title:       req.Title,
-		Description: req.Description,
-		Responsible: req.Responsible,
-		DueDate:     req.DueDate,
-		Status:      req.Status,
-		Version:     req.Version,
+		ID:                measureID,
+		Title:             req.Title,
+		Description:       req.Description,
+		Responsible:       responsible,
+		ResponsibleUserID: responsibleUserID,
+		DueDate:           req.DueDate,
+		Status:            req.Status,
+		Version:           req.Version,
 	})
 	if err != nil {
 		if errors.Is(err, repository.ErrVersionConflict) {

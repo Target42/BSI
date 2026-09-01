@@ -38,6 +38,12 @@
           <input type="checkbox" name="hideDone" value="1" {{if .HideDone}}checked{{end}}>
           Erledigte ausblenden
         </label>
+        {{if .LoggedIn}}
+        <label class="check">
+          <input type="checkbox" name="mine" value="1" {{if .Mine}}checked{{end}}>
+          Nur meine
+        </label>
+        {{end}}
         <button class="btn" type="submit">Filtern</button>
       </form>
 

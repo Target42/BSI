@@ -10,6 +10,7 @@ import (
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/domain"
+	"github.com/Target42/BSI/isms-server/internal/repository"
 )
 
 func TestEmbeddedWebUIServesPagesAndLeavesAPI(t *testing.T) {
@@ -108,6 +109,17 @@ func TestHomeAndProjectPages(t *testing.T) {
 			t.Fatalf("home missing %q", want)
 		}
 	}
+	if strings.Contains(home, "Meine Aufgaben") {
+		t.Fatal("anonymous home must not show the task inbox")
+	}
+	buf.Reset()
+	if err := ui.tmpl.ExecuteTemplate(&buf, "home", webPage{LoggedIn: true, DisplayName: "Anna"}); err != nil {
+		t.Fatal(err)
+	}
+	inbox := buf.String()
+	if !strings.Contains(inbox, "Meine Aufgaben") || !strings.Contains(inbox, "Keine offenen Aufgaben") {
+		t.Fatalf("logged-in home should be the inbox: %s", inbox)
+	}
 	buf.Reset()
 	if err := ui.tmpl.ExecuteTemplate(&buf, "projects", webPage{LoggedIn: true}); err != nil {
 		t.Fatal(err)
@@ -142,6 +154,17 @@ func TestHomeAndProjectPages(t *testing.T) {
 	if strings.Contains(head, "Abmelden") {
 		t.Fatalf("anonymous header must not offer logout: %s", head)
 	}
+	if strings.Contains(head, "Aufgaben") {
+		t.Fatalf("anonymous header must not offer tasks: %s", head)
+	}
+	buf.Reset()
+	if err := ui.tmpl.ExecuteTemplate(&buf, "header", webPage{LoggedIn: true, DisplayName: "Anna"}); err != nil {
+		t.Fatal(err)
+	}
+	loggedHead := buf.String()
+	if !strings.Contains(loggedHead, "Aufgaben") || !strings.Contains(loggedHead, "Abmelden") {
+		t.Fatalf("logged-in header: %s", loggedHead)
+	}
 }
 
 func TestFilterMeasures(t *testing.T) {
@@ -163,6 +186,45 @@ func TestFilterMeasures(t *testing.T) {
 	got = filterMeasures(items, "", "Erledigt", false)
 	if len(got) != 1 || got[0].ID != 2 {
 		t.Fatalf("status filter: %+v", got)
+	}
+}
+
+func TestFilterMeasuresMine(t *testing.T) {
+	items := []webMeasureRow{
+		{Measure: domain.Measure{ID: 1, Title: "Patchen", ResponsibleUserID: 4, Responsible: "Anna"}},
+		{Measure: domain.Measure{ID: 2, Title: "Schulung", Responsible: "anna@example.com"}},
+		{Measure: domain.Measure{ID: 3, Title: "Firewall", Responsible: "Netz"}},
+	}
+	got := filterMeasuresMine(items, 4, "Anna ISB", "anna@example.com")
+	if len(got) != 2 || got[0].ID != 1 || got[1].ID != 2 {
+		t.Fatalf("mine: %+v", got)
+	}
+}
+
+func TestAssessmentResponsibleSelect(t *testing.T) {
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
+	var buf bytes.Buffer
+	err := ui.tmpl.ExecuteTemplate(&buf, "assessment", webPage{
+		CanEdit: true,
+		Members: []repository.ProjectMember{
+			{UserID: 4, DisplayName: "Anna ISB", Email: "anna@example.com"},
+		},
+		Assessment:         domain.RequirementAssessment{ResponsibleUserID: 4, Responsible: "Anna ISB", Version: 1},
+		MeasureStatuses:    webMeasureStatuses,
+		AssessmentStatuses: webAssessmentStatuses,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, `name="responsibleUserID"`) {
+		t.Fatal("assessment form must assign a project member")
+	}
+	if !strings.Contains(body, `value="4"`) || !strings.Contains(body, "Anna ISB") {
+		t.Fatalf("member option missing: %s", body)
+	}
+	if strings.Contains(body, `name="responsible"`) {
+		t.Fatal("free-text responsible field should be gone")
 	}
 }
 

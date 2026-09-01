@@ -41,16 +41,17 @@ type TargetObject struct {
 }
 
 type RequirementAssessment struct {
-	ID             int64     `json:"id"`
-	ProjectID      int64     `json:"projectId"`
-	TargetObjectID int64     `json:"targetObjectId"`
-	RequirementID  int64     `json:"requirementId"`
-	Status         string    `json:"status"`
-	Note           string    `json:"note"`
-	Responsible    string    `json:"responsible"`
-	DueDate        *string   `json:"dueDate,omitempty"`
-	Version        int       `json:"version"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID                int64     `json:"id"`
+	ProjectID         int64     `json:"projectId"`
+	TargetObjectID    int64     `json:"targetObjectId"`
+	RequirementID     int64     `json:"requirementId"`
+	Status            string    `json:"status"`
+	Note              string    `json:"note"`
+	Responsible       string    `json:"responsible"`
+	ResponsibleUserID int64     `json:"responsibleUserId,omitempty"`
+	DueDate           *string   `json:"dueDate,omitempty"`
+	Version           int       `json:"version"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 type BausteinApplicability struct {
@@ -62,17 +63,38 @@ type BausteinApplicability struct {
 }
 
 type Measure struct {
-	ID             int64     `json:"id"`
-	ProjectID      int64     `json:"projectId"`
-	TargetObjectID int64     `json:"targetObjectId"`
-	RequirementID  int64     `json:"requirementId"`
-	Title          string    `json:"title"`
-	Description    string    `json:"description"`
-	Responsible    string    `json:"responsible"`
-	DueDate        *string   `json:"dueDate,omitempty"`
-	Status         string    `json:"status"`
-	Version        int       `json:"version"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID                int64     `json:"id"`
+	ProjectID         int64     `json:"projectId"`
+	TargetObjectID    int64     `json:"targetObjectId"`
+	RequirementID     int64     `json:"requirementId"`
+	Title             string    `json:"title"`
+	Description       string    `json:"description"`
+	Responsible       string    `json:"responsible"`
+	ResponsibleUserID int64     `json:"responsibleUserId,omitempty"`
+	DueDate           *string   `json:"dueDate,omitempty"`
+	Status            string    `json:"status"`
+	Version           int       `json:"version"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+}
+
+type NamedPerson struct {
+	ID          int64
+	DisplayName string
+	Email       string
+}
+
+type AssignedTask struct {
+	Kind             string
+	ProjectID        int64
+	ProjectName      string
+	TargetObjectID   int64
+	TargetName       string
+	RequirementID    int64
+	RequirementLabel string
+	MeasureID        int64
+	Title            string
+	Status           string
+	DueDate          *string
 }
 
 type Baustein struct {

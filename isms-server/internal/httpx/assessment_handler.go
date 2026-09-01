@@ -20,11 +20,12 @@ func NewAssessmentHandler(store *repository.Store) *AssessmentHandler {
 }
 
 type saveAssessmentRequest struct {
-	Status      string  `json:"status"`
-	Note        string  `json:"note"`
-	Responsible string  `json:"responsible"`
-	DueDate     *string `json:"dueDate"`
-	Version     int     `json:"version"`
+	Status            string  `json:"status"`
+	Note              string  `json:"note"`
+	Responsible       string  `json:"responsible"`
+	ResponsibleUserID int64   `json:"responsibleUserId"`
+	DueDate           *string `json:"dueDate"`
+	Version           int     `json:"version"`
 }
 
 type saveApplicabilityRequest struct {
@@ -112,15 +113,21 @@ func (h *AssessmentHandler) SaveAssessment(w http.ResponseWriter, r *http.Reques
 	if req.Status == "" {
 		req.Status = "Offen"
 	}
+	responsibleUserID, responsible, err := h.store.ResolveProjectResponsible(r.Context(), projectID, req.ResponsibleUserID, req.Responsible)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "save assessment failed")
+		return
+	}
 	item, err := h.store.SaveAssessment(r.Context(), domain.RequirementAssessment{
-		ProjectID:      projectID,
-		TargetObjectID: targetObjectID,
-		RequirementID:  requirementID,
-		Status:         req.Status,
-		Note:           req.Note,
-		Responsible:    req.Responsible,
-		DueDate:        req.DueDate,
-		Version:        req.Version,
+		ProjectID:         projectID,
+		TargetObjectID:    targetObjectID,
+		RequirementID:     requirementID,
+		Status:            req.Status,
+		Note:              req.Note,
+		Responsible:       responsible,
+		ResponsibleUserID: responsibleUserID,
+		DueDate:           req.DueDate,
+		Version:           req.Version,
 	})
 	if err != nil {
 		if errors.Is(err, repository.ErrVersionConflict) {

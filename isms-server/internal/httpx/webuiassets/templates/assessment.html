@@ -49,8 +49,17 @@
             </select>
           </div>
           <div class="field">
-            <label for="responsible">Verantwortlich</label>
-            <input id="responsible" name="responsible" value="{{.Assessment.Responsible}}">
+            <label for="responsibleUserID">Verantwortlich</label>
+            <select id="responsibleUserID" name="responsibleUserID">
+              <option value="">— nicht zugewiesen —</option>
+              {{range .Members}}
+              <option value="{{.UserID}}" {{if eq .UserID $.Assessment.ResponsibleUserID}}selected{{end}}>{{.DisplayName}}</option>
+              {{end}}
+              {{$legacy := responsibleLegacy .Assessment.ResponsibleUserID .Assessment.Responsible .Members}}
+              {{if $legacy}}
+              <option value="legacy" selected>{{$legacy}}</option>
+              {{end}}
+            </select>
           </div>
           <div class="field">
             <label for="dueDate">Frist</label>
@@ -145,7 +154,12 @@
           </div>
           <div class="field">
             <label for="measureResponsible">Verantwortlich</label>
-            <input id="measureResponsible" name="responsible">
+            <select id="measureResponsible" name="responsibleUserID">
+              <option value="">— nicht zugewiesen —</option>
+              {{range .Members}}
+              <option value="{{.UserID}}">{{.DisplayName}}</option>
+              {{end}}
+            </select>
           </div>
           <div class="field">
             <label for="measureDue">Frist</label>

@@ -8,10 +8,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const measureColumns = `
+		id, project_id, target_object_id, requirement_id, title,
+		COALESCE(description, ''), COALESCE(responsible, ''), responsible_user_id,
+		due_date::text, status, version, updated_at`
+
 func (s *Store) ListMeasures(ctx context.Context, projectID, targetObjectID, requirementID int64) ([]domain.Measure, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, project_id, target_object_id, requirement_id, title,
-		       COALESCE(description, ''), COALESCE(responsible, ''), due_date::text, status, version, updated_at
+		SELECT `+measureColumns+`
 		FROM measures
 		WHERE project_id = $1 AND target_object_id = $2 AND requirement_id = $3
 		ORDER BY due_date IS NULL, due_date, title`,
@@ -25,8 +29,7 @@ func (s *Store) ListMeasures(ctx context.Context, projectID, targetObjectID, req
 
 func (s *Store) ListProjectMeasures(ctx context.Context, projectID int64) ([]domain.Measure, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, project_id, target_object_id, requirement_id, title,
-		       COALESCE(description, ''), COALESCE(responsible, ''), due_date::text, status, version, updated_at
+		SELECT `+measureColumns+`
 		FROM measures
 		WHERE project_id = $1
 		ORDER BY due_date IS NULL, due_date, title`,
@@ -65,37 +68,29 @@ func (s *Store) CreateMeasure(ctx context.Context, measure domain.Measure) (doma
 	if measure.Status == "" {
 		measure.Status = "Offen"
 	}
-	err := s.pool.QueryRow(ctx, `
+	row := s.pool.QueryRow(ctx, `
 		INSERT INTO measures
-		(project_id, target_object_id, requirement_id, title, description, responsible, due_date, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, project_id, target_object_id, requirement_id, title,
-		          COALESCE(description, ''), COALESCE(responsible, ''), due_date::text, status, version, updated_at`,
+		(project_id, target_object_id, requirement_id, title, description, responsible, responsible_user_id, due_date, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING `+measureColumns,
 		measure.ProjectID, measure.TargetObjectID, measure.RequirementID,
-		measure.Title, measure.Description, measure.Responsible, nullableDate(measure.DueDate), measure.Status,
-	).Scan(
-		&measure.ID, &measure.ProjectID, &measure.TargetObjectID, &measure.RequirementID,
-		&measure.Title, &measure.Description, &measure.Responsible, &measure.DueDate,
-		&measure.Status, &measure.Version, &measure.UpdatedAt,
+		measure.Title, measure.Description, measure.Responsible, nullableInt64(measure.ResponsibleUserID),
+		nullableDate(measure.DueDate), measure.Status,
 	)
-	return measure, err
+	return scanMeasure(row)
 }
 
 func (s *Store) UpdateMeasure(ctx context.Context, measure domain.Measure) (domain.Measure, error) {
-	err := s.pool.QueryRow(ctx, `
+	row := s.pool.QueryRow(ctx, `
 		UPDATE measures
-		SET title = $2, description = $3, responsible = $4, due_date = $5, status = $6,
+		SET title = $2, description = $3, responsible = $4, responsible_user_id = $5, due_date = $6, status = $7,
 		    version = version + 1, updated_at = now()
-		WHERE id = $1 AND version = $7
-		RETURNING id, project_id, target_object_id, requirement_id, title,
-		          COALESCE(description, ''), COALESCE(responsible, ''), due_date::text, status, version, updated_at`,
-		measure.ID, measure.Title, measure.Description, measure.Responsible,
+		WHERE id = $1 AND version = $8
+		RETURNING `+measureColumns,
+		measure.ID, measure.Title, measure.Description, measure.Responsible, nullableInt64(measure.ResponsibleUserID),
 		nullableDate(measure.DueDate), measure.Status, measure.Version,
-	).Scan(
-		&measure.ID, &measure.ProjectID, &measure.TargetObjectID, &measure.RequirementID,
-		&measure.Title, &measure.Description, &measure.Responsible, &measure.DueDate,
-		&measure.Status, &measure.Version, &measure.UpdatedAt,
 	)
+	updated, err := scanMeasure(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		current, lookupErr := s.GetMeasure(ctx, measure.ID)
 		if lookupErr != nil {
@@ -103,21 +98,12 @@ func (s *Store) UpdateMeasure(ctx context.Context, measure domain.Measure) (doma
 		}
 		return current, ErrVersionConflict
 	}
-	return measure, err
+	return updated, err
 }
 
 func (s *Store) GetMeasure(ctx context.Context, measureID int64) (domain.Measure, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT id, project_id, target_object_id, requirement_id, title,
-		       COALESCE(description, ''), COALESCE(responsible, ''), due_date::text, status, version, updated_at
-		FROM measures WHERE id = $1`, measureID)
-
-	var measure domain.Measure
-	err := row.Scan(
-		&measure.ID, &measure.ProjectID, &measure.TargetObjectID, &measure.RequirementID,
-		&measure.Title, &measure.Description, &measure.Responsible, &measure.DueDate,
-		&measure.Status, &measure.Version, &measure.UpdatedAt,
-	)
+	measure, err := scanMeasure(s.pool.QueryRow(ctx, `
+		SELECT `+measureColumns+` FROM measures WHERE id = $1`, measureID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Measure{}, ErrNotFound
 	}
@@ -147,15 +133,28 @@ func (s *Store) MeasureProjectID(ctx context.Context, measureID int64) (int64, e
 func scanMeasures(rows pgx.Rows) ([]domain.Measure, error) {
 	var items []domain.Measure
 	for rows.Next() {
-		var m domain.Measure
-		if err := rows.Scan(
-			&m.ID, &m.ProjectID, &m.TargetObjectID, &m.RequirementID,
-			&m.Title, &m.Description, &m.Responsible, &m.DueDate,
-			&m.Status, &m.Version, &m.UpdatedAt,
-		); err != nil {
+		m, err := scanMeasure(rows)
+		if err != nil {
 			return nil, err
 		}
 		items = append(items, m)
 	}
 	return items, rows.Err()
+}
+
+func scanMeasure(scanner interface{ Scan(dest ...any) error }) (domain.Measure, error) {
+	var m domain.Measure
+	var userID *int64
+	err := scanner.Scan(
+		&m.ID, &m.ProjectID, &m.TargetObjectID, &m.RequirementID,
+		&m.Title, &m.Description, &m.Responsible, &userID, &m.DueDate,
+		&m.Status, &m.Version, &m.UpdatedAt,
+	)
+	if err != nil {
+		return domain.Measure{}, err
+	}
+	if userID != nil {
+		m.ResponsibleUserID = *userID
+	}
+	return m, nil
 }

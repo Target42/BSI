@@ -503,10 +503,13 @@ func (s *Store) TargetObjectProjectID(ctx context.Context, targetObjectID int64)
 	return projectID, err
 }
 
+const assessmentColumns = `
+		id, project_id, target_object_id, requirement_id, status, note,
+		COALESCE(responsible, ''), responsible_user_id, due_date::text, version, updated_at`
+
 func (s *Store) ListAssessments(ctx context.Context, projectID, targetObjectID int64) ([]domain.RequirementAssessment, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, project_id, target_object_id, requirement_id, status, note, responsible,
-		       due_date::text, version, updated_at
+		SELECT `+assessmentColumns+`
 		FROM requirement_assessments
 		WHERE project_id = $1 AND target_object_id = $2
 		ORDER BY requirement_id`, projectID, targetObjectID)
@@ -517,27 +520,22 @@ func (s *Store) ListAssessments(ctx context.Context, projectID, targetObjectID i
 
 	var items []domain.RequirementAssessment
 	for rows.Next() {
-		var a domain.RequirementAssessment
-		var dueDate *string
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.TargetObjectID, &a.RequirementID, &a.Status, &a.Note, &a.Responsible, &dueDate, &a.Version, &a.UpdatedAt); err != nil {
+		a, err := scanAssessment(rows)
+		if err != nil {
 			return nil, err
 		}
-		a.DueDate = dueDate
 		items = append(items, a)
 	}
 	return items, rows.Err()
 }
 
 func (s *Store) GetAssessment(ctx context.Context, projectID, targetObjectID, requirementID int64) (domain.RequirementAssessment, error) {
-	var a domain.RequirementAssessment
-	var dueDate *string
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, project_id, target_object_id, requirement_id, status, note, responsible,
-		       due_date::text, version, updated_at
+	a, err := scanAssessment(s.pool.QueryRow(ctx, `
+		SELECT `+assessmentColumns+`
 		FROM requirement_assessments
 		WHERE project_id = $1 AND target_object_id = $2 AND requirement_id = $3`,
 		projectID, targetObjectID, requirementID,
-	).Scan(&a.ID, &a.ProjectID, &a.TargetObjectID, &a.RequirementID, &a.Status, &a.Note, &a.Responsible, &dueDate, &a.Version, &a.UpdatedAt)
+	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.RequirementAssessment{
 			ProjectID:      projectID,
@@ -547,7 +545,6 @@ func (s *Store) GetAssessment(ctx context.Context, projectID, targetObjectID, re
 			Version:        0,
 		}, nil
 	}
-	a.DueDate = dueDate
 	return a, err
 }
 
@@ -555,11 +552,12 @@ func (s *Store) SaveAssessment(ctx context.Context, assessment domain.Requiremen
 	if assessment.Version > 0 {
 		tag, err := s.pool.Exec(ctx, `
 			UPDATE requirement_assessments
-			SET status = $4, note = $5, responsible = $6, due_date = $7,
+			SET status = $4, note = $5, responsible = $6, responsible_user_id = $7, due_date = $8,
 			    version = version + 1, updated_at = now()
-			WHERE project_id = $1 AND target_object_id = $2 AND requirement_id = $3 AND version = $8`,
+			WHERE project_id = $1 AND target_object_id = $2 AND requirement_id = $3 AND version = $9`,
 			assessment.ProjectID, assessment.TargetObjectID, assessment.RequirementID,
-			assessment.Status, assessment.Note, assessment.Responsible, nullableDate(assessment.DueDate), assessment.Version,
+			assessment.Status, assessment.Note, assessment.Responsible, nullableInt64(assessment.ResponsibleUserID),
+			nullableDate(assessment.DueDate), assessment.Version,
 		)
 		if err != nil {
 			return domain.RequirementAssessment{}, err
@@ -577,17 +575,19 @@ func (s *Store) SaveAssessment(ctx context.Context, assessment domain.Requiremen
 	} else {
 		_, err := s.pool.Exec(ctx, `
 			INSERT INTO requirement_assessments
-			(project_id, target_object_id, requirement_id, status, note, responsible, due_date)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			(project_id, target_object_id, requirement_id, status, note, responsible, responsible_user_id, due_date)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (project_id, target_object_id, requirement_id) DO UPDATE SET
 			  status = EXCLUDED.status,
 			  note = EXCLUDED.note,
 			  responsible = EXCLUDED.responsible,
+			  responsible_user_id = EXCLUDED.responsible_user_id,
 			  due_date = EXCLUDED.due_date,
 			  version = requirement_assessments.version + 1,
 			  updated_at = now()`,
 			assessment.ProjectID, assessment.TargetObjectID, assessment.RequirementID,
-			assessment.Status, assessment.Note, assessment.Responsible, nullableDate(assessment.DueDate),
+			assessment.Status, assessment.Note, assessment.Responsible, nullableInt64(assessment.ResponsibleUserID),
+			nullableDate(assessment.DueDate),
 		)
 		if err != nil {
 			return domain.RequirementAssessment{}, err
@@ -674,9 +674,49 @@ func (s *Store) DeleteDeviation(ctx context.Context, projectID, targetObjectID, 
 	return err
 }
 
+func scanAssessment(scanner interface{ Scan(dest ...any) error }) (domain.RequirementAssessment, error) {
+	var a domain.RequirementAssessment
+	var userID *int64
+	err := scanner.Scan(
+		&a.ID, &a.ProjectID, &a.TargetObjectID, &a.RequirementID, &a.Status, &a.Note,
+		&a.Responsible, &userID, &a.DueDate, &a.Version, &a.UpdatedAt,
+	)
+	if err != nil {
+		return domain.RequirementAssessment{}, err
+	}
+	if userID != nil {
+		a.ResponsibleUserID = *userID
+	}
+	return a, nil
+}
+
 func nullableDate(value *string) any {
 	if value == nil || *value == "" {
 		return nil
 	}
 	return *value
+}
+
+func nullableInt64(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+	return value
+}
+
+func NamedPeople(members []ProjectMember) []domain.NamedPerson {
+	people := make([]domain.NamedPerson, len(members))
+	for i, member := range members {
+		people[i] = domain.NamedPerson{ID: member.UserID, DisplayName: member.DisplayName, Email: member.Email}
+	}
+	return people
+}
+
+func (s *Store) ResolveProjectResponsible(ctx context.Context, projectID, userID int64, text string) (int64, string, error) {
+	members, err := s.ListProjectMembers(ctx, projectID)
+	if err != nil {
+		return 0, "", err
+	}
+	id, label := domain.ResolveResponsible(NamedPeople(members), userID, text)
+	return id, label, nil
 }
