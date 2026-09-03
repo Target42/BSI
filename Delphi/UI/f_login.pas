@@ -92,7 +92,7 @@ end;
 procedure TLoginForm.SetReloginMode;
 begin
   FReloginMode := True;
-  Caption := 'ISMS – Erneut anmelden';
+  Caption := 'ISMS ' + #$2013 + ' Erneut anmelden';
   lblIntro.Caption := 'Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.';
   chkRemote.Checked := True;
   chkRemote.Enabled := False;
@@ -104,7 +104,7 @@ end;
 procedure TLoginForm.SetSwitchUserMode;
 begin
   FSwitchUserMode := True;
-  Caption := 'ISMS – Abmelden / Benutzer wechseln';
+  Caption := 'ISMS ' + #$2013 + ' Abmelden / Benutzer wechseln';
   lblIntro.Caption :=
     'Melden Sie sich erneut an, wechseln Sie den Benutzer oder arbeiten Sie lokal ohne Server.';
   edtPassword.Clear;
