@@ -71,6 +71,8 @@ uses
 
   f_measure in 'UI\f_measure.pas' {MeasureForm},
 
+  f_texteditor in 'UI\f_texteditor.pas' {TextEditorForm},
+
   f_report in 'UI\f_report.pas' {ReportForm},
 
   f_cockpit in 'UI\f_cockpit.pas' {CockpitForm},

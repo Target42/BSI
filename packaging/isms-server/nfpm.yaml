@@ -1,0 +1,54 @@
+name: isms-server
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${ISMS_VERSION}
+release: "1"
+section: net
+priority: optional
+maintainer: ${ISMS_MAINTAINER}
+vendor: ISMS
+homepage: https://github.com/Target42/BSI
+license: LicenseRef-ISMS
+description: |
+  ISMS-Server für IT-Grundschutz.
+  REST-API und Web-Oberfläche; PostgreSQL als Datenbank.
+contents:
+  - src: ${ISMS_SERVER_BIN}
+    dst: /opt/isms/isms-server
+    file_info:
+      mode: 0755
+  - src: ${ISMS_SERVER_DIR}/migrations
+    dst: /opt/isms/migrations
+    file_info:
+      mode: 0644
+  - dst: /opt/isms/catalog
+    type: dir
+    file_info:
+      mode: 0755
+  - src: ${ISMS_SERVER_DIR}/.env.example
+    dst: /etc/isms/isms.env.example
+    file_info:
+      mode: 0640
+  - src: ${ISMS_SERVER_DIR}/.env.example
+    dst: /etc/isms/isms.env
+    type: config|noreplace
+    file_info:
+      mode: 0640
+  - src: ${ISMS_SERVER_DIR}/scripts/isms-server.service
+    dst: /lib/systemd/system/isms-server.service
+    file_info:
+      mode: 0644
+scripts:
+  postinstall: ${ISMS_ROOT}/packaging/isms-server/postinstall.sh
+  preremove: ${ISMS_ROOT}/packaging/isms-server/preremove.sh
+recommends:
+  - postgresql
+overrides:
+  deb:
+    depends:
+      - adduser
+      - libc6
+  rpm:
+    depends:
+      - shadow-utils
+      - glibc

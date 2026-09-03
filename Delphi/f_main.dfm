@@ -149,6 +149,13 @@ object MainForm: TMainForm
       DesignSize = (
         320
         522)
+      object lblStatusFilter: TLabel
+        Left = 8
+        Top = 49
+        Width = 32
+        Height = 15
+        Caption = 'Status'
+      end
       object edtBausteinSearch: TEdit
         Left = 8
         Top = 20
@@ -158,13 +165,6 @@ object MainForm: TMainForm
         TabOrder = 0
         TextHint = 'Bausteine durchsuchen'#8230
         OnChange = edtBausteinSearchChange
-      end
-      object lblStatusFilter: TLabel
-        Left = 8
-        Top = 49
-        Width = 31
-        Height = 15
-        Caption = 'Status'
       end
       object chkFilterRequired: TCheckBox
         Left = 52
@@ -275,6 +275,14 @@ object MainForm: TMainForm
         Height = 15
         Caption = 'Baustein'
       end
+      object lblReqStatusFilter: TLabel
+        Left = 742
+        Top = 80
+        Width = 32
+        Height = 15
+        Anchors = [akTop, akRight]
+        Caption = 'Status'
+      end
       object pbTargetProgress: TProgressBar
         Left = 8
         Top = 52
@@ -293,14 +301,6 @@ object MainForm: TMainForm
         Anchors = [akLeft, akTop, akRight]
         TabOrder = 1
         OnChange = cboAssignedBausteineChange
-      end
-      object lblReqStatusFilter: TLabel
-        Left = 742
-        Top = 80
-        Width = 31
-        Height = 15
-        Anchors = [akTop, akRight]
-        Caption = 'Status'
       end
       object chkReqFilterOpen: TCheckBox
         Left = 784
@@ -352,7 +352,7 @@ object MainForm: TMainForm
         DefaultRowHeight = 20
         FixedCols = 0
         RowCount = 2
-        Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goColSizing, goRangeSelect, goRowSelect, goThumbTracking]
+        Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goColSizing, goRowSelect, goThumbTracking]
         TabOrder = 6
         OnDrawCell = sgRequirementsDrawCell
         OnSelectCell = sgRequirementsSelectCell
@@ -453,8 +453,8 @@ object MainForm: TMainForm
         OnChange = dtpDueDateChange
       end
       object memAssessmentNote: TMemo
-        Left = 8
-        Top = 268
+        Left = 6
+        Top = 269
         Width = 1060
         Height = 80
         Anchors = [akLeft, akTop, akRight]
@@ -462,6 +462,18 @@ object MainForm: TMainForm
         TabOrder = 5
         OnChange = memAssessmentNoteChange
         OnExit = memAssessmentNoteExit
+      end
+      object btnExpandNote: TButton
+        Left = 76
+        Top = 245
+        Width = 25
+        Height = 20
+        Hint = 'Umsetzungstext in gro'#223'em Editor '#246'ffnen'
+        Caption = #8599
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 7
+        OnClick = btnExpandNoteClick
       end
       object grpMeasures: TGroupBox
         Left = 8
@@ -484,7 +496,7 @@ object MainForm: TMainForm
           DefaultRowHeight = 20
           FixedCols = 0
           RowCount = 2
-          Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goColSizing, goRangeSelect, goRowSelect, goThumbTracking]
+          Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goColSizing, goRowSelect, goThumbTracking]
           TabOrder = 0
           OnDblClick = sgMeasuresDblClick
         end

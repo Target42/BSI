@@ -17,8 +17,13 @@
 
 #include <QHash>
 #include <QList>
+#include <memory>
 #include <QMainWindow>
 #include <QSet>
+
+namespace spell {
+class HunspellSpellChecker;
+} // namespace spell
 
 class QCheckBox;
 class QComboBox;
@@ -45,6 +50,7 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(AppContext &context, QWidget *parent = nullptr);
+    ~MainWindow() override;
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -85,6 +91,7 @@ private slots:
     void applyBausteinSearchFilter();
     void viewSelectedBaustein();
     void showCatalogSearch();
+    void openAssessmentNoteEditor();
 
 private:
     void buildUi();
@@ -195,6 +202,7 @@ private:
     QTextEdit *m_requirementText = nullptr;
     QTextEdit *m_assessmentNote = nullptr;
     QLabel *m_assessmentNoteLabel = nullptr;
+    QPushButton *m_expandNoteButton = nullptr;
     QLineEdit *m_responsibleEdit = nullptr;
     QDateEdit *m_dueDateEdit = nullptr;
     QComboBox *m_statusBox = nullptr;
@@ -220,6 +228,8 @@ private:
     QLabel *m_targetProgressLabel = nullptr;
     QProgressBar *m_projectProgressBar = nullptr;
     QProgressBar *m_targetProgressBar = nullptr;
+
+    std::unique_ptr<spell::HunspellSpellChecker> m_spellChecker;
 
     QAction *m_closeProjectAction = nullptr;
     QAction *m_editProjectAction = nullptr;

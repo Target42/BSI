@@ -72,6 +72,7 @@ type
     dtpDueDate: TDateTimePicker;
     lblAssessmentNote: TLabel;
     memAssessmentNote: TMemo;
+    btnExpandNote: TButton;
     grpMeasures: TGroupBox;
     sgMeasures: TStringGrid;
     btnAddMeasure: TButton;
@@ -137,6 +138,7 @@ type
     procedure edtResponsibleExit(Sender: TObject);
     procedure memAssessmentNoteExit(Sender: TObject);
     procedure memAssessmentNoteChange(Sender: TObject);
+    procedure btnExpandNoteClick(Sender: TObject);
     procedure chkHasDueDateClick(Sender: TObject);
     procedure dtpDueDateChange(Sender: TObject);
     procedure edtBausteinSearchChange(Sender: TObject);
@@ -286,7 +288,7 @@ uses
   f_project, f_projectopen, f_targetobject, f_movetarget, f_measure, f_report, f_cockpit,
   ReportService, RequirementTextFormatter, BausteinRecommendationService, AppSession,
   f_bausteinview, f_catalogsearch, f_bausteinrecommendation, f_projectmembers,
-  InheritanceService;
+  InheritanceService, f_texteditor;
 
 {$R *.dfm}
 
@@ -370,7 +372,7 @@ begin
   pbTargetProgress.Max := 100;
 
   sgRequirements.FixedRows := 1;
-  sgRequirements.ColCount := 8;
+  sgRequirements.ColCount := 9;
   sgRequirements.DefaultDrawing := False;
   sgRequirements.Cells[0, 0] := 'ID';
   sgRequirements.Cells[1, 0] := 'Anforderung';
@@ -379,15 +381,17 @@ begin
   sgRequirements.Cells[4, 0] := 'Status';
   sgRequirements.Cells[5, 0] := 'Umsetzung durch';
   sgRequirements.Cells[6, 0] := 'Frist';
-  sgRequirements.Cells[7, 0] := 'Maßnahmen';
+  sgRequirements.Cells[7, 0] := 'Ma'#223'nahmen';
+  sgRequirements.Cells[8, 0] := 'Anforderungstext';
   sgRequirements.ColWidths[0] := 90;
-  sgRequirements.ColWidths[1] := 240;
+  sgRequirements.ColWidths[1] := 200;
   sgRequirements.ColWidths[2] := 60;
   sgRequirements.ColWidths[3] := 90;
   sgRequirements.ColWidths[4] := 80;
   sgRequirements.ColWidths[5] := 120;
   sgRequirements.ColWidths[6] := 80;
   sgRequirements.ColWidths[7] := 70;
+  sgRequirements.ColWidths[8] := 300;
 
   sgMeasures.FixedRows := 1;
   sgMeasures.Cells[0, 0] := 'Titel';
@@ -1181,6 +1185,7 @@ begin
   chkHasDueDate.Enabled := CanEdit and not FromParent;
   dtpDueDate.Enabled := CanEdit and chkHasDueDate.Checked and not FromParent;
   memAssessmentNote.ReadOnly := not CanEdit;
+  btnExpandNote.Enabled := FActiveRequirementId > 0;
   btnAddMeasure.Enabled := CanEdit and (FActiveRequirementId > 0) and not FromParent;
   btnDeleteMeasure.Enabled := CanEdit and (FActiveRequirementId > 0) and not FromParent;
   btnEditMeasure.Enabled := HasTarget and (FActiveRequirementId > 0);
@@ -1388,6 +1393,7 @@ begin
   chkHasDueDate.Checked := False;
   dtpDueDate.Enabled := False;
   memAssessmentNote.Clear;
+  btnExpandNote.Enabled := False;
   FSuppressAssessmentSave := False;
   sgMeasures.RowCount := 2;
   sgMeasures.Rows[1].Clear;
@@ -1451,6 +1457,7 @@ begin
       sgRequirements.Cells[7, Row] := IntToStr(MeasureCnt)
     else
       sgRequirements.Cells[7, Row] := '';
+    sgRequirements.Cells[8, Row] := R.Text;
     sgRequirements.Objects[0, Row] := TObject(R.Id);
     if IsAssessmentDueDateOverdue(Assessment) then
       sgRequirements.Objects[2, Row] := TObject(1)
@@ -1653,6 +1660,18 @@ end;
 procedure TMainForm.memAssessmentNoteChange(Sender: TObject);
 begin
   SaveAssessmentFields;
+end;
+
+procedure TMainForm.btnExpandNoteClick(Sender: TObject);
+var
+  Txt: string;
+begin
+  Txt := memAssessmentNote.Text;
+  if TTextEditorForm.Execute(lblAssessmentNote.Caption, Txt, memAssessmentNote.ReadOnly) then
+  begin
+    memAssessmentNote.Text := Txt;
+    SaveAssessmentFields;
+  end;
 end;
 
 procedure TMainForm.DoShowSollIstReport(Sender: TObject);

@@ -106,6 +106,28 @@ Katalog-XML nach `/opt/isms/catalog/` legen (das Skript im nächsten Schritt leg
 
 ### 5. Bauen und als Dienst installieren
 
+**Variante A — Pakete (.deb / .rpm), empfohlen zum Verteilen**
+
+Auf einem Linux-Rechner (oder WSL) mit [nfpm](https://nfpm.goreleaser.com/install/):
+
+```bash
+cd ~/BSI
+./scripts/build-linux-packages.sh          # Server + Client, falls Binaries da
+./scripts/build-linux-packages.sh server   # nur Server
+```
+
+Pakete liegen in `dist/packages/`. Installation z. B. auf Ubuntu:
+
+```bash
+sudo apt install ./dist/packages/isms-server_*_amd64.deb
+# Qt-Client (nach qmake/make, Binary z. B. in build/ISMS):
+# sudo apt install ./dist/packages/isms-werkzeug_*_amd64.deb
+```
+
+Die Server-Umgebung liegt in `/etc/isms/isms.env` (wird beim Update nicht überschrieben). Danach `JWT_SECRET` und `ADMIN_PASSWORD` setzen und `sudo systemctl restart isms-server`.
+
+**Variante B — Skript ohne Paketmanager**
+
 ```bash
 cd ~/BSI/isms-server   # oder dein Clone-Pfad
 ./scripts/build.sh linux

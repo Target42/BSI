@@ -21,6 +21,7 @@ public:
         ResponsibleColumn,
         DueDateColumn,
         MeasureCountColumn,
+        TextColumn,
         ColumnCount
     };
 

@@ -82,6 +82,9 @@ QVariant RequirementTableModel::data(const QModelIndex &index, int role) const
         return QBrush(Qt::red);
     }
 
+    if (role == Qt::ToolTipRole && index.column() == TextColumn)
+        return row.requirement.text;
+
     if (role != Qt::DisplayRole)
         return {};
 
@@ -108,6 +111,8 @@ QVariant RequirementTableModel::data(const QModelIndex &index, int role) const
         if (!row.hasAssessment || row.assessment.measureCount == 0)
             return {};
         return row.assessment.measureCount;
+    case TextColumn:
+        return row.requirement.text;
     default:
         return {};
     }
@@ -135,6 +140,8 @@ QVariant RequirementTableModel::headerData(int section, Qt::Orientation orientat
         return QStringLiteral("Frist");
     case MeasureCountColumn:
         return QStringLiteral("Maßnahmen");
+    case TextColumn:
+        return QStringLiteral("Anforderungstext");
     default:
         return {};
     }

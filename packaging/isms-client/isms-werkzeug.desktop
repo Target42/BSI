@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ISMS Werkzeug
+Comment=IT-Grundschutz ISMS-Client
+Exec=isms-werkzeug
+Icon=isms-werkzeug
+Terminal=false
+Categories=Office;Security;
+StartupWMClass=ISMS
+Keywords=ISMS;Grundschutz;BSI;

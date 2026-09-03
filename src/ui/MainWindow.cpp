@@ -25,7 +25,9 @@
 #include "ui/dialogs/CockpitDialog.h"
 #include "ui/dialogs/ReportDialog.h"
 #include "ui/dialogs/TargetObjectDialog.h"
+#include "ui/dialogs/TextEditorDialog.h"
 #include "ui/TableViewHelper.h"
+#include "ui/spell/HunspellSpellSupport.h"
 
 #include <QAbstractItemView>
 #include <QAction>
@@ -87,6 +89,8 @@ MainWindow::MainWindow(AppContext &context, QWidget *parent)
     configureRemoteSessionWatcher();
     updateSessionInfoLabel();
 }
+
+MainWindow::~MainWindow() = default;
 
 void MainWindow::configureRemoteSessionWatcher()
 {
@@ -236,6 +240,14 @@ void MainWindow::buildUi()
     m_requirementTable->setSelectionMode(QAbstractItemView::SingleSelection);
     enableResizableColumns(m_requirementTable);
     m_requirementTable->setAlternatingRowColors(true);
+    m_requirementTable->setColumnWidth(RequirementTableModel::ExternalIdColumn, 90);
+    m_requirementTable->setColumnWidth(RequirementTableModel::TitleColumn, 200);
+    m_requirementTable->setColumnWidth(RequirementTableModel::LevelColumn, 70);
+    m_requirementTable->setColumnWidth(RequirementTableModel::RoleColumn, 90);
+    m_requirementTable->setColumnWidth(RequirementTableModel::StatusColumn, 80);
+    m_requirementTable->setColumnWidth(RequirementTableModel::ResponsibleColumn, 120);
+    m_requirementTable->setColumnWidth(RequirementTableModel::DueDateColumn, 80);
+    m_requirementTable->setColumnWidth(RequirementTableModel::MeasureCountColumn, 80);
     connect(m_requirementTable->selectionModel(), &QItemSelectionModel::currentChanged, this,
             [this](const QModelIndex &current, const QModelIndex &) {
                 if (m_blockRequirementSelectionHandler)
@@ -249,6 +261,10 @@ void MainWindow::buildUi()
     m_assessmentNote = new QTextEdit(this);
     m_assessmentNote->setPlaceholderText(tr("Umsetzungsnotiz für die ausgewählte Anforderung"));
     connect(m_assessmentNote, &QTextEdit::textChanged, this, &MainWindow::saveAssessmentFields);
+
+    m_spellChecker = std::make_unique<spell::HunspellSpellChecker>();
+    spell::attachSpellSupport(m_spellChecker.get(), m_assessmentNote);
+    spell::attachSpellSupport(m_spellChecker.get(), m_requirementText);
 
     m_responsibleEdit = new QLineEdit(this);
     m_responsibleEdit->setPlaceholderText(tr("Verantwortliche Person oder Rolle"));
@@ -312,7 +328,16 @@ void MainWindow::buildUi()
     detailLayout->addLayout(dueDateRow);
 
     m_assessmentNoteLabel = new QLabel(tr("Umsetzung"), detailPanel);
-    detailLayout->addWidget(m_assessmentNoteLabel);
+    m_expandNoteButton = new QPushButton(QStringLiteral("\u2197"), detailPanel);
+    m_expandNoteButton->setFixedSize(26, 22);
+    m_expandNoteButton->setToolTip(tr("Umsetzungstext in großem Editor öffnen"));
+    m_expandNoteButton->setEnabled(false);
+    connect(m_expandNoteButton, &QPushButton::clicked, this, &MainWindow::openAssessmentNoteEditor);
+    auto *noteHeader = new QHBoxLayout();
+    noteHeader->addWidget(m_assessmentNoteLabel);
+    noteHeader->addWidget(m_expandNoteButton);
+    noteHeader->addStretch();
+    detailLayout->addLayout(noteHeader);
     detailLayout->addWidget(m_assessmentNote, 1);
 
     detailLayout->addWidget(new QLabel(tr("Maßnahmen"), detailPanel));
@@ -904,6 +929,8 @@ void MainWindow::clearRequirementView()
     QSignalBlocker dueDateEnabledBlocker(m_hasDueDateBox);
     QSignalBlocker dueDateBlocker(m_dueDateEdit);
     m_assessmentNote->clear();
+    if (m_expandNoteButton != nullptr)
+        m_expandNoteButton->setEnabled(false);
     m_responsibleEdit->clear();
     m_hasDueDateBox->setChecked(false);
     m_dueDateEdit->clear();
@@ -1158,6 +1185,8 @@ void MainWindow::applyInheritedUiState()
         m_assessmentNote->setEnabled(hasTargetObject && canEdit);
         m_assessmentNote->setReadOnly(!canEdit);
     }
+    if (m_expandNoteButton != nullptr)
+        m_expandNoteButton->setEnabled(m_activeRequirementId > 0);
     if (m_statusBox != nullptr)
         m_statusBox->setEnabled(canEdit && !inherited);
     if (m_responsibleEdit != nullptr) {
@@ -2148,6 +2177,24 @@ void MainWindow::saveAssessmentFields()
         return;
 
     notifySaveFailure(m_context.projectRepository().lastError(), false);
+}
+
+void MainWindow::openAssessmentNoteEditor()
+{
+    if (m_assessmentNote == nullptr)
+        return;
+
+    QString text = m_assessmentNote->toPlainText();
+    const QString title = m_assessmentNoteLabel != nullptr
+                              ? m_assessmentNoteLabel->text()
+                              : tr("Umsetzung");
+    const bool readOnly = m_assessmentNote->isReadOnly();
+    if (!TextEditorDialog::editText(this, title, &text, readOnly, m_spellChecker.get()))
+        return;
+
+    const QSignalBlocker blocker(m_assessmentNote);
+    m_assessmentNote->setPlainText(text);
+    saveAssessmentFields();
 }
 
 void MainWindow::addMeasure()

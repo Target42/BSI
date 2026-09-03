@@ -44,9 +44,11 @@ SOURCES += \
     src/ui/dialogs/ProjectMembersDialog.cpp \
     src/ui/dialogs/ReportDialog.cpp \
     src/ui/dialogs/TargetObjectDialog.cpp \
+    src/ui/dialogs/TextEditorDialog.cpp \
     src/ui/models/BausteinTreeModel.cpp \
     src/ui/models/CockpitTableModel.cpp \
     src/ui/models/MeasureTableModel.cpp \
+    src/ui/spell/HunspellSpellSupport.cpp \
     src/ui/models/ReportTableModel.cpp \
     src/ui/models/RequirementTableModel.cpp \
     src/ui/models/TargetObjectTreeModel.cpp
@@ -113,12 +115,23 @@ HEADERS += \
     src/ui/dialogs/ProjectMembersDialog.h \
     src/ui/dialogs/ReportDialog.h \
     src/ui/dialogs/TargetObjectDialog.h \
+    src/ui/dialogs/TextEditorDialog.h \
     src/ui/models/BausteinTreeModel.h \
     src/ui/models/CockpitTableModel.h \
     src/ui/models/MeasureTableModel.h \
     src/ui/models/ReportTableModel.h \
     src/ui/models/RequirementTableModel.h \
-    src/ui/models/TargetObjectTreeModel.h
+    src/ui/models/TargetObjectTreeModel.h \
+    src/ui/spell/HunspellSpellSupport.h
+
+# Hunspell nur unter Linux, wenn die Dev-Header installiert sind.
+# Unter Windows bleibt der Spell-Support ein No-Op (kein Link auf hunspell).
+unix:!macx {
+    exists(/usr/include/hunspell/hunspell.h) {
+        DEFINES += HAVE_HUNSPELL
+        LIBS += -lhunspell
+    }
+}
 
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
