@@ -15,6 +15,8 @@ QString roleLabel(const QString &role)
         return ProjectOpenDialog::tr("Besitzer");
     if (role == QStringLiteral("editor"))
         return ProjectOpenDialog::tr("Bearbeiter");
+    if (role == QStringLiteral("reviewer"))
+        return ProjectOpenDialog::tr("Prüfer");
     if (role == QStringLiteral("viewer"))
         return ProjectOpenDialog::tr("Leser");
     return {};

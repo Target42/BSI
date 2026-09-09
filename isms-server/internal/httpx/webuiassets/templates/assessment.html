@@ -35,7 +35,18 @@
         <div class="notice">Diese Bewertung stammt von {{.InheritedFrom}}. Status, Frist und Maßnahmen werden dort gepflegt.</div>
       {{end}}
 
-      {{if and .CanEdit (not .Inherited)}}
+      {{if .Project.WorkflowEnabled}}
+        <p>
+          Laufzettel:
+          <span class="{{statusClass (reviewLabel .Review.State) false}}">{{reviewLabel .Review.State}}</span>
+        </p>
+        {{if .Review.ReviewNote}}<div class="notice">Rückgabe: {{.Review.ReviewNote}}</div>{{end}}
+      {{end}}
+      {{if .ReviewLocked}}
+        <p class="muted">Dieser Baustein ist zur Prüfung oder abgenommen. Bewertungen und Maßnahmen sind gesperrt.</p>
+      {{end}}
+
+      {{if and .CanEdit (not .Inherited) (not .ReviewLocked)}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/requirements/%d" .Project.ID .Target.ID .Requirement.ID)}}">
         {{template "csrf" .}}
         <input type="hidden" name="version" value="{{.Assessment.Version}}">
@@ -82,7 +93,11 @@
         <p>Verantwortlich: {{if .Assessment.Responsible}}{{.Assessment.Responsible}}{{else}}—{{end}}</p>
         <p>Frist: {{formatDue .Assessment.DueDate}}</p>
         {{if .Assessment.Note}}<div class="req-text">{{.Assessment.Note}}</div>{{end}}
-        {{if not .Inherited}}<p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>{{end}}
+        {{if .ReviewLocked}}
+          <p class="muted">Eingereichte oder abgenommene Bausteine können nicht geändert werden.</p>
+        {{else if not .Inherited}}
+          <p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>
+        {{end}}
       </div>
       {{if and .Inherited .CanEdit}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/deviation" .Project.ID .Target.ID)}}">
@@ -135,7 +150,7 @@
         <p class="muted"><a href="{{href (printf "/projects/%d/cockpit" .Project.ID)}}">Zum Maßnahmen-Cockpit</a></p>
       {{end}}
 
-      {{if and .CanEdit (not .Inherited)}}
+      {{if and .CanEdit (not .Inherited) (not .ReviewLocked)}}
       <h2>Neue Maßnahme</h2>
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/requirements/%d/measures" .Project.ID .Target.ID .Requirement.ID)}}">
         {{template "csrf" .}}

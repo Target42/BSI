@@ -28,6 +28,11 @@ type
     function LoadDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer): string; override;
     function SaveDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer;
       const ANote: string): Boolean; override;
+    function LoadReviews(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, TBausteinReview>; override;
+    function LoadProjectReviews(AProjectId: Integer): TArray<TBausteinReview>; override;
+    function ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
+      const AAction, ANote: string;
+      const ARequirementIds: TArray<Integer>): TReviewSaveResult; override;
     function GetLastError: string; override;
   end;
 
@@ -420,6 +425,23 @@ begin
       FLastError := E.Message;
   end;
   Q.Free;
+end;
+
+function TTargetObjectRepository.LoadReviews(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, TBausteinReview>;
+begin
+  Result := TDictionary<Integer, TBausteinReview>.Create;
+end;
+
+function TTargetObjectRepository.LoadProjectReviews(AProjectId: Integer): TArray<TBausteinReview>;
+begin
+  SetLength(Result, 0);
+end;
+
+function TTargetObjectRepository.ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
+  const AAction, ANote: string; const ARequirementIds: TArray<Integer>): TReviewSaveResult;
+begin
+  FLastError := 'Pr'#$00FC'fkreislauf nur im Server-Modus verf'#$00FC'gbar.';
+  Result := ReviewSaveFailed;
 end;
 
 function TTargetObjectRepository.GetLastError: string;

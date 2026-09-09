@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/Target42/BSI/isms-server/internal/domain"
 	"github.com/Target42/BSI/isms-server/internal/repository"
 )
 
@@ -34,6 +35,8 @@ func mapRepoError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusForbidden, "forbidden")
 	case errors.Is(err, repository.ErrVersionConflict):
 		writeError(w, http.StatusConflict, "version_conflict")
+	case errors.Is(err, domain.ErrReviewLocked):
+		writeError(w, http.StatusConflict, "review_locked")
 	default:
 		return false
 	}

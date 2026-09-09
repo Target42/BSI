@@ -49,6 +49,18 @@
         {{else}}
         <p class="muted">Sichtbarkeit: {{visibilityLabel .Project.Visibility}}. Nur der Besitzer kann das ändern.</p>
         {{end}}
+        {{if .CanOwn}}
+        <fieldset class="field">
+          <legend>Prüfkreislauf</legend>
+          <label class="check">
+            <input type="hidden" name="workflowEnabled" value="0">
+            <input type="checkbox" name="workflowEnabled" value="1" {{if .Project.WorkflowEnabled}}checked{{end}}>
+            <span>Bausteine einreichen, zurückgeben und abnehmen. Ist der Kreis aus, arbeitet jeder Bearbeiter wie bisher ohne Laufzettel.</span>
+          </label>
+        </fieldset>
+        {{else}}
+        <p class="muted">Prüfkreislauf: {{if .Project.WorkflowEnabled}}aktiv{{else}}aus{{end}}. Nur der Besitzer kann das ändern.</p>
+        {{end}}
         <p class="muted">Katalogversion {{.Project.CatalogVersion}} (beim Anlegen festgelegt).</p>
         <div class="form-actions">
           <button class="btn" type="submit">Speichern</button>

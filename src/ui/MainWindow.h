@@ -4,6 +4,7 @@
 #include "app/AppContext.h"
 #include "domain/ApplicabilityStatus.h"
 #include "domain/AssessmentStatus.h"
+#include "domain/BausteinReview.h"
 #include "domain/CockpitItem.h"
 #include "domain/Project.h"
 #include "domain/Requirement.h"
@@ -37,6 +38,7 @@ class QTableView;
 class QTextEdit;
 class QTimer;
 class QTreeView;
+class QWidget;
 
 struct SessionSelection {
     int targetObjectId = 0;
@@ -92,6 +94,9 @@ private slots:
     void viewSelectedBaustein();
     void showCatalogSearch();
     void openAssessmentNoteEditor();
+    void submitActiveBausteinReview();
+    void returnActiveBausteinReview();
+    void acceptActiveBausteinReview();
 
 private:
     void buildUi();
@@ -115,6 +120,16 @@ private:
     int assessmentTargetId(int bausteinDbId) const;
     void applyInheritedUiState();
     bool saveDeviationNote();
+    bool workflowActive() const;
+    bool activeBausteinLocked() const;
+    bool activeRequirementLocked() const;
+    bool bausteinReviewLocked(int bausteinDbId) const;
+    BausteinReview currentReview() const;
+    void reloadReviews();
+    void updateReviewUi();
+    bool applyReviewAction(const QString &action, const QString &note = {},
+                           const QList<int> &requirementIds = {});
+    bool promptReviewReturn(QString *note, QList<int> *requirementIds);
     bool hasApplicableBausteineForActiveTarget() const;
     bool statusFilterActive() const;
     bool anyBausteinMatchesStatusFilter() const;
@@ -186,6 +201,7 @@ private:
 
     QHash<int, ApplicabilityStatus> m_applicabilityMap;
     QHash<int, InheritedBaustein> m_inheritedBausteine;
+    QHash<int, BausteinReview> m_reviews;
 
     QList<Baustein> m_catalogBausteine;
     QList<Requirement> m_catalogRequirements;
@@ -207,6 +223,12 @@ private:
     QDateEdit *m_dueDateEdit = nullptr;
     QComboBox *m_statusBox = nullptr;
     QComboBox *m_assignedBausteinBox = nullptr;
+    QWidget *m_reviewWidget = nullptr;
+    QLabel *m_reviewLabel = nullptr;
+    QLabel *m_reviewNoteLabel = nullptr;
+    QPushButton *m_reviewSubmitButton = nullptr;
+    QPushButton *m_reviewReturnButton = nullptr;
+    QPushButton *m_reviewAcceptButton = nullptr;
     QCheckBox *m_reqFilterOpenBox = nullptr;
     QCheckBox *m_reqFilterPartialBox = nullptr;
     QCheckBox *m_reqFilterFulfilledBox = nullptr;

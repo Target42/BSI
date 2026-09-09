@@ -331,6 +331,33 @@ bool TargetObjectRepository::saveDeviation(int projectId, int targetObjectId, in
     return true;
 }
 
+QHash<int, BausteinReview> TargetObjectRepository::loadReviews(int projectId, int targetObjectId) const
+{
+    Q_UNUSED(projectId)
+    Q_UNUSED(targetObjectId)
+    return {};
+}
+
+QList<BausteinReview> TargetObjectRepository::loadProjectReviews(int projectId) const
+{
+    Q_UNUSED(projectId)
+    return {};
+}
+
+ReviewSaveResult TargetObjectRepository::applyReview(int projectId, int targetObjectId, int bausteinId,
+                                                     const QString &action, const QString &note,
+                                                     const QList<int> &requirementIds)
+{
+    Q_UNUSED(projectId)
+    Q_UNUSED(targetObjectId)
+    Q_UNUSED(bausteinId)
+    Q_UNUSED(action)
+    Q_UNUSED(note)
+    Q_UNUSED(requirementIds)
+    m_lastError = QStringLiteral("Prüfkreislauf nur im Server-Modus verfügbar.");
+    return ReviewSaveResult::failed();
+}
+
 QString TargetObjectRepository::lastError() const
 {
     return m_lastError;

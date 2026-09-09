@@ -1,5 +1,7 @@
 #include "CockpitTableModel.h"
 
+#include "domain/BausteinReview.h"
+
 #include <QBrush>
 #include <QLocale>
 
@@ -62,6 +64,10 @@ QVariant CockpitTableModel::data(const QModelIndex &index, int role) const
         return item.title;
     case StatusColumn:
         return item.statusText;
+    case ReviewColumn:
+        if (item.reviewState.trimmed().isEmpty())
+            return {};
+        return reviewStateLabel(item.reviewState);
     case ResponsibleColumn:
         return item.responsible;
     case DueDateColumn:
@@ -91,6 +97,8 @@ QVariant CockpitTableModel::headerData(int section, Qt::Orientation orientation,
         return QStringLiteral("Titel");
     case StatusColumn:
         return QStringLiteral("Status");
+    case ReviewColumn:
+        return QStringLiteral("Laufzettel");
     case ResponsibleColumn:
         return QStringLiteral("Verantwortlich");
     case DueDateColumn:

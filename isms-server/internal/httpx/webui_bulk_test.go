@@ -136,6 +136,7 @@ func TestBulkPostsWithoutCSRFAreForbidden(t *testing.T) {
 	for _, path := range []string{
 		"/projects/1/targets/1/applicability/bulk",
 		"/projects/1/targets/1/assessments/bulk",
+		"/projects/1/targets/1/review",
 	} {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		rec := httptest.NewRecorder()
@@ -152,6 +153,7 @@ func TestBulkPostsWithCSRFRedirectToLogin(t *testing.T) {
 	for _, path := range []string{
 		"/projects/1/targets/1/applicability/bulk",
 		"/projects/1/targets/1/assessments/bulk",
+		"/projects/1/targets/1/review",
 	} {
 		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("csrf_token="+token))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

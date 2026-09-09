@@ -173,13 +173,13 @@ func (s *Store) projectAccess(ctx context.Context, projectID int64, user *auth.C
 	return result, nil
 }
 
-const projectColumns = `id, name, description, catalog_version, visibility, created_at, updated_at`
+const projectColumns = `id, name, description, catalog_version, visibility, workflow_enabled, created_at, updated_at`
 
 func scanProject(scanner interface {
 	Scan(dest ...any) error
 }, extra ...any) (domain.Project, error) {
 	var p domain.Project
-	dest := []any{&p.ID, &p.Name, &p.Description, &p.CatalogVersion, &p.Visibility, &p.CreatedAt, &p.UpdatedAt}
+	dest := []any{&p.ID, &p.Name, &p.Description, &p.CatalogVersion, &p.Visibility, &p.WorkflowEnabled, &p.CreatedAt, &p.UpdatedAt}
 	dest = append(dest, extra...)
 	err := scanner.Scan(dest...)
 	if p.Visibility == "" {
@@ -190,7 +190,7 @@ func scanProject(scanner interface {
 
 func (s *Store) ListProjects(ctx context.Context, userID int64) ([]domain.Project, error) {
 	query := `
-		SELECT p.id, p.name, p.description, p.catalog_version, p.visibility, p.created_at, p.updated_at,
+		SELECT p.id, p.name, p.description, p.catalog_version, p.visibility, p.workflow_enabled, p.created_at, p.updated_at,
 		       'viewer' AS role, FALSE AS is_member
 		FROM projects p
 		WHERE p.visibility = 'public'
@@ -198,7 +198,7 @@ func (s *Store) ListProjects(ctx context.Context, userID int64) ([]domain.Projec
 	args := []any{}
 	if userID > 0 {
 		query = `
-			SELECT p.id, p.name, p.description, p.catalog_version, p.visibility, p.created_at, p.updated_at,
+			SELECT p.id, p.name, p.description, p.catalog_version, p.visibility, p.workflow_enabled, p.created_at, p.updated_at,
 			       COALESCE(pm.role, 'viewer') AS role, (pm.user_id IS NOT NULL) AS is_member
 			FROM projects p
 			LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
@@ -235,13 +235,12 @@ func (s *Store) CreateProject(ctx context.Context, userID int64, name, descripti
 	}
 	defer tx.Rollback(ctx)
 
-	var project domain.Project
-	err = tx.QueryRow(ctx, `
+	project, err := scanProject(tx.QueryRow(ctx, `
 		INSERT INTO projects (name, description, catalog_version, visibility)
 		VALUES ($1, $2, $3, $4)
 		RETURNING `+projectColumns,
 		name, description, catalogVersion, visibility,
-	).Scan(&project.ID, &project.Name, &project.Description, &project.CatalogVersion, &project.Visibility, &project.CreatedAt, &project.UpdatedAt)
+	))
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -270,33 +269,28 @@ func (s *Store) CreateProject(ctx context.Context, userID int64, name, descripti
 }
 
 func (s *Store) GetProject(ctx context.Context, projectID int64) (domain.Project, error) {
-	var p domain.Project
-	err := s.pool.QueryRow(ctx, `
+	p, err := scanProject(s.pool.QueryRow(ctx, `
 		SELECT `+projectColumns+`
-		FROM projects WHERE id = $1`, projectID,
-	).Scan(&p.ID, &p.Name, &p.Description, &p.CatalogVersion, &p.Visibility, &p.CreatedAt, &p.UpdatedAt)
+		FROM projects WHERE id = $1`, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Project{}, ErrNotFound
-	}
-	if p.Visibility == "" {
-		p.Visibility = domain.VisibilityPrivate
 	}
 	return p, err
 }
 
 func (s *Store) UpdateProject(ctx context.Context, project domain.Project) (domain.Project, error) {
 	project.Visibility = domain.NormalizeVisibility(project.Visibility)
-	err := s.pool.QueryRow(ctx, `
+	updated, err := scanProject(s.pool.QueryRow(ctx, `
 		UPDATE projects
-		SET name = $2, description = $3, visibility = $4, updated_at = now()
+		SET name = $2, description = $3, visibility = $4, workflow_enabled = $5, updated_at = now()
 		WHERE id = $1
 		RETURNING `+projectColumns,
-		project.ID, project.Name, project.Description, project.Visibility,
-	).Scan(&project.ID, &project.Name, &project.Description, &project.CatalogVersion, &project.Visibility, &project.CreatedAt, &project.UpdatedAt)
+		project.ID, project.Name, project.Description, project.Visibility, project.WorkflowEnabled,
+	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Project{}, ErrNotFound
 	}
-	return project, err
+	return updated, err
 }
 
 func (s *Store) DeleteProject(ctx context.Context, projectID int64) error {

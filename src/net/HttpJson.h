@@ -3,6 +3,7 @@
 
 #include "domain/AssessmentStatus.h"
 #include "domain/Baustein.h"
+#include "domain/BausteinReview.h"
 #include "domain/Measure.h"
 #include "domain/MeasureStatus.h"
 #include "domain/Project.h"
@@ -15,6 +16,7 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QJsonArray>
 #include <QJsonObject>
 
 inline QDateTime parseDateTime(const QJsonValue &value)
@@ -35,6 +37,7 @@ inline Project projectFromJson(const QJsonObject &obj)
     project.description = obj.value(QStringLiteral("description")).toString();
     project.catalogVersion = obj.value(QStringLiteral("catalogVersion")).toString();
     project.role = obj.value(QStringLiteral("role")).toString();
+    project.workflowEnabled = obj.value(QStringLiteral("workflowEnabled")).toBool();
     project.createdAt = parseDateTime(obj.value(QStringLiteral("createdAt")));
     project.updatedAt = parseDateTime(obj.value(QStringLiteral("updatedAt")));
     return project;
@@ -114,6 +117,32 @@ inline RequirementAssessment assessmentFromJson(const QJsonObject &obj)
         assessment.dueDate = dueDate;
     assessment.version = obj.value(QStringLiteral("version")).toInt();
     return assessment;
+}
+
+inline QString jsonErrorCode(const QJsonObject &obj)
+{
+    return obj.value(QStringLiteral("error")).toString();
+}
+
+inline bool isReviewLockedJson(const QJsonObject &obj)
+{
+    return jsonErrorCode(obj) == QStringLiteral("review_locked");
+}
+
+inline BausteinReview bausteinReviewFromJson(const QJsonObject &obj)
+{
+    BausteinReview review;
+    review.projectId = obj.value(QStringLiteral("projectId")).toInt();
+    review.targetObjectId = obj.value(QStringLiteral("targetObjectId")).toInt();
+    review.bausteinId = obj.value(QStringLiteral("bausteinId")).toInt();
+    review.state = normalizeReviewState(obj.value(QStringLiteral("state")).toString());
+    review.reviewNote = obj.value(QStringLiteral("reviewNote")).toString();
+    const QJsonValue returned = obj.value(QStringLiteral("returnedRequirementIds"));
+    if (returned.isArray()) {
+        for (const QJsonValue &value : returned.toArray())
+            review.returnedRequirementIds.append(value.toInt());
+    }
+    return review;
 }
 
 inline Measure measureFromJson(const QJsonObject &obj)

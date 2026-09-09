@@ -39,6 +39,7 @@ private:
     QTableView *m_table = nullptr;
     QComboBox *m_kindBox = nullptr;
     QComboBox *m_dueBox = nullptr;
+    QComboBox *m_reviewBox = nullptr;
     QCheckBox *m_hideDoneBox = nullptr;
     QCheckBox *m_mineBox = nullptr;
     QLineEdit *m_personEdit = nullptr;

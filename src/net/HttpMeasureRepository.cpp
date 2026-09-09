@@ -1,5 +1,6 @@
 #include "HttpMeasureRepository.h"
 
+#include "domain/BausteinReview.h"
 #include "domain/MeasureStatus.h"
 #include "net/HttpJson.h"
 #include "qjsonarray.h"
@@ -91,7 +92,10 @@ Measure HttpMeasureRepository::createMeasure(const Measure &measure)
             .arg(measure.requirementDbId),
         body, &status);
     if (status != 201 || !doc.isObject()) {
-        m_lastError = m_client.lastError();
+        if (status == 409 && doc.isObject() && isReviewLockedJson(doc.object()))
+            m_lastError = reviewLockMessage();
+        else
+            m_lastError = m_client.lastError();
         return {};
     }
     return measureFromJson(doc.object());
@@ -119,6 +123,10 @@ MeasureSaveResult HttpMeasureRepository::updateMeasure(const Measure &measure)
         const QJsonValue current = obj.value(QStringLiteral("current"));
         if (current.isObject())
             return MeasureSaveResult::conflict(measureFromJson(current.toObject()));
+        if (isReviewLockedJson(obj)) {
+            m_lastError = reviewLockMessage();
+            return MeasureSaveResult::reviewLocked();
+        }
     }
 
     m_lastError = m_client.lastError();
@@ -131,7 +139,10 @@ bool HttpMeasureRepository::deleteMeasure(int measureId)
 {
     int status = 0;
     if (!m_client.del(QStringLiteral("/api/v1/measures/%1").arg(measureId), &status)) {
-        m_lastError = m_client.lastError();
+        if (m_client.lastError() == QStringLiteral("review_locked"))
+            m_lastError = reviewLockMessage();
+        else
+            m_lastError = m_client.lastError();
         return false;
     }
     return status == 204;

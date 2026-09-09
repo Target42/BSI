@@ -22,10 +22,10 @@ func (u *webUI) workplaceGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	u.renderWorkplace(w, r, user, project, roleCanEdit(role), target, "")
+	u.renderWorkplace(w, r, user, project, role, target, "")
 }
 
-func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, canEdit bool, target domain.TargetObject, errMsg string) {
+func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, role string, target domain.TargetObject, errMsg string) {
 	objects, err := u.store.ListTargetObjects(r.Context(), project.ID)
 	if err != nil {
 		http.Error(w, "Zielobjekte konnten nicht geladen werden.", http.StatusInternalServerError)
@@ -39,6 +39,11 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 	own, inherited, err := u.inheritedMaps(r, project.ID, objects, target)
 	if err != nil {
 		http.Error(w, "Anwendbarkeit konnte nicht geladen werden.", http.StatusInternalServerError)
+		return
+	}
+	reviews, err := u.store.ListBausteinReviews(r.Context(), project.ID, target.ID)
+	if err != nil {
+		http.Error(w, "Laufzettel konnten nicht geladen werden.", http.StatusInternalServerError)
 		return
 	}
 	merged := service.MergeApplicability(own, inherited)
@@ -107,6 +112,10 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 		}
 		total, open := countWorkplaceProgress(reqsByBaustein[b.ID], target.ProtectionNeed, assessments)
 		rec := recs[b.ID]
+		review := reviews[b.ID]
+		if review.State == "" {
+			review = domain.DefaultBausteinReview(project.ID, target.ID, b.ID)
+		}
 		row := webWorkBaustein{
 			Baustein:      b,
 			Status:        current,
@@ -116,6 +125,9 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 			RecommendTier: rec.Tier,
 			OpenCount:     open,
 			TotalCount:    total,
+			ReviewState:   review.State,
+			ReviewLabel:   domain.ReviewStateLabel(review.State),
+			ReviewNote:    review.ReviewNote,
 		}
 		rows = append(rows, row)
 		if b.ID == selectedID {
@@ -143,7 +155,12 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 				st = "Offen"
 			}
 			overdue := assessment.DueDate != nil && *assessment.DueDate < today && st != "Erfüllt" && st != "Entfällt"
-			workReqs = append(workReqs, webWorkReq{Requirement: req, Status: st, Overdue: overdue})
+			workReqs = append(workReqs, webWorkReq{
+				Requirement: req,
+				Status:      st,
+				Overdue:     overdue,
+				Returned:    domain.ContainsReturnedRequirementID(reviews[selected.ID].ReturnedRequirementIDs, req.ID),
+			})
 		}
 	}
 
@@ -156,10 +173,30 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 		}
 		notice = germanCount(n, "Anforderung", "Anforderungen") + " auf " + to + " gesetzt."
 	}
+	if errMsg == "" && notice == "" {
+		switch r.URL.Query().Get("saved") {
+		case domain.ReviewActionSubmit, domain.ReviewActionReturn, domain.ReviewActionAccept:
+			notice = reviewActionMessage(r.URL.Query().Get("saved"))
+		}
+	}
+
+	canEdit := roleCanEdit(role)
+	selectedReview := domain.DefaultBausteinReview(project.ID, target.ID, selected.ID)
+	if selected.ID != 0 {
+		if item, ok := reviews[selected.ID]; ok {
+			selectedReview = item
+		} else {
+			selectedReview.State = selected.ReviewState
+			selectedReview.ReviewNote = selected.ReviewNote
+		}
+	}
+	reviewLocked := selected.ID != 0 && !selected.Inherited &&
+		!domain.ReviewAllowsBausteinEdit(project.WorkflowEnabled, selectedReview.State, selectedReview.ReturnedRequirementIDs)
 
 	u.render(w, r, "workplace", webPage{
 		DisplayName:        user.DisplayName,
 		CanEdit:            canEdit,
+		CanOwn:             roleCanOwn(role),
 		Project:            project,
 		Target:             target,
 		Query:              query,
@@ -172,8 +209,13 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 		HighlightID:        selected.ID,
 		Inherited:          selected.Inherited,
 		AssessmentStatuses: webAssessmentStatuses,
-		Error:              errMsg,
-		Notice:             notice,
+		Review:             selectedReview,
+		CanSubmit:          domain.CanSubmitReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role),
+		CanReview: domain.CanReturnReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role) ||
+			domain.CanAcceptReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role),
+		ReviewLocked: reviewLocked,
+		Error:        errMsg,
+		Notice:       notice,
 	})
 }
 

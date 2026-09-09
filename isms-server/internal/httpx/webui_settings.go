@@ -3,6 +3,7 @@ package httpx
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
@@ -43,10 +44,11 @@ func (u *webUI) projectSettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, err := u.store.UpdateProject(r.Context(), domain.Project{
-		ID:          project.ID,
-		Name:        name,
-		Description: strings.TrimSpace(r.FormValue("description")),
-		Visibility:  visibilityForSave(project, role, r.FormValue("visibility")),
+		ID:              project.ID,
+		Name:            name,
+		Description:     strings.TrimSpace(r.FormValue("description")),
+		Visibility:      visibilityForSave(project, role, r.FormValue("visibility")),
+		WorkflowEnabled: workflowEnabledForSave(project, role, r.Form),
 	})
 	if err != nil {
 		u.renderProjectSettings(w, r, user, project, role, "Projekt konnte nicht gespeichert werden.")
@@ -81,4 +83,15 @@ func visibilityForSave(project domain.Project, role, formValue string) string {
 		return domain.NormalizeVisibility(formValue)
 	}
 	return domain.NormalizeVisibility(project.Visibility)
+}
+
+func workflowEnabledForSave(project domain.Project, role string, form url.Values) bool {
+	if !roleCanOwn(role) {
+		return project.WorkflowEnabled
+	}
+	values := form["workflowEnabled"]
+	if len(values) == 0 {
+		return project.WorkflowEnabled
+	}
+	return values[len(values)-1] == "1"
 }

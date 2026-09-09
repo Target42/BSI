@@ -42,11 +42,19 @@ struct CockpitItem {
     int measureId = 0;
     AssessmentStatus assessmentStatus = AssessmentStatus::Open;
     MeasureStatus measureStatus = MeasureStatus::Open;
+    QString reviewState;
+};
+
+enum class CockpitReviewFilter {
+    All,
+    Submitted,
+    Returned
 };
 
 struct CockpitFilter {
     CockpitKindFilter kind = CockpitKindFilter::All;
     CockpitDueFilter due = CockpitDueFilter::All;
+    CockpitReviewFilter review = CockpitReviewFilter::All;
     bool hideDone = true;
     bool mineOnly = false;
     QString currentUserName;
@@ -60,6 +68,8 @@ struct CockpitSummary {
     int measureCount = 0;
     int overdueCount = 0;
     int dueThisWeekCount = 0;
+    int submittedCount = 0;
+    int returnedCount = 0;
 };
 
 inline QString cockpitKindToString(CockpitKind kind)

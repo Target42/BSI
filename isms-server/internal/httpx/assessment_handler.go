@@ -105,6 +105,13 @@ func (h *AssessmentHandler) SaveAssessment(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "access check failed")
 		return
 	}
+	if err := h.store.RequireRequirementWritable(r.Context(), projectID, targetObjectID, requirementID); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
 	var req saveAssessmentRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
@@ -198,6 +205,13 @@ func (h *AssessmentHandler) SaveApplicability(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusInternalServerError, "access check failed")
 		return
 	}
+	if err := h.store.RequireBausteinWritable(r.Context(), projectID, targetObjectID, bausteinID); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
 	var req saveApplicabilityRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
@@ -237,6 +251,13 @@ func (h *AssessmentHandler) DeleteApplicability(w http.ResponseWriter, r *http.R
 		return
 	}
 	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	if err := h.store.RequireBausteinWritable(r.Context(), projectID, targetObjectID, bausteinID); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -302,6 +323,13 @@ func (h *AssessmentHandler) SaveDeviation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	if err := h.store.RequireBausteinWritable(r.Context(), projectID, targetObjectID, bausteinID); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}

@@ -2,6 +2,7 @@
 #define PERSISTENCE_ITARGETOBJECTREPOSITORY_H
 
 #include "domain/BausteinApplicability.h"
+#include "domain/BausteinReview.h"
 #include "domain/TargetObject.h"
 
 #include <QHash>
@@ -27,6 +28,12 @@ public:
     virtual QString loadDeviation(int projectId, int targetObjectId, int bausteinDbId) const = 0;
     virtual bool saveDeviation(int projectId, int targetObjectId, int bausteinDbId,
                                const QString &note) = 0;
+
+    virtual QHash<int, BausteinReview> loadReviews(int projectId, int targetObjectId) const = 0;
+    virtual QList<BausteinReview> loadProjectReviews(int projectId) const = 0;
+    virtual ReviewSaveResult applyReview(int projectId, int targetObjectId, int bausteinId,
+                                         const QString &action, const QString &note,
+                                         const QList<int> &requirementIds = {}) = 0;
 
     virtual QString lastError() const = 0;
 };

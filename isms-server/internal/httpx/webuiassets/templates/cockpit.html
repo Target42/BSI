@@ -20,6 +20,7 @@
       <p class="lede">Status leicht anpassen, einzelne Maßnahme vollständig bearbeiten. Der Verbund bleibt im Desktop-Client.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+      {{if .ReviewSummary}}<p class="lede">{{.ReviewSummary}}</p>{{end}}
 
       <form class="toolbar" method="get" action="{{href (printf "/projects/%d/cockpit" .Project.ID)}}">
         <div class="field">
@@ -34,6 +35,16 @@
             {{end}}
           </select>
         </div>
+        {{if .Project.WorkflowEnabled}}
+        <div class="field">
+          <label for="review">Laufzettel</label>
+          <select id="review" name="review">
+            {{range .ReviewFilters}}
+            <option value="{{.}}" {{if eq . $.ReviewFilter}}selected{{end}}>{{reviewFilterLabel .}}</option>
+            {{end}}
+          </select>
+        </div>
+        {{end}}
         <label class="check">
           <input type="checkbox" name="hideDone" value="1" {{if .HideDone}}checked{{end}}>
           Erledigte ausblenden
@@ -47,6 +58,39 @@
         <button class="btn" type="submit">Filtern</button>
       </form>
 
+      {{if .ReviewQueue}}
+      <h2>Laufzettel</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Zielobjekt</th>
+              <th>Baustein</th>
+              <th>Laufzettel</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .ReviewQueue}}
+            <tr>
+              <td>{{if .TargetObjectName}}{{.TargetObjectName}}{{else}}—{{end}}</td>
+              <td>{{if .BausteinExternalID}}{{.BausteinExternalID}} {{.BausteinTitle}}{{else}}Baustein {{.BausteinID}}{{end}}</td>
+              <td>
+                <span class="{{statusClass (reviewLabel .State) false}}">{{reviewLabel .State}}</span>
+                {{if .ReviewNote}}<div class="muted">{{.ReviewNote}}</div>{{end}}
+              </td>
+              <td>
+                <a href="{{href (printf "/projects/%d/targets/%d?baustein=%d" $.Project.ID .TargetObjectID .BausteinID)}}">Öffnen</a>
+              </td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else if and .Project.WorkflowEnabled (or (eq .ReviewFilter "submitted") (eq .ReviewFilter "returned"))}}
+        <p class="muted">Keine Bausteine für diesen Laufzettel-Filter.</p>
+      {{end}}
+
       {{if not .Measures}}
         <p class="muted">Keine Maßnahmen für diesen Filter.</p>
       {{else}}
@@ -56,6 +100,7 @@
               <tr>
                 <th>Maßnahme</th>
                 <th>Status</th>
+                <th>Laufzettel</th>
                 <th>Verantwortlich</th>
                 <th>Frist</th>
                 {{if .CanEdit}}<th>Ändern</th>{{end}}
@@ -72,6 +117,7 @@
                     {{.Status}}{{if .Overdue}} · überfällig{{end}}
                   </span>
                 </td>
+                <td>{{if .ReviewLabel}}{{.ReviewLabel}}{{else}}—{{end}}</td>
                 <td>{{if .Responsible}}{{.Responsible}}{{else}}—{{end}}</td>
                 <td>{{formatDue .DueDate}}</td>
                 {{if $.CanEdit}}

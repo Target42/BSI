@@ -24,6 +24,9 @@
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
+      {{if .ReviewLocked}}
+        <div class="notice">Dieser Baustein ist zur Prüfung oder abgenommen. Die Maßnahme kann nicht geändert werden.</div>
+      {{end}}
       {{if .CanEdit}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/measures/%d/edit" .Project.ID .Measure.ID)}}">
         {{template "csrf" .}}
@@ -79,7 +82,7 @@
         <p>Verantwortlich: {{if .Measure.Responsible}}{{.Measure.Responsible}}{{else}}—{{end}}</p>
         <p>Frist: {{formatDue .Measure.DueDate}}</p>
         {{if .Measure.Description}}<div class="req-text">{{.Measure.Description}}</div>{{end}}
-        <p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>
+        <p class="muted">{{if .ReviewLocked}}Eingereichte oder abgenommene Bausteine können nicht geändert werden.{{else}}Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.{{end}}</p>
       </div>
       {{end}}
     </main>

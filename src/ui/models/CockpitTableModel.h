@@ -18,6 +18,7 @@ public:
         RequirementColumn,
         TitleColumn,
         StatusColumn,
+        ReviewColumn,
         ResponsibleColumn,
         DueDateColumn,
         ColumnCount

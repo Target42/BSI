@@ -22,7 +22,8 @@ namespace {
 
 QStringList roleOptions()
 {
-    return {QStringLiteral("owner"), QStringLiteral("editor"), QStringLiteral("viewer")};
+    return {QStringLiteral("owner"), QStringLiteral("reviewer"), QStringLiteral("editor"),
+            QStringLiteral("viewer")};
 }
 
 } // namespace
@@ -123,6 +124,8 @@ QString ProjectMembersDialog::roleLabel(const QString &role)
         return QCoreApplication::translate("ProjectMembersDialog", "Besitzer");
     if (role == QStringLiteral("editor"))
         return QCoreApplication::translate("ProjectMembersDialog", "Bearbeiter");
+    if (role == QStringLiteral("reviewer"))
+        return QCoreApplication::translate("ProjectMembersDialog", "Prüfer");
     if (role == QStringLiteral("viewer"))
         return QCoreApplication::translate("ProjectMembersDialog", "Leser");
     return role;

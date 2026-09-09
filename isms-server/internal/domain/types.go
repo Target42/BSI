@@ -12,15 +12,16 @@ type User struct {
 }
 
 type Project struct {
-	ID             int64     `json:"id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	CatalogVersion string    `json:"catalogVersion"`
-	Visibility     string    `json:"visibility"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
-	Role           string    `json:"role,omitempty"`
-	IsMember       bool      `json:"isMember"`
+	ID              int64     `json:"id"`
+	Name            string    `json:"name"`
+	Description     string    `json:"description"`
+	CatalogVersion  string    `json:"catalogVersion"`
+	Visibility      string    `json:"visibility"`
+	WorkflowEnabled bool      `json:"workflowEnabled"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	Role            string    `json:"role,omitempty"`
+	IsMember        bool      `json:"isMember"`
 }
 
 type TargetObject struct {

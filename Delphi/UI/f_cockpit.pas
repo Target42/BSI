@@ -32,8 +32,11 @@ type
     FFilter: TCockpitFilter;
     FSelected: TCockpitItem;
     FService: TCockpitService;
+    lblReview: TLabel;
+    cboReview: TComboBox;
     procedure KindChange(Sender: TObject);
     procedure DueChange(Sender: TObject);
+    procedure ReviewChange(Sender: TObject);
     procedure HideDoneClick(Sender: TObject);
     procedure MineClick(Sender: TObject);
     procedure PersonChange(Sender: TObject);
@@ -118,10 +121,29 @@ begin
   cboDue.Items.Add('Ohne Frist');
   cboDue.ItemIndex := 0;
 
+  lblReview := TLabel.Create(Self);
+  lblReview.Parent := pnlTop;
+  lblReview.Left := 12;
+  lblReview.Top := 50;
+  lblReview.Caption := 'Laufzettel';
+  cboReview := TComboBox.Create(Self);
+  cboReview.Parent := pnlTop;
+  cboReview.Left := 80;
+  cboReview.Top := 46;
+  cboReview.Width := 150;
+  cboReview.Style := csDropDownList;
+  cboReview.Items.Add('Alle');
+  cboReview.Items.Add('Zur Pr'#$00FC'fung');
+  cboReview.Items.Add('Zur'#$00FC'ckgegeben');
+  cboReview.ItemIndex := 0;
+  pnlTop.Height := 120;
+  lblSummary.Top := 76;
+  lblSummary.Height := 36;
+
   chkMine.Enabled := (Trim(FFilter.CurrentUserName) <> '') or
     (Trim(FFilter.CurrentUserEmail) <> '');
 
-  sgItems.ColCount := 8;
+  sgItems.ColCount := 9;
   sgItems.RowCount := 2;
   sgItems.FixedRows := 1;
   sgItems.Cells[0, 0] := 'Art';
@@ -130,20 +152,23 @@ begin
   sgItems.Cells[3, 0] := 'Anforderung';
   sgItems.Cells[4, 0] := 'Titel';
   sgItems.Cells[5, 0] := 'Status';
-  sgItems.Cells[6, 0] := 'Verantwortlich';
-  sgItems.Cells[7, 0] := 'Frist';
+  sgItems.Cells[6, 0] := 'Laufzettel';
+  sgItems.Cells[7, 0] := 'Verantwortlich';
+  sgItems.Cells[8, 0] := 'Frist';
   sgItems.ColWidths[0] := 90;
   sgItems.ColWidths[1] := 150;
   sgItems.ColWidths[2] := 80;
   sgItems.ColWidths[3] := 110;
-  sgItems.ColWidths[4] := 260;
-  sgItems.ColWidths[5] := 110;
-  sgItems.ColWidths[6] := 140;
-  sgItems.ColWidths[7] := 90;
+  sgItems.ColWidths[4] := 220;
+  sgItems.ColWidths[5] := 100;
+  sgItems.ColWidths[6] := 110;
+  sgItems.ColWidths[7] := 130;
+  sgItems.ColWidths[8] := 90;
   EnableGridColumnSizing(sgItems);
 
   cboKind.OnChange := KindChange;
   cboDue.OnChange := DueChange;
+  cboReview.OnChange := ReviewChange;
   chkHideDone.OnClick := HideDoneClick;
   chkMine.OnClick := MineClick;
   edtPerson.OnChange := PersonChange;
@@ -163,6 +188,8 @@ begin
 end;
 
 procedure TCockpitForm.ApplyCurrentFilter;
+var
+  Summary, Queue: TCockpitSummary;
 begin
   case cboKind.ItemIndex of
     1: FFilter.Kind := ckfAssessments;
@@ -178,13 +205,22 @@ begin
   else
     FFilter.Due := cdfAll;
   end;
+  case cboReview.ItemIndex of
+    1: FFilter.Review := crfSubmitted;
+    2: FFilter.Review := crfReturned;
+  else
+    FFilter.Review := crfAll;
+  end;
   FFilter.HideDone := chkHideDone.Checked;
   FFilter.MineOnly := chkMine.Checked;
   FFilter.ResponsibleNeedle := Trim(edtPerson.Text);
   FVisibleItems := TCockpitService.ApplyFilter(FAllItems, FFilter);
   FillGrid;
-  lblSummary.Caption := TCockpitService.FormatSummary(
-    TCockpitService.Summarize(FVisibleItems));
+  Summary := TCockpitService.Summarize(FVisibleItems);
+  Queue := TCockpitService.Summarize(FAllItems);
+  Summary.SubmittedCount := Queue.SubmittedCount;
+  Summary.ReturnedCount := Queue.ReturnedCount;
+  lblSummary.Caption := TCockpitService.FormatSummary(Summary);
 end;
 
 procedure TCockpitForm.FillGrid;
@@ -210,11 +246,15 @@ begin
     sgItems.Cells[3, GridRow] := Item.RequirementExternalId;
     sgItems.Cells[4, GridRow] := Item.Title;
     sgItems.Cells[5, GridRow] := Item.StatusText;
-    sgItems.Cells[6, GridRow] := Item.Responsible;
-    if IsValidDate(Item.DueDate) then
-      sgItems.Cells[7, GridRow] := FormatDateTime('dd.mm.yyyy', Item.DueDate)
+    if Item.ReviewState <> '' then
+      sgItems.Cells[6, GridRow] := ReviewStateLabel(Item.ReviewState)
     else
-      sgItems.Cells[7, GridRow] := '';
+      sgItems.Cells[6, GridRow] := '';
+    sgItems.Cells[7, GridRow] := Item.Responsible;
+    if IsValidDate(Item.DueDate) then
+      sgItems.Cells[8, GridRow] := FormatDateTime('dd.mm.yyyy', Item.DueDate)
+    else
+      sgItems.Cells[8, GridRow] := '';
     sgItems.Objects[0, GridRow] := TObject(I + 1);
   end;
 end;
@@ -250,6 +290,11 @@ begin
 end;
 
 procedure TCockpitForm.DueChange(Sender: TObject);
+begin
+  ApplyCurrentFilter;
+end;
+
+procedure TCockpitForm.ReviewChange(Sender: TObject);
 begin
   ApplyCurrentFilter;
 end;

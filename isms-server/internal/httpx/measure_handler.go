@@ -116,6 +116,13 @@ func (h *MeasureHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "access check failed")
 		return
 	}
+	if err := h.store.RequireRequirementWritable(r.Context(), projectID, targetObjectID, requirementID); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
 
 	var req createMeasureRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -171,6 +178,22 @@ func (h *MeasureHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+
+	current, err := h.store.GetMeasure(r.Context(), measureID)
+	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "measure lookup failed")
+		return
+	}
+	if err := h.store.RequireMeasureWritable(r.Context(), current); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -270,6 +293,21 @@ func (h *MeasureHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	current, err := h.store.GetMeasure(r.Context(), measureID)
+	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "measure lookup failed")
+		return
+	}
+	if err := h.store.RequireMeasureWritable(r.Context(), current); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}

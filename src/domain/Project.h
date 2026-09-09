@@ -10,6 +10,7 @@ struct Project {
     QString description;
     QString catalogVersion;
     QString role;
+    bool workflowEnabled = false;
     QDateTime createdAt;
     QDateTime updatedAt;
 };

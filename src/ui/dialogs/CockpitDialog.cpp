@@ -40,6 +40,11 @@ CockpitDialog::CockpitDialog(AppContext &context, const Project &project, const 
     m_dueBox->addItem(tr("Mit Frist"), static_cast<int>(CockpitDueFilter::HasDate));
     m_dueBox->addItem(tr("Ohne Frist"), static_cast<int>(CockpitDueFilter::NoDate));
 
+    m_reviewBox = new QComboBox(this);
+    m_reviewBox->addItem(tr("Alle"), static_cast<int>(CockpitReviewFilter::All));
+    m_reviewBox->addItem(tr("Zur Prüfung"), static_cast<int>(CockpitReviewFilter::Submitted));
+    m_reviewBox->addItem(tr("Zurückgegeben"), static_cast<int>(CockpitReviewFilter::Returned));
+
     m_hideDoneBox = new QCheckBox(tr("Erledigte ausblenden"), this);
     m_hideDoneBox->setChecked(true);
     m_mineBox = new QCheckBox(tr("Nur meine"), this);
@@ -60,6 +65,8 @@ CockpitDialog::CockpitDialog(AppContext &context, const Project &project, const 
             &CockpitDialog::applyFilter);
     connect(m_dueBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &CockpitDialog::applyFilter);
+    connect(m_reviewBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &CockpitDialog::applyFilter);
     connect(m_hideDoneBox, &QCheckBox::toggled, this, &CockpitDialog::applyFilter);
     connect(m_mineBox, &QCheckBox::toggled, this, &CockpitDialog::applyFilter);
     connect(m_personEdit, &QLineEdit::textChanged, this, &CockpitDialog::applyFilter);
@@ -70,6 +77,8 @@ CockpitDialog::CockpitDialog(AppContext &context, const Project &project, const 
     filterRow->addWidget(m_kindBox);
     filterRow->addWidget(new QLabel(tr("Frist"), this));
     filterRow->addWidget(m_dueBox);
+    filterRow->addWidget(new QLabel(tr("Laufzettel"), this));
+    filterRow->addWidget(m_reviewBox);
     filterRow->addWidget(m_hideDoneBox);
     filterRow->addWidget(m_mineBox);
     filterRow->addWidget(new QLabel(tr("Verantwortlich"), this));
@@ -103,12 +112,17 @@ void CockpitDialog::applyFilter()
 {
     m_filter.kind = static_cast<CockpitKindFilter>(m_kindBox->currentData().toInt());
     m_filter.due = static_cast<CockpitDueFilter>(m_dueBox->currentData().toInt());
+    m_filter.review = static_cast<CockpitReviewFilter>(m_reviewBox->currentData().toInt());
     m_filter.hideDone = m_hideDoneBox->isChecked();
     m_filter.mineOnly = m_mineBox->isChecked();
     m_filter.responsibleNeedle = m_personEdit->text().trimmed();
     const QList<CockpitItem> visible = CockpitService::applyFilter(m_allItems, m_filter);
     m_model->setItems(visible);
-    m_summaryLabel->setText(CockpitService::formatSummary(CockpitService::summarize(visible)));
+    CockpitSummary summary = CockpitService::summarize(visible);
+    const CockpitSummary queue = CockpitService::summarize(m_allItems);
+    summary.submittedCount = queue.submittedCount;
+    summary.returnedCount = queue.returnedCount;
+    m_summaryLabel->setText(CockpitService::formatSummary(summary));
     if (m_model->rowCount() > 0)
         m_table->selectRow(0);
 }

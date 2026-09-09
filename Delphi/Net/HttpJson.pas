@@ -11,6 +11,7 @@ function BausteinFromJson(AObj: TJSONObject): TBaustein;
 function RequirementFromJson(AObj: TJSONObject): TRequirement;
 function AssessmentFromJson(AObj: TJSONObject): TRequirementAssessment;
 function MeasureFromJson(AObj: TJSONObject): TMeasure;
+function BausteinReviewFromJson(AObj: TJSONObject): TBausteinReview;
 function ServerUserFromJson(AObj: TJSONObject): TServerUser;
 function ProjectMemberFromJson(AObj: TJSONObject): TProjectMember;
 function RepairUtf8Mojibake(const S: string): string;
@@ -18,6 +19,8 @@ function JsonStringValue(AObj: TJSONObject; const AName: string;
   const ADefault: string = ''): string;
 function JsonBoolValue(AObj: TJSONObject; const AName: string;
   ADefault: Boolean = False): Boolean;
+function JsonErrorCode(AObj: TJSONObject): string;
+function IsReviewLockedJson(AObj: TJSONObject): Boolean;
 procedure AddTargetObjectJsonFields(ABody: TJSONObject; const ATarget: TTargetObject);
 
 implementation
@@ -121,6 +124,7 @@ begin
   Result.Visibility := NormalizeProjectVisibility(JsonStringValue(AObj, 'visibility'));
   Result.Role := JsonStringValue(AObj, 'role');
   Result.IsMember := JsonBoolValue(AObj, 'isMember');
+  Result.WorkflowEnabled := JsonBoolValue(AObj, 'workflowEnabled');
   Result.CreatedAt := ParseDateTimeValue(AObj.GetValue('createdAt'));
   Result.UpdatedAt := ParseDateTimeValue(AObj.GetValue('updatedAt'));
 end;
@@ -203,6 +207,45 @@ begin
   Result.DueDate := ParseDateValue(AObj.GetValue('dueDate'));
   Result.Status := MeasureStatusFromString(JsonStringValue(AObj, 'status'));
   Result.Version := AObj.GetValue<Integer>('version', 0);
+end;
+
+function JsonErrorCode(AObj: TJSONObject): string;
+begin
+  Result := '';
+  if AObj = nil then
+    Exit;
+  Result := JsonStringValue(AObj, 'error');
+end;
+
+function IsReviewLockedJson(AObj: TJSONObject): Boolean;
+begin
+  Result := JsonErrorCode(AObj) = 'review_locked';
+end;
+
+function BausteinReviewFromJson(AObj: TJSONObject): TBausteinReview;
+var
+  Arr: TJSONArray;
+  I: Integer;
+  Value: TJSONValue;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.ProjectId := AObj.GetValue<Integer>('projectId', 0);
+  Result.TargetObjectId := AObj.GetValue<Integer>('targetObjectId', 0);
+  Result.BausteinId := AObj.GetValue<Integer>('bausteinId', 0);
+  Result.State := NormalizeReviewState(JsonStringValue(AObj, 'state'));
+  Result.ReviewNote := JsonStringValue(AObj, 'reviewNote');
+  if AObj.TryGetValue<TJSONArray>('returnedRequirementIds', Arr) and (Arr <> nil) then
+  begin
+    SetLength(Result.ReturnedRequirementIds, Arr.Count);
+    for I := 0 to Arr.Count - 1 do
+    begin
+      Value := Arr.Items[I];
+      if Value is TJSONNumber then
+        Result.ReturnedRequirementIds[I] := TJSONNumber(Value).AsInt
+      else
+        Result.ReturnedRequirementIds[I] := StrToIntDef(Value.Value, 0);
+    end;
+  end;
 end;
 
 function ServerUserFromJson(AObj: TJSONObject): TServerUser;

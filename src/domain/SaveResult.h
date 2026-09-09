@@ -5,7 +5,7 @@
 #include "domain/RequirementAssessment.h"
 
 struct AssessmentSaveResult {
-    enum class Status { Ok, VersionConflict, Forbidden, Failed };
+    enum class Status { Ok, VersionConflict, Forbidden, ReviewLocked, Failed };
 
     Status status = Status::Failed;
     RequirementAssessment assessment;
@@ -33,6 +33,13 @@ struct AssessmentSaveResult {
         return result;
     }
 
+    static AssessmentSaveResult reviewLocked()
+    {
+        AssessmentSaveResult result;
+        result.status = Status::ReviewLocked;
+        return result;
+    }
+
     static AssessmentSaveResult failed()
     {
         return AssessmentSaveResult{};
@@ -40,7 +47,7 @@ struct AssessmentSaveResult {
 };
 
 struct MeasureSaveResult {
-    enum class Status { Ok, VersionConflict, Forbidden, Failed };
+    enum class Status { Ok, VersionConflict, Forbidden, ReviewLocked, Failed };
 
     Status status = Status::Failed;
     Measure measure;
@@ -65,6 +72,13 @@ struct MeasureSaveResult {
     {
         MeasureSaveResult result;
         result.status = Status::Forbidden;
+        return result;
+    }
+
+    static MeasureSaveResult reviewLocked()
+    {
+        MeasureSaveResult result;
+        result.status = Status::ReviewLocked;
         return result;
     }
 

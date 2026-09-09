@@ -20,9 +20,10 @@ const (
 	VisibilityPublic  = "public"
 	VisibilityPrivate = "private"
 
-	RoleOwner  = "owner"
-	RoleEditor = "editor"
-	RoleViewer = "viewer"
+	RoleOwner    = "owner"
+	RoleEditor   = "editor"
+	RoleReviewer = "reviewer"
+	RoleViewer   = "viewer"
 )
 
 // RequirementLevelApplies mirrors ProtectionNeed logic from the Qt client.
@@ -255,6 +256,8 @@ func VisibilityLabel(value string) string {
 func RoleRank(role string) int {
 	switch role {
 	case RoleOwner:
+		return 4
+	case RoleReviewer:
 		return 3
 	case RoleEditor:
 		return 2
@@ -265,9 +268,24 @@ func RoleRank(role string) int {
 	}
 }
 
+func CanEditContent(role string) bool {
+	return role == RoleOwner || role == RoleEditor
+}
+
+func CanReview(role string) bool {
+	return role == RoleOwner || role == RoleReviewer
+}
+
 // ResolveProjectRole decides whether a caller may act with minRole.
 // memberRole is empty when the caller is not in project_members.
+// minRole editor is special: reviewers outrank editors but must not edit content.
 func ResolveProjectRole(memberRole, visibility, minRole string) (role string, ok bool) {
+	if minRole == RoleEditor {
+		if CanEditContent(memberRole) {
+			return memberRole, true
+		}
+		return memberRole, false
+	}
 	if memberRole != "" && RoleRank(memberRole) >= RoleRank(minRole) {
 		return memberRole, true
 	}

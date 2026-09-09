@@ -113,6 +113,10 @@ var
   List: TList<TCockpitItem>;
   Key: string;
   Linked: TReportRow;
+  Reviews: TArray<TBausteinReview>;
+  Review: TBausteinReview;
+  ReviewStateByKey: TDictionary<string, string>;
+  I: Integer;
 begin
   List := TList<TCockpitItem>.Create;
   ReqById := TDictionary<Integer, TRequirement>.Create;
@@ -186,6 +190,23 @@ begin
       List.Add(Item);
     end;
 
+    Reviews := FTarget.LoadProjectReviews(AProjectId);
+    ReviewStateByKey := TDictionary<string, string>.Create;
+    try
+      for Review in Reviews do
+        ReviewStateByKey.AddOrSetValue(Format('%d:%d', [Review.TargetObjectId, Review.BausteinId]),
+          NormalizeReviewState(Review.State));
+      for I := 0 to List.Count - 1 do
+      begin
+        Item := List[I];
+        if (Item.BausteinDbId > 0) and ReviewStateByKey.TryGetValue(
+          Format('%d:%d', [Item.TargetObjectId, Item.BausteinDbId]), Item.ReviewState) then
+          List[I] := Item;
+      end;
+    finally
+      ReviewStateByKey.Free;
+    end;
+
     List.Sort(TComparer<TCockpitItem>.Construct(
       function(const L, R: TCockpitItem): Integer
       begin
@@ -219,8 +240,16 @@ begin
           if Item.Kind <> ckMeasure then
             Continue;
       end;
-      if AFilter.HideDone and CockpitItemIsDone(Item) then
+      if AFilter.HideDone and (AFilter.Review = crfAll) and CockpitItemIsDone(Item) then
         Continue;
+      case AFilter.Review of
+        crfSubmitted:
+          if NormalizeReviewState(Item.ReviewState) <> ReviewStateSubmitted then
+            Continue;
+        crfReturned:
+          if NormalizeReviewState(Item.ReviewState) <> ReviewStateReturned then
+            Continue;
+      end;
       case AFilter.Due of
         cdfOverdue:
           if not Item.Overdue then
@@ -257,19 +286,37 @@ end;
 class function TCockpitService.Summarize(const AItems: TArray<TCockpitItem>): TCockpitSummary;
 var
   Item: TCockpitItem;
+  SubmittedKeys, ReturnedKeys: TDictionary<string, Byte>;
+  Key: string;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.TotalCount := Length(AItems);
-  for Item in AItems do
-  begin
-    case Item.Kind of
-      ckAssessment: Inc(Result.AssessmentCount);
-      ckMeasure: Inc(Result.MeasureCount);
+  SubmittedKeys := TDictionary<string, Byte>.Create;
+  ReturnedKeys := TDictionary<string, Byte>.Create;
+  try
+    for Item in AItems do
+    begin
+      case Item.Kind of
+        ckAssessment: Inc(Result.AssessmentCount);
+        ckMeasure: Inc(Result.MeasureCount);
+      end;
+      if Item.Overdue then
+        Inc(Result.OverdueCount);
+      if IsDueThisWeek(Item.DueDate) then
+        Inc(Result.DueThisWeekCount);
+      if Item.BausteinDbId <= 0 then
+        Continue;
+      Key := Format('%d:%d', [Item.TargetObjectId, Item.BausteinDbId]);
+      if NormalizeReviewState(Item.ReviewState) = ReviewStateSubmitted then
+        SubmittedKeys.AddOrSetValue(Key, 0)
+      else if NormalizeReviewState(Item.ReviewState) = ReviewStateReturned then
+        ReturnedKeys.AddOrSetValue(Key, 0);
     end;
-    if Item.Overdue then
-      Inc(Result.OverdueCount);
-    if IsDueThisWeek(Item.DueDate) then
-      Inc(Result.DueThisWeekCount);
+    Result.SubmittedCount := SubmittedKeys.Count;
+    Result.ReturnedCount := ReturnedKeys.Count;
+  finally
+    ReturnedKeys.Free;
+    SubmittedKeys.Free;
   end;
 end;
 
@@ -300,6 +347,16 @@ begin
   begin
     SetLength(Parts, Length(Parts) + 1);
     Parts[High(Parts)] := Format('%d diese Woche', [ASummary.DueThisWeekCount]);
+  end;
+  if ASummary.SubmittedCount > 0 then
+  begin
+    SetLength(Parts, Length(Parts) + 1);
+    Parts[High(Parts)] := Format('%d zur Pr'#$00FC'fung', [ASummary.SubmittedCount]);
+  end;
+  if ASummary.ReturnedCount > 0 then
+  begin
+    SetLength(Parts, Length(Parts) + 1);
+    Parts[High(Parts)] := Format('%d zur'#$00FC'ckgegeben', [ASummary.ReturnedCount]);
   end;
   if Length(Parts) > 0 then
     Result := Result + ' ' + #$2013 + ' ' + string.Join(', ', Parts);

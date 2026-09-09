@@ -99,6 +99,7 @@ begin
     Body.AddPair('name', AProject.Name);
     Body.AddPair('description', AProject.Description);
     Body.AddPair('visibility', NormalizeProjectVisibility(AProject.Visibility));
+    Body.AddPair('workflowEnabled', TJSONBool.Create(AProject.WorkflowEnabled));
     Doc := FClient.PatchJson(Format('/api/v1/projects/%d', [AProject.Id]), Body, Status);
     try
       if Status <> 200 then
@@ -181,6 +182,11 @@ begin
         Current := Obj.GetValue('current');
         if (Current <> nil) and (Current is TJSONObject) then
           Exit(AssessmentSaveConflict(AssessmentFromJson(TJSONObject(Current))));
+        if IsReviewLockedJson(Obj) then
+        begin
+          FLastError := ReviewLockMessage;
+          Exit(AssessmentSaveReviewLocked);
+        end;
         FLastError := 'Datensatz wurde zwischenzeitlich geändert. Bitte neu laden.';
         Exit;
       end;

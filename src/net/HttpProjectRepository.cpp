@@ -1,6 +1,7 @@
 #include "HttpProjectRepository.h"
 
 #include "domain/AssessmentStatus.h"
+#include "domain/BausteinReview.h"
 #include "net/HttpJson.h"
 
 #include <QJsonArray>
@@ -51,6 +52,7 @@ bool HttpProjectRepository::updateProject(const Project &project)
     QJsonObject body;
     body.insert(QStringLiteral("name"), project.name);
     body.insert(QStringLiteral("description"), project.description);
+    body.insert(QStringLiteral("workflowEnabled"), project.workflowEnabled);
 
     int status = 0;
     m_client.patch(QStringLiteral("/api/v1/projects/%1").arg(project.id), body, &status);
@@ -113,6 +115,10 @@ AssessmentSaveResult HttpProjectRepository::saveAssessment(const RequirementAsse
         const QJsonValue current = obj.value(QStringLiteral("current"));
         if (current.isObject())
             return AssessmentSaveResult::conflict(assessmentFromJson(current.toObject()));
+        if (isReviewLockedJson(obj)) {
+            m_lastError = reviewLockMessage();
+            return AssessmentSaveResult::reviewLocked();
+        }
     }
 
     m_lastError = m_client.lastError();

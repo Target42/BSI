@@ -24,6 +24,7 @@ type Server struct {
 	reportHandler     *ReportHandler
 	adminHandler      *AdminHandler
 	memberHandler     *MemberHandler
+	reviewHandler     *ReviewHandler
 	webUI             *webUI
 	limiter           *loginLimiter
 	trustedProxies    []*net.IPNet
@@ -51,6 +52,7 @@ func NewServer(
 		reportHandler:     NewReportHandler(store, reportService),
 		adminHandler:      NewAdminHandler(store),
 		memberHandler:     NewMemberHandler(store),
+		reviewHandler:     NewReviewHandler(store),
 		webUI:             newWebUI(authService, store, reportService, publicBase, limiter),
 		limiter:           limiter,
 	}
@@ -112,6 +114,11 @@ func (s *Server) Router() http.Handler {
 			protected.Delete("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/applicability", s.assessmentHandler.DeleteApplicability)
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/deviation", s.assessmentHandler.GetDeviation)
 			protected.Put("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/deviation", s.assessmentHandler.SaveDeviation)
+
+			protected.Get("/projects/{projectID}/reviews", s.reviewHandler.ListProject)
+			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/reviews", s.reviewHandler.List)
+			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/review", s.reviewHandler.Get)
+			protected.Post("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/review", s.reviewHandler.Apply)
 
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/measure-counts", s.measureHandler.MeasureCounts)
 			protected.Get("/projects/{projectID}/measures", s.measureHandler.ListProject)

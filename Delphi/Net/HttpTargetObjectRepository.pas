@@ -24,6 +24,11 @@ type
     function LoadDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer): string; override;
     function SaveDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer;
       const ANote: string): Boolean; override;
+    function LoadReviews(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, TBausteinReview>; override;
+    function LoadProjectReviews(AProjectId: Integer): TArray<TBausteinReview>; override;
+    function ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
+      const AAction, ANote: string;
+      const ARequirementIds: TArray<Integer>): TReviewSaveResult; override;
     function GetLastError: string; override;
   end;
 
@@ -101,7 +106,12 @@ begin
     Doc := FClient.PatchJson(Format('/api/v1/target-objects/%d', [ATargetObject.Id]), Body, Status);
     try
       if Status <> 200 then
-        FLastError := FClient.LastError
+      begin
+        if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
+          FLastError := ReviewLockMessage
+        else
+          FLastError := FClient.LastError;
+      end
       else
         Result := True;
     finally
@@ -225,7 +235,12 @@ begin
   begin
     Result := FClient.Delete(Path, Status) and (Status = 204);
     if not Result then
-      FLastError := FClient.LastError;
+    begin
+      if FClient.LastError = 'review_locked' then
+        FLastError := ReviewLockMessage
+      else
+        FLastError := FClient.LastError;
+    end;
     Exit;
   end;
 
@@ -235,7 +250,12 @@ begin
     Doc := FClient.PutJson(Path, Body, Status);
     try
       if Status <> 200 then
-        FLastError := FClient.LastError
+      begin
+        if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
+          FLastError := ReviewLockMessage
+        else
+          FLastError := FClient.LastError;
+      end
       else
         Result := True;
     finally
@@ -282,9 +302,130 @@ begin
       [AProjectId, ATargetObjectId, ABausteinDbId]), Body, Status);
     try
       if Status <> 200 then
-        FLastError := FClient.LastError
+      begin
+        if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
+          FLastError := ReviewLockMessage
+        else
+          FLastError := FClient.LastError;
+      end
       else
         Result := True;
+    finally
+      Doc.Free;
+    end;
+  finally
+    Body.Free;
+  end;
+end;
+
+function THttpTargetObjectRepository.LoadReviews(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, TBausteinReview>;
+var
+  Doc: TJSONValue;
+  Arr: TJSONArray;
+  I: Integer;
+  Status: Integer;
+  Review: TBausteinReview;
+begin
+  Result := TDictionary<Integer, TBausteinReview>.Create;
+  Doc := FClient.Get(Format('/api/v1/projects/%d/target-objects/%d/reviews',
+    [AProjectId, ATargetObjectId]), Status);
+  try
+    if (Status <> 200) or not (Doc is TJSONArray) then
+    begin
+      FLastError := FClient.LastError;
+      Exit;
+    end;
+    Arr := TJSONArray(Doc);
+    for I := 0 to Arr.Count - 1 do
+      if Arr.Items[I] is TJSONObject then
+      begin
+        Review := BausteinReviewFromJson(TJSONObject(Arr.Items[I]));
+        if Review.BausteinId > 0 then
+          Result.AddOrSetValue(Review.BausteinId, Review);
+      end;
+  finally
+    Doc.Free;
+  end;
+end;
+
+function THttpTargetObjectRepository.LoadProjectReviews(AProjectId: Integer): TArray<TBausteinReview>;
+var
+  Doc: TJSONValue;
+  Arr: TJSONArray;
+  I: Integer;
+  Status: Integer;
+  List: TList<TBausteinReview>;
+  Review: TBausteinReview;
+begin
+  SetLength(Result, 0);
+  Doc := FClient.Get(Format('/api/v1/projects/%d/reviews', [AProjectId]), Status);
+  try
+    if (Status <> 200) or not (Doc is TJSONArray) then
+    begin
+      FLastError := FClient.LastError;
+      Exit;
+    end;
+    Arr := TJSONArray(Doc);
+    List := TList<TBausteinReview>.Create;
+    try
+      for I := 0 to Arr.Count - 1 do
+        if Arr.Items[I] is TJSONObject then
+        begin
+          Review := BausteinReviewFromJson(TJSONObject(Arr.Items[I]));
+          if Review.BausteinId > 0 then
+            List.Add(Review);
+        end;
+      Result := List.ToArray;
+    finally
+      List.Free;
+    end;
+  finally
+    Doc.Free;
+  end;
+end;
+
+function THttpTargetObjectRepository.ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
+  const AAction, ANote: string; const ARequirementIds: TArray<Integer>): TReviewSaveResult;
+var
+  Body: TJSONObject;
+  Ids: TJSONArray;
+  Doc: TJSONValue;
+  Status: Integer;
+  Code: string;
+  Id: Integer;
+begin
+  Result := ReviewSaveFailed;
+  Body := TJSONObject.Create;
+  try
+    Body.AddPair('action', AAction);
+    Body.AddPair('note', ANote);
+    if Length(ARequirementIds) > 0 then
+    begin
+      Ids := TJSONArray.Create;
+      for Id in ARequirementIds do
+        Ids.Add(Id);
+      Body.AddPair('requirementIds', Ids);
+    end;
+    Doc := FClient.PostJson(Format('/api/v1/projects/%d/target-objects/%d/bausteine/%d/review',
+      [AProjectId, ATargetObjectId, ABausteinId]), Body, Status);
+    try
+      if (Status = 200) and (Doc is TJSONObject) then
+        Exit(ReviewSaveOk(BausteinReviewFromJson(TJSONObject(Doc))));
+      if Doc is TJSONObject then
+        Code := JsonErrorCode(TJSONObject(Doc))
+      else
+        Code := '';
+      if Code <> '' then
+        FLastError := ReviewClientErrorMessage(Code)
+      else
+        FLastError := FClient.LastError;
+      if Status = 403 then
+        Exit(ReviewSaveFailed(rssForbidden));
+      if Code = 'review_note_required' then
+        Exit(ReviewSaveFailed(rssNoteRequired));
+      if (Code = 'invalid_review_transition') or (Code = 'baustein_not_applicable') or
+         (Code = 'workflow_disabled') or (Code = 'invalid_returned_requirements') then
+        Exit(ReviewSaveFailed(rssInvalid));
     finally
       Doc.Free;
     end;

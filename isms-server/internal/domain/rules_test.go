@@ -167,6 +167,11 @@ func TestResolveProjectRole(t *testing.T) {
 		{"viewer", VisibilityPublic, RoleEditor, "viewer", false},
 		{"", "PUBLIC", RoleViewer, RoleViewer, true},
 		{"", "", RoleViewer, "", false},
+		{"reviewer", VisibilityPrivate, RoleViewer, "reviewer", true},
+		{"reviewer", VisibilityPrivate, RoleReviewer, "reviewer", true},
+		{"reviewer", VisibilityPrivate, RoleEditor, "reviewer", false},
+		{"editor", VisibilityPrivate, RoleReviewer, "editor", false},
+		{"owner", VisibilityPrivate, RoleReviewer, "owner", true},
 	}
 	for _, tc := range tests {
 		got, ok := ResolveProjectRole(tc.member, tc.visibility, tc.minRole)

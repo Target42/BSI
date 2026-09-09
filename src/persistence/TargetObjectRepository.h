@@ -26,6 +26,12 @@ public:
     bool saveDeviation(int projectId, int targetObjectId, int bausteinDbId,
                        const QString &note) override;
 
+    QHash<int, BausteinReview> loadReviews(int projectId, int targetObjectId) const override;
+    QList<BausteinReview> loadProjectReviews(int projectId) const override;
+    ReviewSaveResult applyReview(int projectId, int targetObjectId, int bausteinId,
+                                 const QString &action, const QString &note,
+                                 const QList<int> &requirementIds = {}) override;
+
     QString lastError() const override;
 
 private:

@@ -1,6 +1,7 @@
 #include "CockpitService.h"
 
 #include "domain/AssessmentStatus.h"
+#include "domain/BausteinReview.h"
 #include "domain/Measure.h"
 #include "domain/MeasureStatus.h"
 #include "domain/Requirement.h"
@@ -11,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDate>
 #include <QHash>
+#include <QSet>
 #include <QStringList>
 #include <algorithm>
 
@@ -114,6 +116,20 @@ QList<CockpitItem> CockpitService::buildItems(int projectId, const QString &cata
         items.append(item);
     }
 
+    QHash<QString, QString> reviewStateByKey;
+    const QList<BausteinReview> reviews = m_targetObjects.loadProjectReviews(projectId);
+    for (const BausteinReview &review : reviews) {
+        reviewStateByKey.insert(
+            QStringLiteral("%1:%2").arg(review.targetObjectId).arg(review.bausteinId),
+            normalizeReviewState(review.state));
+    }
+    for (CockpitItem &item : items) {
+        if (item.bausteinDbId <= 0)
+            continue;
+        item.reviewState = reviewStateByKey.value(
+            QStringLiteral("%1:%2").arg(item.targetObjectId).arg(item.bausteinDbId));
+    }
+
     std::sort(items.begin(), items.end(), [](const CockpitItem &left, const CockpitItem &right) {
         if (left.overdue != right.overdue)
             return left.overdue;
@@ -144,8 +160,22 @@ QList<CockpitItem> CockpitService::applyFilter(const QList<CockpitItem> &items,
             continue;
         if (filter.kind == CockpitKindFilter::Measures && item.kind != CockpitKind::Measure)
             continue;
-        if (filter.hideDone && cockpitItemIsDone(item))
+        const bool reviewQueue = filter.review == CockpitReviewFilter::Submitted
+            || filter.review == CockpitReviewFilter::Returned;
+        if (filter.hideDone && !reviewQueue && cockpitItemIsDone(item))
             continue;
+        switch (filter.review) {
+        case CockpitReviewFilter::Submitted:
+            if (normalizeReviewState(item.reviewState) != ReviewStateSubmitted)
+                continue;
+            break;
+        case CockpitReviewFilter::Returned:
+            if (normalizeReviewState(item.reviewState) != ReviewStateReturned)
+                continue;
+            break;
+        case CockpitReviewFilter::All:
+            break;
+        }
         switch (filter.due) {
         case CockpitDueFilter::Overdue:
             if (!item.overdue)
@@ -183,6 +213,8 @@ CockpitSummary CockpitService::summarize(const QList<CockpitItem> &items)
 {
     CockpitSummary summary;
     summary.totalCount = items.size();
+    QSet<QString> submittedKeys;
+    QSet<QString> returnedKeys;
     for (const CockpitItem &item : items) {
         if (item.kind == CockpitKind::Assessment)
             ++summary.assessmentCount;
@@ -192,7 +224,17 @@ CockpitSummary CockpitService::summarize(const QList<CockpitItem> &items)
             ++summary.overdueCount;
         if (isDueThisWeek(item.dueDate))
             ++summary.dueThisWeekCount;
+        if (item.bausteinDbId <= 0)
+            continue;
+        const QString key = QStringLiteral("%1:%2").arg(item.targetObjectId).arg(item.bausteinDbId);
+        const QString state = normalizeReviewState(item.reviewState);
+        if (state == ReviewStateSubmitted)
+            submittedKeys.insert(key);
+        else if (state == ReviewStateReturned)
+            returnedKeys.insert(key);
     }
+    summary.submittedCount = submittedKeys.size();
+    summary.returnedCount = returnedKeys.size();
     return summary;
 }
 
@@ -216,6 +258,12 @@ QString CockpitService::formatSummary(const CockpitSummary &summary)
     if (summary.dueThisWeekCount > 0)
         parts << QCoreApplication::translate("CockpitService", "%1 diese Woche")
                      .arg(summary.dueThisWeekCount);
+    if (summary.submittedCount > 0)
+        parts << QCoreApplication::translate("CockpitService", "%1 zur Prüfung")
+                     .arg(summary.submittedCount);
+    if (summary.returnedCount > 0)
+        parts << QCoreApplication::translate("CockpitService", "%1 zurückgegeben")
+                     .arg(summary.returnedCount);
     if (!parts.isEmpty())
         text += QStringLiteral(" – ") + parts.join(QStringLiteral(", "));
     return text;

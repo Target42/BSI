@@ -26,9 +26,10 @@ type createProjectRequest struct {
 }
 
 type updateProjectRequest struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Visibility  *string `json:"visibility"`
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	Visibility      *string `json:"visibility"`
+	WorkflowEnabled *bool   `json:"workflowEnabled"`
 }
 
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -124,11 +125,16 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Visibility != nil && role == "owner" {
 		visibility = *req.Visibility
 	}
+	workflowEnabled := current.WorkflowEnabled
+	if req.WorkflowEnabled != nil && role == "owner" {
+		workflowEnabled = *req.WorkflowEnabled
+	}
 	project, err := h.store.UpdateProject(r.Context(), domain.Project{
-		ID:          projectID,
-		Name:        req.Name,
-		Description: req.Description,
-		Visibility:  visibility,
+		ID:              projectID,
+		Name:            req.Name,
+		Description:     req.Description,
+		Visibility:      visibility,
+		WorkflowEnabled: workflowEnabled,
 	})
 	if err != nil {
 		if mapRepoError(w, err) {

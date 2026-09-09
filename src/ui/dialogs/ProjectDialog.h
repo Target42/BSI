@@ -5,6 +5,7 @@
 
 #include <QDialog>
 
+class QCheckBox;
 class QLineEdit;
 class QTextEdit;
 
@@ -16,11 +17,13 @@ public:
     explicit ProjectDialog(QWidget *parent = nullptr);
 
     void setProject(const Project &project);
+    void setShowWorkflow(bool show);
     Project project() const;
 
 private:
     QLineEdit *m_nameEdit = nullptr;
     QTextEdit *m_descriptionEdit = nullptr;
+    QCheckBox *m_workflowBox = nullptr;
     Project m_project;
 };
 

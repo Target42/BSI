@@ -5,6 +5,7 @@
 #include "catalog/RequirementTextFormatter.h"
 #include "domain/AssessmentStatus.h"
 #include "domain/Baustein.h"
+#include "domain/BausteinReview.h"
 #include "domain/Measure.h"
 #include "domain/SaveResult.h"
 #include "domain/ProtectionNeed.h"
@@ -37,7 +38,10 @@
 #include <QComboBox>
 #include <QDate>
 #include <QDateEdit>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QInputDialog>
 #include <QFileDialog>
 #include <QHash>
 #include <QGridLayout>
@@ -45,6 +49,8 @@
 #include <QItemSelectionModel>
 #include <QKeySequence>
 #include <QLabel>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -277,7 +283,8 @@ void MainWindow::buildUi()
     m_dueDateEdit->setEnabled(false);
     connect(m_hasDueDateBox, &QCheckBox::toggled, this, [this](bool checked) {
         m_dueDateEdit->setEnabled(checked && canEditActiveProject()
-                                  && !isInheritedBaustein(m_activeBausteinId));
+                                  && !isInheritedBaustein(m_activeBausteinId)
+                                  && !activeRequirementLocked());
     });
     connect(m_hasDueDateBox, &QCheckBox::toggled, this, &MainWindow::saveAssessmentFields);
     connect(m_dueDateEdit, &QDateEdit::dateChanged, this, &MainWindow::saveAssessmentFields);
@@ -391,12 +398,37 @@ void MainWindow::buildUi()
     bausteinRow->addWidget(m_reqFilterFulfilledBox);
     bausteinRow->addWidget(m_reqFilterNotApplicableBox);
 
+    m_reviewWidget = new QWidget(this);
+    auto *reviewRow = new QHBoxLayout(m_reviewWidget);
+    reviewRow->setContentsMargins(0, 0, 0, 0);
+    m_reviewLabel = new QLabel(tr("Laufzettel: In Bearbeitung"), m_reviewWidget);
+    m_reviewSubmitButton = new QPushButton(tr("Einreichen"), m_reviewWidget);
+    m_reviewReturnButton = new QPushButton(tr("Zurückgeben"), m_reviewWidget);
+    m_reviewAcceptButton = new QPushButton(tr("Abnehmen"), m_reviewWidget);
+    m_reviewSubmitButton->setToolTip(tr("Reicht den Baustein zur Prüfung ein. Danach sind Bewertungen und Maßnahmen gesperrt."));
+    m_reviewReturnButton->setToolTip(tr("Gibt den Baustein mit Begründung zur Nacharbeit zurück."));
+    m_reviewAcceptButton->setToolTip(tr("Nimmt den Baustein mit den hinterlegten Bewertungen und Maßnahmen ab."));
+    connect(m_reviewSubmitButton, &QPushButton::clicked, this, &MainWindow::submitActiveBausteinReview);
+    connect(m_reviewReturnButton, &QPushButton::clicked, this, &MainWindow::returnActiveBausteinReview);
+    connect(m_reviewAcceptButton, &QPushButton::clicked, this, &MainWindow::acceptActiveBausteinReview);
+    reviewRow->addWidget(m_reviewLabel);
+    reviewRow->addStretch();
+    reviewRow->addWidget(m_reviewSubmitButton);
+    reviewRow->addWidget(m_reviewReturnButton);
+    reviewRow->addWidget(m_reviewAcceptButton);
+    m_reviewNoteLabel = new QLabel(m_reviewWidget);
+    m_reviewNoteLabel->setWordWrap(true);
+    m_reviewNoteLabel->setVisible(false);
+    m_reviewWidget->setVisible(false);
+
     auto *requirementPanel = new QWidget(this);
     auto *requirementLayout = new QVBoxLayout(requirementPanel);
     requirementLayout->setContentsMargins(0, 0, 0, 0);
     requirementLayout->addWidget(m_targetProgressLabel);
     requirementLayout->addWidget(m_targetProgressBar);
     requirementLayout->addLayout(bausteinRow);
+    requirementLayout->addWidget(m_reviewWidget);
+    requirementLayout->addWidget(m_reviewNoteLabel);
     requirementLayout->addWidget(m_requirementTable, 1);
 
     auto *centerSplitter = new QSplitter(Qt::Vertical, this);
@@ -596,6 +628,8 @@ void MainWindow::notifySaveFailure(const QString &repositoryError, bool useDialo
     QString message = repositoryError;
     if (message == QStringLiteral("forbidden"))
         message = tr("Keine Berechtigung zum Speichern. Ihre Rolle erlaubt nur Lesen.");
+    else if (message == QStringLiteral("review_locked"))
+        message = reviewLockMessage();
     else if (message.isEmpty())
         message = tr("Speichern fehlgeschlagen.");
 
@@ -1175,6 +1209,8 @@ void MainWindow::applyInheritedUiState()
     const bool hasTargetObject = hasActiveProjectContext();
     const bool canEdit = hasTargetObject && canEditActiveProject();
     const bool inherited = isInheritedBaustein(m_activeBausteinId);
+    const bool locked = activeRequirementLocked();
+    const bool canEditContent = canEdit && !inherited && !locked;
     if (m_assessmentNoteLabel != nullptr) {
         m_assessmentNoteLabel->setText(inherited ? tr("Abweichungstext") : tr("Umsetzung"));
     }
@@ -1182,38 +1218,39 @@ void MainWindow::applyInheritedUiState()
         m_assessmentNote->setPlaceholderText(
             inherited ? tr("Nur ausfüllen, wenn die Bewertung vom übergeordneten Zielobjekt abweicht.")
                       : tr("Umsetzungsnotiz für die ausgewählte Anforderung"));
-        m_assessmentNote->setEnabled(hasTargetObject && canEdit);
-        m_assessmentNote->setReadOnly(!canEdit);
+        m_assessmentNote->setEnabled(hasTargetObject && canEdit && !locked);
+        m_assessmentNote->setReadOnly(!canEdit || locked);
     }
     if (m_expandNoteButton != nullptr)
         m_expandNoteButton->setEnabled(m_activeRequirementId > 0);
     if (m_statusBox != nullptr)
-        m_statusBox->setEnabled(canEdit && !inherited);
+        m_statusBox->setEnabled(canEditContent);
     if (m_responsibleEdit != nullptr) {
-        m_responsibleEdit->setEnabled(canEdit && !inherited);
-        m_responsibleEdit->setReadOnly(!canEdit || inherited);
+        m_responsibleEdit->setEnabled(canEditContent);
+        m_responsibleEdit->setReadOnly(!canEditContent);
     }
     if (m_hasDueDateBox != nullptr)
-        m_hasDueDateBox->setEnabled(canEdit && !inherited);
+        m_hasDueDateBox->setEnabled(canEditContent);
     if (m_dueDateEdit != nullptr)
-        m_dueDateEdit->setEnabled(canEdit && !inherited && m_hasDueDateBox->isChecked());
+        m_dueDateEdit->setEnabled(canEditContent && m_hasDueDateBox->isChecked());
     if (m_measureTable != nullptr)
         m_measureTable->setEnabled(hasTargetObject);
     if (m_addMeasureButton != nullptr)
-        m_addMeasureButton->setEnabled(canEdit && !inherited);
+        m_addMeasureButton->setEnabled(canEditContent && m_activeRequirementId > 0);
     if (m_deleteMeasureButton != nullptr)
-        m_deleteMeasureButton->setEnabled(canEdit && !inherited);
+        m_deleteMeasureButton->setEnabled(canEditContent && m_activeRequirementId > 0);
     if (m_editMeasureButton != nullptr) {
         m_editMeasureButton->setEnabled(hasTargetObject);
-        m_editMeasureButton->setText((canEdit && !inherited) ? tr("Bearbeiten") : tr("Anzeigen"));
+        m_editMeasureButton->setText(canEditContent ? tr("Bearbeiten") : tr("Anzeigen"));
     }
+    updateReviewUi();
 }
 
 bool MainWindow::saveDeviationNote()
 {
     if (!hasActiveProjectContext() || m_activeBausteinId == 0)
         return true;
-    if (!canEditActiveProject())
+    if (!canEditActiveProject() || activeBausteinLocked())
         return true;
     if (!m_context.targetObjectRepository().saveDeviation(
             m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId,
@@ -1222,6 +1259,166 @@ bool MainWindow::saveDeviationNote()
         return false;
     }
     return true;
+}
+
+bool MainWindow::workflowActive() const
+{
+    return m_context.isRemote() && m_activeProject.workflowEnabled;
+}
+
+bool MainWindow::bausteinReviewLocked(int bausteinDbId) const
+{
+    if (!workflowActive() || bausteinDbId <= 0)
+        return false;
+    const BausteinReview review = m_reviews.value(
+        bausteinDbId, defaultBausteinReview(m_activeProject.id, m_activeTargetObject.id, bausteinDbId));
+    return !reviewAllowsBausteinEdit(true, review.state, review.returnedRequirementIds);
+}
+
+bool MainWindow::activeBausteinLocked() const
+{
+    return bausteinReviewLocked(m_activeBausteinId);
+}
+
+bool MainWindow::activeRequirementLocked() const
+{
+    if (!workflowActive())
+        return false;
+    const BausteinReview review = currentReview();
+    return !reviewAllowsRequirementEdit(true, review.state, review.returnedRequirementIds,
+                                        m_activeRequirementId);
+}
+
+BausteinReview MainWindow::currentReview() const
+{
+    return m_reviews.value(
+        m_activeBausteinId,
+        defaultBausteinReview(m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId));
+}
+
+void MainWindow::reloadReviews()
+{
+    m_reviews.clear();
+    if (!workflowActive() || !hasActiveProjectContext())
+        return;
+    m_reviews = m_context.targetObjectRepository().loadReviews(m_activeProject.id,
+                                                               m_activeTargetObject.id);
+}
+
+void MainWindow::updateReviewUi()
+{
+    if (m_reviewWidget == nullptr)
+        return;
+
+    const bool visible = workflowActive() && hasActiveProjectContext() && m_activeBausteinId > 0;
+    m_reviewWidget->setVisible(visible);
+    if (m_reviewNoteLabel != nullptr)
+        m_reviewNoteLabel->setVisible(false);
+    if (!visible)
+        return;
+
+    const BausteinReview review = currentReview();
+    const bool inherited = isInheritedBaustein(m_activeBausteinId);
+    const QString role = m_activeProject.role;
+    m_reviewLabel->setText(tr("Laufzettel: %1").arg(reviewStateLabel(review.state)));
+    m_reviewSubmitButton->setVisible(canSubmitReview(true, inherited, review.state, role));
+    m_reviewReturnButton->setVisible(canReturnReview(true, inherited, review.state, role));
+    m_reviewAcceptButton->setVisible(canAcceptReview(true, inherited, review.state, role));
+    if (m_reviewNoteLabel != nullptr) {
+        const bool showNote = review.state == ReviewStateReturned && !review.reviewNote.trimmed().isEmpty();
+        m_reviewNoteLabel->setVisible(showNote);
+        if (showNote)
+            m_reviewNoteLabel->setText(tr("Rückgabe: %1").arg(review.reviewNote.trimmed()));
+    }
+}
+
+bool MainWindow::applyReviewAction(const QString &action, const QString &note,
+                                   const QList<int> &requirementIds)
+{
+    if (!workflowActive() || !hasActiveProjectContext() || m_activeBausteinId <= 0)
+        return false;
+
+    const ReviewSaveResult result = m_context.targetObjectRepository().applyReview(
+        m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId, action, note,
+        requirementIds);
+    if (result.status != ReviewSaveResult::Status::Ok) {
+        QMessageBox::warning(this, tr("Laufzettel"), m_context.targetObjectRepository().lastError());
+        return false;
+    }
+
+    m_reviews.insert(m_activeBausteinId, result.review);
+    applyInheritedUiState();
+    showTemporaryStatusMessage(reviewActionMessage(action));
+    return true;
+}
+
+void MainWindow::submitActiveBausteinReview()
+{
+    applyReviewAction(ReviewActionSubmit);
+}
+
+void MainWindow::returnActiveBausteinReview()
+{
+    QString note;
+    QList<int> requirementIds;
+    if (!promptReviewReturn(&note, &requirementIds))
+        return;
+    applyReviewAction(ReviewActionReturn, note, requirementIds);
+}
+
+bool MainWindow::promptReviewReturn(QString *note, QList<int> *requirementIds)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Zurückgeben"));
+    dialog.setModal(true);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(
+        tr("Keine Auswahl gibt den ganzen Baustein zurück. Mit Auswahl bleiben die anderen Anforderungen gesperrt."),
+        &dialog));
+    auto *list = new QListWidget(&dialog);
+    list->setSelectionMode(QAbstractItemView::NoSelection);
+    const QList<int> alreadyReturned = currentReview().returnedRequirementIds;
+    if (m_requirementModel != nullptr) {
+        for (int row = 0; row < m_requirementModel->rowCount(); ++row) {
+            const Requirement requirement = m_requirementModel->requirementAt(row);
+            if (requirement.id <= 0)
+                continue;
+            auto *item = new QListWidgetItem(
+                QStringLiteral("%1 %2").arg(requirement.externalId, requirement.title), list);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(alreadyReturned.contains(requirement.id) ? Qt::Checked : Qt::Unchecked);
+            item->setData(Qt::UserRole, requirement.id);
+        }
+    }
+    layout->addWidget(list, 1);
+    layout->addWidget(new QLabel(tr("Begründung der Rückgabe:"), &dialog));
+    auto *noteEdit = new QTextEdit(&dialog);
+    noteEdit->setAcceptRichText(false);
+    layout->addWidget(noteEdit);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+    if (noteEdit->toPlainText().trimmed().isEmpty()) {
+        QMessageBox::warning(this, tr("Zurückgeben"),
+                             tr("Bitte eine Begründung für die Rückgabe eintragen."));
+        return false;
+    }
+    *note = noteEdit->toPlainText().trimmed();
+    requirementIds->clear();
+    for (int row = 0; row < list->count(); ++row) {
+        QListWidgetItem *item = list->item(row);
+        if (item != nullptr && item->checkState() == Qt::Checked)
+            requirementIds->append(item->data(Qt::UserRole).toInt());
+    }
+    return true;
+}
+
+void MainWindow::acceptActiveBausteinReview()
+{
+    applyReviewAction(ReviewActionAccept);
 }
 
 bool MainWindow::hasApplicableBausteineForActiveTarget() const
@@ -1477,6 +1674,7 @@ void MainWindow::reloadMergedApplicability()
     m_inheritedBausteine =
         Inheritance::collectInherited(objects, m_activeTargetObject, ownMap, parentMaps);
     m_applicabilityMap = Inheritance::mergeApplicability(ownMap, m_inheritedBausteine);
+    reloadReviews();
 }
 
 void MainWindow::checkRemoteSession()
@@ -1665,6 +1863,7 @@ void MainWindow::editProject()
 
     ProjectDialog dialog(this);
     dialog.setProject(m_activeProject);
+    dialog.setShowWorkflow(m_context.isRemote() && m_activeProject.role == QStringLiteral("owner"));
     if (dialog.exec() != QDialog::Accepted)
         return;
 
@@ -1682,6 +1881,8 @@ void MainWindow::editProject()
     m_activeProject = project;
     updateWindowTitle();
     updateProjectUiEnabled();
+    reloadReviews();
+    applyInheritedUiState();
     showTemporaryStatusMessage(tr("Projekteigenschaften gespeichert"));
 }
 
@@ -2027,6 +2228,12 @@ bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId, bool
         return saveDeviationNote();
     if (!canEditActiveProject())
         return true;
+    if (workflowActive()) {
+        const BausteinReview review = currentReview();
+        if (!reviewAllowsRequirementEdit(true, review.state, review.returnedRequirementIds,
+                                         requirementDbId))
+            return true;
+    }
     if (targetObjectId == 0 || requirementDbId == 0)
         return false;
 
@@ -2070,6 +2277,14 @@ bool MainWindow::saveAssessmentFor(int targetObjectId, int requirementDbId, bool
     if (result.status == AssessmentSaveResult::Status::Forbidden) {
         if (notifyConflictDialog)
             notifySaveFailure(m_context.projectRepository().lastError(), true);
+        return false;
+    }
+    if (result.status == AssessmentSaveResult::Status::ReviewLocked) {
+        applyInheritedUiState();
+        if (notifyConflictDialog)
+            notifySaveFailure(m_context.projectRepository().lastError(), true);
+        else
+            showTemporaryStatusMessage(m_context.projectRepository().lastError(), 8000);
         return false;
     }
     if (notifyConflictDialog)
@@ -2170,7 +2385,7 @@ void MainWindow::setAssessmentStatus(int index)
 
 void MainWindow::saveAssessmentFields()
 {
-    if (m_suppressAssessmentSave || !canEditActiveProject())
+    if (m_suppressAssessmentSave || !canEditActiveProject() || activeRequirementLocked())
         return;
 
     if (saveCurrentAssessment(false))
@@ -2199,7 +2414,7 @@ void MainWindow::openAssessmentNoteEditor()
 
 void MainWindow::addMeasure()
 {
-    if (!hasActiveProjectContext() || !canEditActiveProject())
+    if (!hasActiveProjectContext() || !canEditActiveProject() || activeRequirementLocked())
         return;
     if (isInheritedBaustein(m_activeBausteinId))
         return;
@@ -2239,7 +2454,8 @@ void MainWindow::editMeasure()
     if (!index.isValid() || !hasActiveProjectContext())
         return;
 
-    const bool canEdit = canEditActiveProject() && !isInheritedBaustein(m_activeBausteinId);
+    const bool canEdit = canEditActiveProject() && !isInheritedBaustein(m_activeBausteinId)
+                         && !activeRequirementLocked();
     Measure measure = m_measureModel->measureAt(index.row());
     MeasureDialog dialog(this);
     dialog.setMeasure(measure);
@@ -2268,13 +2484,18 @@ void MainWindow::editMeasure()
         notifySaveFailure(m_context.measureRepository().lastError(), true);
         return;
     }
+    if (result.status == MeasureSaveResult::Status::ReviewLocked) {
+        applyInheritedUiState();
+        notifySaveFailure(m_context.measureRepository().lastError(), true);
+        return;
+    }
 
     QMessageBox::critical(this, tr("Maßnahme"), m_context.measureRepository().lastError());
 }
 
 void MainWindow::deleteMeasure()
 {
-    if (!canEditActiveProject() || isInheritedBaustein(m_activeBausteinId))
+    if (!canEditActiveProject() || isInheritedBaustein(m_activeBausteinId) || activeRequirementLocked())
         return;
 
     const QModelIndex index = m_measureTable->currentIndex();
@@ -2651,6 +2872,12 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
     const Baustein baustein = m_bausteinModel->bausteinForIndex(index);
     if (baustein.id == 0)
         return;
+
+    if (bausteinReviewLocked(baustein.id)) {
+        QMessageBox::information(this, tr("Laufzettel"), reviewLockMessage());
+        revertBausteinTreeSelection(m_activeBausteinId);
+        return;
+    }
 
     if (isInheritedBaustein(baustein.id) && status == ApplicabilityStatus::Undefined) {
         QMessageBox::information(

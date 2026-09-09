@@ -84,7 +84,7 @@ func (h *MemberHandler) Add(w http.ResponseWriter, r *http.Request) {
 	if req.Role == "" {
 		req.Role = "editor"
 	}
-	if req.Role != "owner" && req.Role != "editor" && req.Role != "viewer" {
+	if req.Role != "owner" && req.Role != "editor" && req.Role != "reviewer" && req.Role != "viewer" {
 		writeError(w, http.StatusBadRequest, "invalid role")
 		return
 	}
@@ -140,7 +140,7 @@ func (h *MemberHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	if req.Role != "owner" && req.Role != "editor" && req.Role != "viewer" {
+	if req.Role != "owner" && req.Role != "editor" && req.Role != "reviewer" && req.Role != "viewer" {
 		writeError(w, http.StatusBadRequest, "invalid role")
 		return
 	}

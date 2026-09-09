@@ -44,6 +44,11 @@ type
     function LoadDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer): string; virtual; abstract;
     function SaveDeviation(AProjectId, ATargetObjectId, ABausteinDbId: Integer;
       const ANote: string): Boolean; virtual; abstract;
+    function LoadReviews(AProjectId, ATargetObjectId: Integer): TDictionary<Integer, TBausteinReview>; virtual; abstract;
+    function LoadProjectReviews(AProjectId: Integer): TArray<TBausteinReview>; virtual; abstract;
+    function ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
+      const AAction, ANote: string;
+      const ARequirementIds: TArray<Integer>): TReviewSaveResult; virtual; abstract;
     function GetLastError: string; virtual; abstract;
     property LastError: string read GetLastError;
   end;

@@ -26,7 +26,8 @@ var webStatusFilters = []string{"Alle", "Offen", "Teilweise", "Erfüllt", "Entf�
 var webMeasureStatusFilters = []string{"Alle", "Offen", "In Bearbeitung", "Erledigt"}
 var webMeasureStatuses = []string{"Offen", "In Bearbeitung", "Erledigt"}
 var webAssessmentStatuses = []string{"Offen", "Teilweise", "Erfüllt", "Entfällt"}
-var webMemberRoles = []string{"owner", "editor", "viewer"}
+var webMemberRoles = []string{"owner", "editor", "reviewer", "viewer"}
+var webReviewFilters = []string{"Alle", domain.ReviewSubmitted, domain.ReviewReturned}
 var webCiaLevels = []string{domain.CiaNormal, domain.CiaHigh, domain.CiaVeryHigh}
 var webApplicabilityStatuses = []string{"Benötigt", "Möglicherweise", "Nicht relevant"}
 var webCatalogStandard = "IT-Grundschutz"
@@ -110,6 +111,14 @@ type webPage struct {
 	Tasks                 []webTaskRow
 	TaskOverdueCount      int
 	Mine                  bool
+	Review                domain.BausteinReview
+	CanSubmit             bool
+	CanReview             bool
+	ReviewLocked          bool
+	ReviewFilter          string
+	ReviewFilters         []string
+	ReviewQueue           []webReviewQueueItem
+	ReviewSummary         string
 }
 
 type webWorkBaustein struct {
@@ -121,12 +130,16 @@ type webWorkBaustein struct {
 	RecommendTier string
 	OpenCount     int
 	TotalCount    int
+	ReviewState   string
+	ReviewLabel   string
+	ReviewNote    string
 }
 
 type webWorkReq struct {
 	domain.Requirement
-	Status  string
-	Overdue bool
+	Status   string
+	Overdue  bool
+	Returned bool
 }
 
 type webRecommendation struct {
@@ -165,7 +178,16 @@ type webCatalogGroup struct {
 
 type webMeasureRow struct {
 	domain.Measure
-	Overdue bool
+	Overdue     bool
+	ReviewState string
+	ReviewLabel string
+}
+
+type webReviewQueueItem struct {
+	domain.BausteinReview
+	TargetObjectName   string
+	BausteinExternalID string
+	BausteinTitle      string
 }
 
 type webTaskRow struct {
@@ -206,6 +228,8 @@ func newWebUI(authService *auth.Service, store *repository.Store, reports *servi
 		"formatDue":         formatDueDate,
 		"dueValue":          dueValue,
 		"statusClass":       statusClass,
+		"reviewLabel":       domain.ReviewStateLabel,
+		"reviewFilterLabel": reviewFilterLabel,
 		"padLeft":           padLeft,
 		"reqHTML":           reqHTML,
 		"responsibleLegacy": responsibleLegacy,
@@ -265,6 +289,7 @@ func (u *webUI) mount(r chi.Router) {
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/applicability", u.applicabilitySave)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/applicability/bulk", u.applicabilityBulk)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/assessments/bulk", u.assessmentsBulk)
+		g.Post("/projects/{projectID}/targets/{targetObjectID}/review", u.reviewApply)
 		g.Get("/projects/{projectID}/targets/{targetObjectID}/recommendations", u.recommendationsGet)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/recommendations", u.recommendationsApply)
 		g.Get("/projects/{projectID}/settings", u.projectSettingsGet)
@@ -605,6 +630,7 @@ func (u *webUI) renderCockpit(w http.ResponseWriter, r *http.Request, user *auth
 			Project:         project,
 			StatusFilters:   webMeasureStatusFilters,
 			MeasureStatuses: webMeasureStatuses,
+			ReviewFilters:   webReviewFilters,
 			Error:           "Maßnahmen konnten nicht geladen werden.",
 		})
 		return
@@ -616,7 +642,50 @@ func (u *webUI) renderCockpit(w http.ResponseWriter, r *http.Request, user *auth
 	}
 	hideDone := r.URL.Query().Get("hideDone") == "1"
 	mine := r.URL.Query().Get("mine") == "1"
-	filtered := filterMeasures(items, query, status, hideDone)
+	reviewFilter := normalizeCockpitReviewFilter(r.URL.Query().Get("review"))
+
+	reviews, err := u.store.ListProjectReviews(r.Context(), project.ID)
+	if err != nil {
+		u.render(w, r, "cockpit", webPage{
+			DisplayName:     user.DisplayName,
+			CanEdit:         canEdit,
+			Project:         project,
+			StatusFilters:   webMeasureStatusFilters,
+			MeasureStatuses: webMeasureStatuses,
+			ReviewFilters:   webReviewFilters,
+			Error:           "Laufzettel konnten nicht geladen werden.",
+		})
+		return
+	}
+	queue, err := u.buildReviewQueue(r, project, reviews, reviewFilter)
+	if err != nil {
+		u.render(w, r, "cockpit", webPage{
+			DisplayName:     user.DisplayName,
+			CanEdit:         canEdit,
+			Project:         project,
+			StatusFilters:   webMeasureStatusFilters,
+			MeasureStatuses: webMeasureStatuses,
+			ReviewFilters:   webReviewFilters,
+			Error:           "Laufzettel konnten nicht geladen werden.",
+		})
+		return
+	}
+	submitted, returned := domain.CountReviewQueue(reviews)
+	rows := toMeasureRows(items)
+	if err := u.attachMeasureReviews(r, project, rows, reviews); err != nil {
+		u.render(w, r, "cockpit", webPage{
+			DisplayName:     user.DisplayName,
+			CanEdit:         canEdit,
+			Project:         project,
+			StatusFilters:   webMeasureStatusFilters,
+			MeasureStatuses: webMeasureStatuses,
+			ReviewFilters:   webReviewFilters,
+			Error:           "Maßnahmen konnten nicht geladen werden.",
+		})
+		return
+	}
+	skipHideDone := reviewFilter == domain.ReviewSubmitted || reviewFilter == domain.ReviewReturned
+	filtered := filterMeasureRows(rows, query, status, hideDone && !skipHideDone, reviewFilter)
 	if mine {
 		filtered = filterMeasuresMine(filtered, user.UserID, user.DisplayName, user.Email)
 	}
@@ -637,6 +706,10 @@ func (u *webUI) renderCockpit(w http.ResponseWriter, r *http.Request, user *auth
 		Mine:            mine,
 		Measures:        filtered,
 		MeasureStatuses: webMeasureStatuses,
+		ReviewFilter:    reviewFilter,
+		ReviewFilters:   webReviewFilters,
+		ReviewQueue:     queue,
+		ReviewSummary:   formatReviewSummary(submitted, returned),
 	})
 }
 
@@ -665,6 +738,10 @@ func (u *webUI) measureStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if measure.ProjectID != project.ID {
 		http.NotFound(w, r)
+		return
+	}
+	if err := u.store.RequireMeasureWritable(r.Context(), measure); err != nil {
+		u.renderCockpit(w, r, user, project, roleCanEdit(role), reviewWebError(err))
 		return
 	}
 	status := strings.TrimSpace(r.FormValue("status"))
@@ -889,6 +966,10 @@ func (u *webUI) measureCreate(w http.ResponseWriter, r *http.Request) {
 		u.renderAssessment(w, r, user, project, true, ctx, "Maßnahmen zu geerbten Bausteinen gehören zum übergeordneten Zielobjekt.", "")
 		return
 	}
+	if err := u.store.RequireRequirementWritable(r.Context(), project.ID, ctx.Target.ID, ctx.Requirement.ID); err != nil {
+		u.renderAssessment(w, r, user, project, true, ctx, reviewWebError(err), "")
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		u.renderAssessment(w, r, user, project, true, ctx, "Ungültige Anfrage.", "")
 		return
@@ -953,6 +1034,10 @@ func (u *webUI) measureEditSave(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := u.store.RequireMeasureWritable(r.Context(), measure); err != nil {
+		u.renderMeasure(w, r, user, project, true, measure, reviewWebError(err), "")
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		u.renderMeasure(w, r, user, project, true, measure, "Ungültige Anfrage.", "")
 		return
@@ -996,12 +1081,16 @@ func (u *webUI) measureEditSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *webUI) measureDelete(w http.ResponseWriter, r *http.Request) {
-	_, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, _, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
 	measure, ok := u.loadProjectMeasure(w, r, project)
 	if !ok {
+		return
+	}
+	if err := u.store.RequireMeasureWritable(r.Context(), measure); err != nil {
+		u.renderMeasure(w, r, user, project, true, measure, reviewWebError(err), "")
 		return
 	}
 	if err := u.store.DeleteMeasure(r.Context(), measure.ID); err != nil {
@@ -1039,6 +1128,16 @@ func (u *webUI) renderMeasure(w http.ResponseWriter, r *http.Request, user *auth
 		http.Error(w, "Mitglieder konnten nicht geladen werden.", http.StatusInternalServerError)
 		return
 	}
+	reviewLocked := false
+	if canEdit {
+		if err := u.store.RequireMeasureWritable(r.Context(), measure); errors.Is(err, domain.ErrReviewLocked) {
+			reviewLocked = true
+			canEdit = false
+		} else if err != nil {
+			http.Error(w, "Laufzettel konnte nicht geladen werden.", http.StatusInternalServerError)
+			return
+		}
+	}
 	u.render(w, r, "measure", webPage{
 		DisplayName:     user.DisplayName,
 		CanEdit:         canEdit,
@@ -1046,6 +1145,7 @@ func (u *webUI) renderMeasure(w http.ResponseWriter, r *http.Request, user *auth
 		Measure:         measure,
 		Members:         members,
 		MeasureStatuses: webMeasureStatuses,
+		ReviewLocked:    reviewLocked,
 		Error:           errMsg,
 		Notice:          notice,
 	})
@@ -1095,6 +1195,10 @@ func (u *webUI) assessmentSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if ctx.Inherited {
 		u.renderAssessment(w, r, user, project, true, ctx, "Geerbte Bewertungen werden am übergeordneten Zielobjekt geändert.", "")
+		return
+	}
+	if err := u.store.RequireRequirementWritable(r.Context(), project.ID, ctx.Target.ID, ctx.Requirement.ID); err != nil {
+		u.renderAssessment(w, r, user, project, true, ctx, reviewWebError(err), "")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -1148,6 +1252,7 @@ type webAssessmentContext struct {
 	Inherited     bool
 	InheritedFrom string
 	Deviation     string
+	Review        domain.BausteinReview
 }
 
 func (u *webUI) loadAssessmentPage(w http.ResponseWriter, r *http.Request, project domain.Project) (webAssessmentContext, bool) {
@@ -1210,6 +1315,11 @@ func (u *webUI) loadAssessmentPage(w http.ResponseWriter, r *http.Request, proje
 		http.Error(w, "Maßnahmen konnten nicht geladen werden.", http.StatusInternalServerError)
 		return webAssessmentContext{}, false
 	}
+	review, err := u.store.GetBausteinReview(r.Context(), project.ID, assessTargetID, baustein.ID)
+	if err != nil {
+		http.Error(w, "Laufzettel konnte nicht geladen werden.", http.StatusInternalServerError)
+		return webAssessmentContext{}, false
+	}
 	return webAssessmentContext{
 		Target:        target,
 		Requirement:   requirement,
@@ -1219,6 +1329,7 @@ func (u *webUI) loadAssessmentPage(w http.ResponseWriter, r *http.Request, proje
 		Inherited:     inherited,
 		InheritedFrom: inheritedFrom,
 		Deviation:     deviation,
+		Review:        review,
 	}, true
 }
 
@@ -1228,6 +1339,7 @@ func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *a
 		http.Error(w, "Mitglieder konnten nicht geladen werden.", http.StatusInternalServerError)
 		return
 	}
+	reviewLocked := !ctx.Inherited && !domain.ReviewAllowsRequirementEdit(project.WorkflowEnabled, ctx.Review.State, ctx.Review.ReturnedRequirementIDs, ctx.Requirement.ID)
 	u.render(w, r, "assessment", webPage{
 		DisplayName:        user.DisplayName,
 		CanEdit:            canEdit,
@@ -1245,6 +1357,8 @@ func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *a
 		Inherited:          ctx.Inherited,
 		InheritedFrom:      ctx.InheritedFrom,
 		Deviation:          ctx.Deviation,
+		Review:             ctx.Review,
+		ReviewLocked:       reviewLocked,
 	})
 }
 
@@ -1361,14 +1475,26 @@ func filterReportRows(rows []domain.ReportRow, query, status string) []domain.Re
 }
 
 func filterMeasures(items []domain.Measure, query, status string, hideDone bool) []webMeasureRow {
+	return filterMeasureRows(toMeasureRows(items), query, status, hideDone, "")
+}
+
+func filterMeasureRows(items []webMeasureRow, query, status string, hideDone bool, reviewFilter string) []webMeasureRow {
 	needle := strings.ToLower(query)
+	reviewFilter = normalizeCockpitReviewFilter(reviewFilter)
 	out := make([]webMeasureRow, 0, len(items))
 	for _, item := range items {
 		if hideDone && item.Status == "Erledigt" {
-			continue
+			if reviewFilter != domain.ReviewSubmitted && reviewFilter != domain.ReviewReturned {
+				continue
+			}
 		}
 		if status != "" && status != "Alle" && item.Status != status {
 			continue
+		}
+		if reviewFilter == domain.ReviewSubmitted || reviewFilter == domain.ReviewReturned {
+			if domain.NormalizeReviewState(item.ReviewState) != reviewFilter {
+				continue
+			}
 		}
 		if needle != "" {
 			hay := strings.ToLower(strings.Join([]string{
@@ -1376,12 +1502,13 @@ func filterMeasures(items []domain.Measure, query, status string, hideDone bool)
 				item.Description,
 				item.Responsible,
 				item.Status,
+				item.ReviewLabel,
 			}, " "))
 			if !strings.Contains(hay, needle) {
 				continue
 			}
 		}
-		out = append(out, toMeasureRow(item))
+		out = append(out, item)
 	}
 	return out
 }
@@ -1505,7 +1632,7 @@ func responsibleLegacy(userID int64, text string, members []repository.ProjectMe
 }
 
 func roleCanEdit(role string) bool {
-	return role == "owner" || role == "editor"
+	return domain.CanEditContent(role)
 }
 
 func roleCanOwn(role string) bool {
@@ -1514,7 +1641,7 @@ func roleCanOwn(role string) bool {
 
 func validMemberRole(role string) bool {
 	switch role {
-	case "owner", "editor", "viewer":
+	case "owner", "editor", "reviewer", "viewer":
 		return true
 	default:
 		return false
@@ -1527,6 +1654,8 @@ func roleLabel(role string) string {
 		return "Besitzer"
 	case "editor":
 		return "Bearbeiter"
+	case "reviewer":
+		return "Prüfer"
 	case "viewer":
 		return "Leser"
 	default:
@@ -1535,6 +1664,113 @@ func roleLabel(role string) string {
 		}
 		return role
 	}
+}
+
+func normalizeCockpitReviewFilter(value string) string {
+	switch strings.TrimSpace(value) {
+	case domain.ReviewSubmitted, "Zur Prüfung":
+		return domain.ReviewSubmitted
+	case domain.ReviewReturned, "Zurückgegeben":
+		return domain.ReviewReturned
+	default:
+		return "Alle"
+	}
+}
+
+func reviewFilterLabel(value string) string {
+	switch normalizeCockpitReviewFilter(value) {
+	case domain.ReviewSubmitted:
+		return "Zur Prüfung"
+	case domain.ReviewReturned:
+		return "Zurückgegeben"
+	default:
+		return "Alle"
+	}
+}
+
+func formatReviewSummary(submitted, returned int) string {
+	parts := make([]string, 0, 2)
+	if submitted > 0 {
+		parts = append(parts, germanCount(submitted, "Baustein", "Bausteine")+" zur Prüfung")
+	}
+	if returned > 0 {
+		parts = append(parts, germanCount(returned, "Baustein", "Bausteine")+" zurückgegeben")
+	}
+	return strings.Join(parts, ", ")
+}
+
+func (u *webUI) attachMeasureReviews(r *http.Request, project domain.Project, rows []webMeasureRow, reviews []domain.BausteinReview) error {
+	if len(rows) == 0 || u.store == nil {
+		return nil
+	}
+	reqs, err := u.store.ListRequirementsByCatalog(r.Context(), webCatalogStandard, project.CatalogVersion)
+	if err != nil {
+		return err
+	}
+	reqBaustein := make(map[int64]int64, len(reqs))
+	for _, req := range reqs {
+		reqBaustein[req.ID] = req.BausteinID
+	}
+	byKey := make(map[string]domain.BausteinReview, len(reviews))
+	for _, review := range reviews {
+		key := fmt.Sprintf("%d:%d", review.TargetObjectID, review.BausteinID)
+		byKey[key] = review
+	}
+	for i := range rows {
+		bausteinID := reqBaustein[rows[i].RequirementID]
+		if bausteinID == 0 {
+			continue
+		}
+		review := byKey[fmt.Sprintf("%d:%d", rows[i].TargetObjectID, bausteinID)]
+		rows[i].ReviewState = domain.NormalizeReviewState(review.State)
+		if review.State != "" {
+			rows[i].ReviewLabel = domain.ReviewStateLabel(review.State)
+		}
+	}
+	return nil
+}
+
+func (u *webUI) buildReviewQueue(r *http.Request, project domain.Project, reviews []domain.BausteinReview, filter string) ([]webReviewQueueItem, error) {
+	if !project.WorkflowEnabled || u.store == nil {
+		return nil, nil
+	}
+	filter = normalizeCockpitReviewFilter(filter)
+	targets, err := u.store.ListTargetObjects(r.Context(), project.ID)
+	if err != nil {
+		return nil, err
+	}
+	targetName := make(map[int64]string, len(targets))
+	for _, target := range targets {
+		targetName[target.ID] = target.Name
+	}
+	bausteine, err := u.store.ListBausteine(r.Context(), webCatalogStandard, project.CatalogVersion)
+	if err != nil {
+		return nil, err
+	}
+	bausteinByID := make(map[int64]domain.Baustein, len(bausteine))
+	for _, b := range bausteine {
+		bausteinByID[b.ID] = b
+	}
+	out := make([]webReviewQueueItem, 0)
+	for _, review := range reviews {
+		state := domain.NormalizeReviewState(review.State)
+		if state != domain.ReviewSubmitted && state != domain.ReviewReturned {
+			continue
+		}
+		if filter == domain.ReviewSubmitted || filter == domain.ReviewReturned {
+			if state != filter {
+				continue
+			}
+		}
+		b := bausteinByID[review.BausteinID]
+		out = append(out, webReviewQueueItem{
+			BausteinReview:     review,
+			TargetObjectName:   targetName[review.TargetObjectID],
+			BausteinExternalID: b.ExternalID,
+			BausteinTitle:      b.Title,
+		})
+	}
+	return out, nil
 }
 
 func formatWebDate(t time.Time) string {
@@ -1573,10 +1809,12 @@ func statusClass(status string, overdue bool) string {
 		return "badge badge-warn"
 	}
 	switch status {
-	case "Erfüllt", "Erledigt", "Benötigt":
+	case "Erfüllt", "Erledigt", "Benötigt", "Abgenommen", domain.ReviewAccepted:
 		return "badge badge-ok"
-	case "Teilweise", "In Bearbeitung", "Möglicherweise":
+	case "Teilweise", "In Bearbeitung", "Möglicherweise", "Zur Prüfung", domain.ReviewSubmitted:
 		return "badge badge-mid"
+	case "Zurückgegeben", domain.ReviewReturned:
+		return "badge badge-warn"
 	case "Entfällt", "Nicht relevant":
 		return "badge badge-mute"
 	default:

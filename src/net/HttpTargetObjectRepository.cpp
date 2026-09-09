@@ -1,11 +1,11 @@
 #include "HttpTargetObjectRepository.h"
 
 #include "domain/ApplicabilityStatus.h"
+#include "domain/BausteinReview.h"
 #include "domain/ProtectionNeed.h"
 #include "domain/TargetObjectType.h"
 #include "net/HttpJson.h"
-#include "qjsonarray.h"
-
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -153,9 +153,12 @@ bool HttpTargetObjectRepository::saveApplicability(const BausteinApplicability &
     QJsonObject body;
     body.insert(QStringLiteral("status"), applicabilityStatusToString(applicability.status));
 
-    m_client.put(path, body, &status);
+    const QJsonDocument doc = m_client.put(path, body, &status);
     if (status != 200) {
-        m_lastError = m_client.lastError();
+        if (status == 409 && doc.isObject() && isReviewLockedJson(doc.object()))
+            m_lastError = reviewLockMessage();
+        else
+            m_lastError = m_client.lastError();
         return false;
     }
     return true;
@@ -184,16 +187,105 @@ bool HttpTargetObjectRepository::saveDeviation(int projectId, int targetObjectId
     QJsonObject body;
     body.insert(QStringLiteral("note"), note);
     int status = 0;
-    m_client.put(QStringLiteral("/api/v1/projects/%1/target-objects/%2/bausteine/%3/deviation")
-                     .arg(projectId)
-                     .arg(targetObjectId)
-                     .arg(bausteinDbId),
-                 body, &status);
+    const QJsonDocument doc =
+        m_client.put(QStringLiteral("/api/v1/projects/%1/target-objects/%2/bausteine/%3/deviation")
+                         .arg(projectId)
+                         .arg(targetObjectId)
+                         .arg(bausteinDbId),
+                     body, &status);
     if (status != 200) {
-        m_lastError = m_client.lastError();
+        if (status == 409 && doc.isObject() && isReviewLockedJson(doc.object()))
+            m_lastError = reviewLockMessage();
+        else
+            m_lastError = m_client.lastError();
         return false;
     }
     return true;
+}
+
+QHash<int, BausteinReview> HttpTargetObjectRepository::loadReviews(int projectId, int targetObjectId) const
+{
+    int status = 0;
+    const QJsonDocument doc = m_client.get(
+        QStringLiteral("/api/v1/projects/%1/target-objects/%2/reviews").arg(projectId).arg(targetObjectId),
+        &status);
+    if (status != 200 || !doc.isArray()) {
+        m_lastError = m_client.lastError();
+        return {};
+    }
+
+    QHash<int, BausteinReview> reviews;
+    for (const QJsonValue &value : doc.array()) {
+        if (!value.isObject())
+            continue;
+        const BausteinReview review = bausteinReviewFromJson(value.toObject());
+        if (review.bausteinId > 0)
+            reviews.insert(review.bausteinId, review);
+    }
+    return reviews;
+}
+
+QList<BausteinReview> HttpTargetObjectRepository::loadProjectReviews(int projectId) const
+{
+    int status = 0;
+    const QJsonDocument doc = m_client.get(
+        QStringLiteral("/api/v1/projects/%1/reviews").arg(projectId), &status);
+    if (status != 200 || !doc.isArray()) {
+        m_lastError = m_client.lastError();
+        return {};
+    }
+
+    QList<BausteinReview> reviews;
+    for (const QJsonValue &value : doc.array()) {
+        if (!value.isObject())
+            continue;
+        const BausteinReview review = bausteinReviewFromJson(value.toObject());
+        if (review.bausteinId > 0)
+            reviews.append(review);
+    }
+    return reviews;
+}
+
+ReviewSaveResult HttpTargetObjectRepository::applyReview(int projectId, int targetObjectId, int bausteinId,
+                                                         const QString &action, const QString &note,
+                                                         const QList<int> &requirementIds)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("action"), action);
+    body.insert(QStringLiteral("note"), note);
+    if (!requirementIds.isEmpty()) {
+        QJsonArray ids;
+        for (int id : requirementIds)
+            ids.append(id);
+        body.insert(QStringLiteral("requirementIds"), ids);
+    }
+
+    int status = 0;
+    const QJsonDocument doc = m_client.post(
+        QStringLiteral("/api/v1/projects/%1/target-objects/%2/bausteine/%3/review")
+            .arg(projectId)
+            .arg(targetObjectId)
+            .arg(bausteinId),
+        body, &status);
+    if (status == 200 && doc.isObject())
+        return ReviewSaveResult::ok(bausteinReviewFromJson(doc.object()));
+
+    const QString code = doc.isObject() ? jsonErrorCode(doc.object()) : QString();
+    if (!code.isEmpty())
+        m_lastError = reviewClientErrorMessage(code);
+    else
+        m_lastError = m_client.lastError();
+
+    if (status == 403)
+        return ReviewSaveResult::failed(ReviewSaveResult::Status::Forbidden);
+    if (code == QStringLiteral("review_note_required"))
+        return ReviewSaveResult::failed(ReviewSaveResult::Status::NoteRequired);
+    if (code == QStringLiteral("invalid_review_transition")
+        || code == QStringLiteral("baustein_not_applicable")
+        || code == QStringLiteral("workflow_disabled")
+        || code == QStringLiteral("invalid_returned_requirements"))
+        return ReviewSaveResult::failed(ReviewSaveResult::Status::Invalid);
+    return ReviewSaveResult::failed();
 }
 
 QString HttpTargetObjectRepository::lastError() const

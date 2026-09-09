@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -131,6 +132,14 @@ func (u *webUI) applicabilityBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, id := range ids {
+		if err := u.store.RequireBausteinWritable(r.Context(), project.ID, target.ID, id); err != nil {
+			if errors.Is(err, domain.ErrReviewLocked) {
+				u.renderApplicability(w, r, user, project, true, target, "Mindestens ein Baustein ist zur Prüfung oder abgenommen und kann nicht geändert werden.")
+				return
+			}
+			u.renderApplicability(w, r, user, project, true, target, "Anwendbarkeit konnte nicht gespeichert werden.")
+			return
+		}
 		if status == "" {
 			if err := u.store.DeleteApplicability(r.Context(), project.ID, target.ID, id); err != nil {
 				u.renderApplicability(w, r, user, project, true, target, "Anwendbarkeit konnte nicht gelöscht werden.")
@@ -156,7 +165,7 @@ func (u *webUI) applicabilityBulk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *webUI) assessmentsBulk(w http.ResponseWriter, r *http.Request) {
-	user, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -165,17 +174,17 @@ func (u *webUI) assessmentsBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		u.renderWorkplace(w, r, user, project, true, target, "Ungültige Anfrage.")
+		u.renderWorkplace(w, r, user, project, role, target, "Ungültige Anfrage.")
 		return
 	}
 	status := strings.TrimSpace(r.FormValue("status"))
 	if !validAssessmentStatus(status) {
-		u.renderWorkplace(w, r, user, project, true, target, "Bitte einen Bewertungsstatus wählen.")
+		u.renderWorkplace(w, r, user, project, role, target, "Bitte einen Bewertungsstatus wählen.")
 		return
 	}
 	bausteinID, err := strconv.ParseInt(r.FormValue("bausteinID"), 10, 64)
 	if err != nil || bausteinID <= 0 {
-		u.renderWorkplace(w, r, user, project, true, target, "Ungültiger Baustein.")
+		u.renderWorkplace(w, r, user, project, role, target, "Ungültiger Baustein.")
 		return
 	}
 	objects, err := u.store.ListTargetObjects(r.Context(), project.ID)
@@ -189,12 +198,20 @@ func (u *webUI) assessmentsBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := inherited[bausteinID]; ok {
-		u.renderWorkplace(w, r, user, project, true, target, "Geerbte Bewertungen werden am übergeordneten Zielobjekt geändert.")
+		u.renderWorkplace(w, r, user, project, role, target, "Geerbte Bewertungen werden am übergeordneten Zielobjekt geändert.")
 		return
 	}
 	merged := service.MergeApplicability(own, inherited)
 	if !domain.ApplicabilityCountsForReport(merged[bausteinID]) {
-		u.renderWorkplace(w, r, user, project, true, target, "Der Baustein ist hier nicht anwendbar.")
+		u.renderWorkplace(w, r, user, project, role, target, "Der Baustein ist hier nicht anwendbar.")
+		return
+	}
+	if err := u.store.RequireBausteinWritable(r.Context(), project.ID, target.ID, bausteinID); err != nil {
+		if errors.Is(err, domain.ErrReviewLocked) {
+			u.renderWorkplace(w, r, user, project, role, target, reviewLockMessage(domain.ReviewSubmitted))
+			return
+		}
+		u.renderWorkplace(w, r, user, project, role, target, "Laufzettel konnte nicht geprüft werden.")
 		return
 	}
 	requirements, err := u.store.ListRequirements(r.Context(), bausteinID)
@@ -214,7 +231,7 @@ func (u *webUI) assessmentsBulk(w http.ResponseWriter, r *http.Request) {
 	onlyOpen := r.FormValue("onlyOpen") == "1"
 	ids := bulkRequirementIDs(requirements, target.ProtectionNeed, assessments, onlyOpen, status)
 	if len(ids) == 0 {
-		u.renderWorkplace(w, r, user, project, true, target, "Keine passenden Anforderungen für diesen Massenstatus.")
+		u.renderWorkplace(w, r, user, project, role, target, "Keine passenden Anforderungen für diesen Massenstatus.")
 		return
 	}
 	for _, id := range ids {
@@ -230,7 +247,7 @@ func (u *webUI) assessmentsBulk(w http.ResponseWriter, r *http.Request) {
 			DueDate:           current.DueDate,
 			Version:           0,
 		}); err != nil {
-			u.renderWorkplace(w, r, user, project, true, target, "Bewertungen konnten nicht gespeichert werden.")
+			u.renderWorkplace(w, r, user, project, role, target, "Bewertungen konnten nicht gespeichert werden.")
 			return
 		}
 	}

@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   System.Generics.Collections, System.Math, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
-  Vcl.Menus, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.Grids,
+  Vcl.Menus, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.Grids, Vcl.CheckLst,
   IsmsDomain, AppContext, AppPaths, FireDAC.UI.Intf, FireDAC.VCLUI.Wait,
   FireDAC.Stan.Intf, FireDAC.Comp.UI, Vcl.ToolWin, SearchEditHelper, GridHelper;
 
@@ -179,6 +179,13 @@ type
     FCurrentMeasures: TArray<TMeasure>;
     FApplicabilityMap: TDictionary<Integer, TApplicabilityStatus>;
     FInheritedBausteine: TDictionary<Integer, TInheritedBaustein>;
+    FReviews: TDictionary<Integer, TBausteinReview>;
+    FReviewPanel: TPanel;
+    lblReview: TLabel;
+    lblReviewNote: TLabel;
+    btnReviewSubmit: TButton;
+    btnReviewReturn: TButton;
+    btnReviewAccept: TButton;
     FMeasureCounts: TDictionary<Integer, Integer>;
     FSummariesByTarget: TDictionary<Integer, TReportSummary>;
     FRecommendedIds: TDictionary<Integer, Byte>;
@@ -273,6 +280,19 @@ type
     function AssessmentTargetId(ABausteinDbId: Integer): Integer;
     procedure ApplyInheritedUiState;
     function SaveDeviationNote: Boolean;
+    function WorkflowActive: Boolean;
+    function BausteinReviewLocked(ABausteinId: Integer): Boolean;
+    function ActiveBausteinLocked: Boolean;
+    function ActiveRequirementLocked: Boolean;
+    function CurrentReview: TBausteinReview;
+    procedure ReloadReviews;
+    procedure UpdateReviewUi;
+    function ApplyReviewAction(const AAction, ANote: string;
+      const ARequirementIds: TArray<Integer>): Boolean;
+    function PromptReviewReturn(out ANote: string; out ARequirementIds: TArray<Integer>): Boolean;
+    procedure ReviewSubmitClick(Sender: TObject);
+    procedure ReviewReturnClick(Sender: TObject);
+    procedure ReviewAcceptClick(Sender: TObject);
     function IsAssessmentDueDateOverdue(const AAssessment: TRequirementAssessment): Boolean;
     procedure SetBausteinApplicability(AStatus: TApplicabilityStatus; ABausteinId: Integer = 0);
   public
@@ -300,6 +320,7 @@ begin
   FActiveRequirementId := 0;
   FApplicabilityMap := TDictionary<Integer, TApplicabilityStatus>.Create;
   FInheritedBausteine := TDictionary<Integer, TInheritedBaustein>.Create;
+  FReviews := TDictionary<Integer, TBausteinReview>.Create;
   FMeasureCounts := TDictionary<Integer, Integer>.Create;
   FSummariesByTarget := TDictionary<Integer, TReportSummary>.Create;
   FRecommendedIds := TDictionary<Integer, Byte>.Create;
@@ -355,6 +376,7 @@ begin
   PersistSessionSelection;
   FApplicabilityMap.Free;
   FInheritedBausteine.Free;
+  FReviews.Free;
   FMeasureCounts.Free;
   FSummariesByTarget.Free;
   FRecommendedIds.Free;
@@ -444,6 +466,67 @@ begin
 
   FClearBausteinSearch := TSearchClearButton.Create(Self, edtBausteinSearch);
   FClearBausteinSearch.OnSearchChange := edtBausteinSearchChange;
+
+  grpRequirements.Height := grpRequirements.Height + 32;
+  sgRequirements.Top := sgRequirements.Top + 32;
+  FReviewPanel := TPanel.Create(Self);
+  FReviewPanel.Parent := grpRequirements;
+  FReviewPanel.BevelOuter := bvNone;
+  FReviewPanel.Left := 8;
+  FReviewPanel.Top := 104;
+  FReviewPanel.Height := 28;
+  FReviewPanel.Width := grpRequirements.ClientWidth - 16;
+  FReviewPanel.Anchors := [akLeft, akTop, akRight];
+  FReviewPanel.Visible := False;
+  lblReview := TLabel.Create(Self);
+  lblReview.Parent := FReviewPanel;
+  lblReview.Left := 0;
+  lblReview.Top := 6;
+  lblReview.Caption := 'Laufzettel: In Bearbeitung';
+  lblReview.AutoSize := True;
+  btnReviewAccept := TButton.Create(Self);
+  btnReviewAccept.Parent := FReviewPanel;
+  btnReviewAccept.Caption := 'Abnehmen';
+  btnReviewAccept.Width := 90;
+  btnReviewAccept.Height := 25;
+  btnReviewAccept.Top := 1;
+  btnReviewAccept.Anchors := [akTop, akRight];
+  btnReviewAccept.OnClick := ReviewAcceptClick;
+  btnReviewReturn := TButton.Create(Self);
+  btnReviewReturn.Parent := FReviewPanel;
+  btnReviewReturn.Caption := 'Zur'#$00FC'ckgeben';
+  btnReviewReturn.Width := 100;
+  btnReviewReturn.Height := 25;
+  btnReviewReturn.Top := 1;
+  btnReviewReturn.Anchors := [akTop, akRight];
+  btnReviewReturn.OnClick := ReviewReturnClick;
+  btnReviewSubmit := TButton.Create(Self);
+  btnReviewSubmit.Parent := FReviewPanel;
+  btnReviewSubmit.Caption := 'Einreichen';
+  btnReviewSubmit.Width := 90;
+  btnReviewSubmit.Height := 25;
+  btnReviewSubmit.Top := 1;
+  btnReviewSubmit.Anchors := [akTop, akRight];
+  btnReviewSubmit.OnClick := ReviewSubmitClick;
+  btnReviewSubmit.Hint :=
+    'Reicht den Baustein zur Pr'#$00FC'fung ein. Danach sind Bewertungen und Ma'#$00DF'nahmen gesperrt.';
+  btnReviewSubmit.ShowHint := True;
+  btnReviewReturn.Hint := 'Gibt den Baustein mit Begr'#$00FC'ndung zur Nacharbeit zur'#$00FC'ck.';
+  btnReviewReturn.ShowHint := True;
+  btnReviewAccept.Hint :=
+    'Nimmt den Baustein mit den hinterlegten Bewertungen und Ma'#$00DF'nahmen ab.';
+  btnReviewAccept.ShowHint := True;
+  btnReviewAccept.Left := FReviewPanel.ClientWidth - btnReviewAccept.Width;
+  btnReviewReturn.Left := btnReviewAccept.Left - btnReviewReturn.Width - 8;
+  btnReviewSubmit.Left := btnReviewReturn.Left - btnReviewSubmit.Width - 8;
+  lblReviewNote := TLabel.Create(Self);
+  lblReviewNote.Parent := grpRequirements;
+  lblReviewNote.Left := 8;
+  lblReviewNote.Top := 104;
+  lblReviewNote.Width := grpRequirements.ClientWidth - 16;
+  lblReviewNote.Anchors := [akLeft, akTop, akRight];
+  lblReviewNote.Font.Color := clMaroon;
+  lblReviewNote.Visible := False;
 end;
 
 procedure TMainForm.ClearProjectSession;
@@ -1172,27 +1255,32 @@ var
   FromParent: Boolean;
   CanEdit: Boolean;
   HasTarget: Boolean;
+  Locked: Boolean;
+  CanEditContent: Boolean;
 begin
   HasTarget := HasActiveProject and (FActiveTarget.Id > 0);
   CanEdit := HasTarget and CanEditActiveProject;
   FromParent := IsInheritedBaustein(FActiveBausteinId);
+  Locked := ActiveRequirementLocked;
+  CanEditContent := CanEdit and not FromParent and not Locked;
   if FromParent then
     lblAssessmentNote.Caption := 'Abweichungstext'
   else
     lblAssessmentNote.Caption := 'Umsetzung';
-  cboAssessmentStatus.Enabled := CanEdit and not FromParent;
-  edtResponsible.Enabled := CanEdit and not FromParent;
-  chkHasDueDate.Enabled := CanEdit and not FromParent;
-  dtpDueDate.Enabled := CanEdit and chkHasDueDate.Checked and not FromParent;
-  memAssessmentNote.ReadOnly := not CanEdit;
+  cboAssessmentStatus.Enabled := CanEditContent;
+  edtResponsible.Enabled := CanEditContent;
+  chkHasDueDate.Enabled := CanEditContent;
+  dtpDueDate.Enabled := CanEditContent and chkHasDueDate.Checked;
+  memAssessmentNote.ReadOnly := not CanEdit or Locked;
   btnExpandNote.Enabled := FActiveRequirementId > 0;
-  btnAddMeasure.Enabled := CanEdit and (FActiveRequirementId > 0) and not FromParent;
-  btnDeleteMeasure.Enabled := CanEdit and (FActiveRequirementId > 0) and not FromParent;
+  btnAddMeasure.Enabled := CanEditContent and (FActiveRequirementId > 0);
+  btnDeleteMeasure.Enabled := CanEditContent and (FActiveRequirementId > 0);
   btnEditMeasure.Enabled := HasTarget and (FActiveRequirementId > 0);
-  if CanEdit and not FromParent then
+  if CanEditContent then
     btnEditMeasure.Caption := 'Bearbeiten'
   else
     btnEditMeasure.Caption := 'Anzeigen';
+  UpdateReviewUi;
 end;
 
 function TMainForm.SaveDeviationNote: Boolean;
@@ -1200,12 +1288,233 @@ begin
   Result := True;
   if not HasActiveProject or (FActiveTarget.Id = 0) or (FActiveBausteinId = 0) then
     Exit;
-  if not CanEditActiveProject then
+  if not CanEditActiveProject or ActiveBausteinLocked then
     Exit;
   Result := FContext.TargetObjectRepository.SaveDeviation(
     FActiveProject.Id, FActiveTarget.Id, FActiveBausteinId, memAssessmentNote.Text);
   if not Result then
     StatusBar.Panels[1].Text := FContext.TargetObjectRepository.LastError;
+end;
+
+function TMainForm.WorkflowActive: Boolean;
+begin
+  Result := FContext.IsRemote and FActiveProject.WorkflowEnabled;
+end;
+
+function TMainForm.BausteinReviewLocked(ABausteinId: Integer): Boolean;
+var
+  Review: TBausteinReview;
+begin
+  if not WorkflowActive or (ABausteinId <= 0) then
+    Exit(False);
+  if not FReviews.TryGetValue(ABausteinId, Review) then
+    Review := DefaultBausteinReview(FActiveProject.Id, FActiveTarget.Id, ABausteinId);
+  Result := not ReviewAllowsBausteinEdit(True, Review.State, Review.ReturnedRequirementIds);
+end;
+
+function TMainForm.ActiveBausteinLocked: Boolean;
+begin
+  Result := BausteinReviewLocked(FActiveBausteinId);
+end;
+
+function TMainForm.ActiveRequirementLocked: Boolean;
+var
+  Review: TBausteinReview;
+begin
+  if not WorkflowActive then
+    Exit(False);
+  Review := CurrentReview;
+  Result := not ReviewAllowsRequirementEdit(True, Review.State, Review.ReturnedRequirementIds,
+    FActiveRequirementId);
+end;
+
+function TMainForm.CurrentReview: TBausteinReview;
+begin
+  if not FReviews.TryGetValue(FActiveBausteinId, Result) then
+    Result := DefaultBausteinReview(FActiveProject.Id, FActiveTarget.Id, FActiveBausteinId);
+end;
+
+procedure TMainForm.ReloadReviews;
+var
+  Map: TDictionary<Integer, TBausteinReview>;
+begin
+  if not WorkflowActive or (FActiveTarget.Id = 0) then
+  begin
+    FReviews.Clear;
+    Exit;
+  end;
+  Map := FContext.TargetObjectRepository.LoadReviews(FActiveProject.Id, FActiveTarget.Id);
+  FReviews.Free;
+  FReviews := Map;
+end;
+
+procedure TMainForm.UpdateReviewUi;
+var
+  Review: TBausteinReview;
+  InheritedBs: Boolean;
+  Role: string;
+begin
+  if FReviewPanel = nil then
+    Exit;
+  FReviewPanel.Visible := WorkflowActive and HasActiveProject and (FActiveTarget.Id > 0) and
+    (FActiveBausteinId > 0);
+  if lblReviewNote <> nil then
+    lblReviewNote.Visible := False;
+  if not FReviewPanel.Visible then
+    Exit;
+  Review := CurrentReview;
+  InheritedBs := IsInheritedBaustein(FActiveBausteinId);
+  Role := FActiveProject.Role;
+  lblReview.Caption := 'Laufzettel: ' + ReviewStateLabel(Review.State);
+  lblReview.ShowHint := Review.ReviewNote <> '';
+  if Review.ReviewNote <> '' then
+    lblReview.Hint := 'R'#$00FC'ckgabe: ' + Review.ReviewNote
+  else
+    lblReview.Hint := '';
+  btnReviewSubmit.Visible := CanSubmitReview(True, InheritedBs, Review.State, Role);
+  btnReviewReturn.Visible := CanReturnReview(True, InheritedBs, Review.State, Role);
+  btnReviewAccept.Visible := CanAcceptReview(True, InheritedBs, Review.State, Role);
+  btnReviewAccept.Left := FReviewPanel.ClientWidth - btnReviewAccept.Width;
+  btnReviewReturn.Left := btnReviewAccept.Left - btnReviewReturn.Width - 8;
+  btnReviewSubmit.Left := btnReviewReturn.Left - btnReviewSubmit.Width - 8;
+end;
+
+function TMainForm.ApplyReviewAction(const AAction, ANote: string;
+  const ARequirementIds: TArray<Integer>): Boolean;
+var
+  SaveResult: TReviewSaveResult;
+begin
+  Result := False;
+  if not WorkflowActive or (FActiveTarget.Id = 0) or (FActiveBausteinId <= 0) then
+    Exit;
+  SaveResult := FContext.TargetObjectRepository.ApplyReview(
+    FActiveProject.Id, FActiveTarget.Id, FActiveBausteinId, AAction, ANote, ARequirementIds);
+  if SaveResult.Status <> rssOk then
+  begin
+    MessageDlg(FContext.TargetObjectRepository.LastError, mtWarning, [mbOK], 0);
+    Exit;
+  end;
+  FReviews.AddOrSetValue(FActiveBausteinId, SaveResult.Review);
+  ApplyInheritedUiState;
+  ShowTemporaryStatusMessage(ReviewActionMessage(AAction));
+  Result := True;
+end;
+
+procedure TMainForm.ReviewSubmitClick(Sender: TObject);
+begin
+  ApplyReviewAction(ReviewActionSubmit, '', nil);
+end;
+
+procedure TMainForm.ReviewReturnClick(Sender: TObject);
+var
+  Note: string;
+  Ids: TArray<Integer>;
+begin
+  if not PromptReviewReturn(Note, Ids) then
+    Exit;
+  ApplyReviewAction(ReviewActionReturn, Note, Ids);
+end;
+
+procedure TMainForm.ReviewAcceptClick(Sender: TObject);
+begin
+  ApplyReviewAction(ReviewActionAccept, '', nil);
+end;
+
+function TMainForm.PromptReviewReturn(out ANote: string; out ARequirementIds: TArray<Integer>): Boolean;
+var
+  Dlg: TForm;
+  List: TCheckListBox;
+  Memo: TMemo;
+  Lbl: TLabel;
+  BtnOk, BtnCancel: TButton;
+  I: Integer;
+  Review: TBausteinReview;
+  Count: Integer;
+begin
+  Result := False;
+  SetLength(ARequirementIds, 0);
+  ANote := '';
+  Dlg := TForm.Create(Self);
+  try
+    Dlg.Caption := 'Zur'#$00FC'ckgeben';
+    Dlg.BorderStyle := bsDialog;
+    Dlg.Position := poOwnerFormCenter;
+    Dlg.ClientWidth := 480;
+    Dlg.ClientHeight := 420;
+    Dlg.Font.Name := 'Segoe UI';
+    Dlg.Font.Height := -12;
+    Lbl := TLabel.Create(Dlg);
+    Lbl.Parent := Dlg;
+    Lbl.Left := 12;
+    Lbl.Top := 12;
+    Lbl.Width := 456;
+    Lbl.WordWrap := True;
+    Lbl.Caption := 'Keine Auswahl gibt den ganzen Baustein zur'#$00FC'ck. Mit Auswahl bleiben die anderen Anforderungen gesperrt.';
+    List := TCheckListBox.Create(Dlg);
+    List.Parent := Dlg;
+    List.Left := 12;
+    List.Top := 52;
+    List.Width := 456;
+    List.Height := 200;
+    Review := CurrentReview;
+    for I := 0 to High(FCurrentRequirements) do
+    begin
+      List.Items.Add(FCurrentRequirements[I].ExternalId + ' ' + FCurrentRequirements[I].Title);
+      List.Checked[List.Items.Count - 1] :=
+        ContainsReturnedRequirementId(Review.ReturnedRequirementIds, FCurrentRequirements[I].Id);
+    end;
+    Lbl := TLabel.Create(Dlg);
+    Lbl.Parent := Dlg;
+    Lbl.Left := 12;
+    Lbl.Top := 260;
+    Lbl.Caption := 'Begr'#$00FC'ndung der R'#$00FC'ckgabe:';
+    Memo := TMemo.Create(Dlg);
+    Memo.Parent := Dlg;
+    Memo.Left := 12;
+    Memo.Top := 280;
+    Memo.Width := 456;
+    Memo.Height := 80;
+    BtnOk := TButton.Create(Dlg);
+    BtnOk.Parent := Dlg;
+    BtnOk.Caption := 'OK';
+    BtnOk.Default := True;
+    BtnOk.ModalResult := mrOk;
+    BtnOk.Left := 292;
+    BtnOk.Top := 372;
+    BtnOk.Width := 85;
+    BtnCancel := TButton.Create(Dlg);
+    BtnCancel.Parent := Dlg;
+    BtnCancel.Caption := 'Abbrechen';
+    BtnCancel.Cancel := True;
+    BtnCancel.ModalResult := mrCancel;
+    BtnCancel.Left := 383;
+    BtnCancel.Top := 372;
+    BtnCancel.Width := 85;
+    if Dlg.ShowModal <> mrOk then
+      Exit;
+    if Trim(Memo.Text) = '' then
+    begin
+      MessageDlg('Bitte eine Begr'#$00FC'ndung f'#$00FC'r die R'#$00FC'ckgabe eintragen.',
+        mtWarning, [mbOK], 0);
+      Exit;
+    end;
+    ANote := Trim(Memo.Text);
+    Count := 0;
+    for I := 0 to List.Count - 1 do
+      if List.Checked[I] then
+        Inc(Count);
+    SetLength(ARequirementIds, Count);
+    Count := 0;
+    for I := 0 to List.Count - 1 do
+      if List.Checked[I] and (I <= High(FCurrentRequirements)) then
+      begin
+        ARequirementIds[Count] := FCurrentRequirements[I].Id;
+        Inc(Count);
+      end;
+    Result := True;
+  finally
+    Dlg.Free;
+  end;
 end;
 
 procedure TMainForm.ReloadBausteinTree;
@@ -1565,7 +1874,7 @@ begin
   edtResponsible.Text := AAssessment.Responsible;
   chkHasDueDate.Checked := IsValidDate(AAssessment.DueDate);
   dtpDueDate.Enabled := chkHasDueDate.Checked and CanEditActiveProject
-    and not IsInheritedBaustein(FActiveBausteinId);
+    and not IsInheritedBaustein(FActiveBausteinId) and not ActiveRequirementLocked;
   if chkHasDueDate.Checked then
     dtpDueDate.Date := AAssessment.DueDate;
   memAssessmentNote.Text := AAssessment.Note;
@@ -1609,7 +1918,7 @@ var
   SaveResult: TAssessmentSaveResult;
 begin
   if FSuppressAssessmentSave or not HasActiveProject or
-     (FActiveTarget.Id = 0) or not CanEditActiveProject then
+     (FActiveTarget.Id = 0) or not CanEditActiveProject or ActiveRequirementLocked then
     Exit(True);
   if IsInheritedBaustein(FActiveBausteinId) then
     Exit(SaveDeviationNote);
@@ -1642,6 +1951,15 @@ begin
     ApplyAssessmentConflict(SaveResult.Assessment, FActiveRequirementId, ANotifyDialog);
     Exit(False);
   end;
+  if SaveResult.Status = assReviewLocked then
+  begin
+    ApplyInheritedUiState;
+    if ANotifyDialog then
+      MessageDlg(FContext.ProjectRepository.LastError, mtWarning, [mbOK], 0)
+    else
+      ShowTemporaryStatusMessage(FContext.ProjectRepository.LastError, 8000);
+    Exit(False);
+  end;
   if ANotifyDialog then
     MessageDlg('Speichern fehlgeschlagen: ' + FContext.ProjectRepository.LastError,
       mtError, [mbOK], 0);
@@ -1650,7 +1968,7 @@ end;
 
 procedure TMainForm.SaveAssessmentFields;
 begin
-  if FSuppressAssessmentSave or not CanEditActiveProject then
+  if FSuppressAssessmentSave or not CanEditActiveProject or ActiveRequirementLocked then
     Exit;
   if not SaveCurrentAssessment(False) then
     ShowTemporaryStatusMessage('Speichern fehlgeschlagen: ' +
@@ -1856,7 +2174,8 @@ begin
   if not HasActiveProject then
     Exit;
   P := FActiveProject;
-  if not TProjectForm.ExecuteEdit(P, FContext.IsRemote) then
+  if not TProjectForm.ExecuteEdit(P, FContext.IsRemote,
+    FContext.IsRemote and (FActiveProject.Role = 'owner')) then
     Exit;
   if not FContext.ProjectRepository.UpdateProject(P) then
   begin
@@ -1866,6 +2185,8 @@ begin
   end;
   FActiveProject := P;
   UpdateProjectUi;
+  ReloadReviews;
+  ApplyInheritedUiState;
 end;
 
 procedure TMainForm.DoManageMembers(Sender: TObject);
@@ -2407,7 +2728,12 @@ begin
     MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
     Exit;
   end;
-  if IsInheritedBaustein(BausteinId) and (AStatus = apUndefined) then
+  if BausteinReviewLocked(BausteinId) then
+  begin
+    MessageDlg(ReviewLockMessage, mtInformation, [mbOK], 0);
+    Exit;
+  end;
+  if IsInheritedBaustein(BausteinId) then
   begin
     MessageDlg('Die Zuweisung ist vom '#252'bergeordneten Zielobjekt geerbt und kann hier nicht entfernt werden.',
       mtInformation, [mbOK], 0);
@@ -2533,7 +2859,7 @@ end;
 procedure TMainForm.chkHasDueDateClick(Sender: TObject);
 begin
   dtpDueDate.Enabled := chkHasDueDate.Checked and CanEditActiveProject
-    and not IsInheritedBaustein(FActiveBausteinId);
+    and not IsInheritedBaustein(FActiveBausteinId) and not ActiveRequirementLocked;
   SaveCurrentAssessment(True);
 end;
 
@@ -2659,6 +2985,7 @@ begin
   for Pair in FInheritedBausteine do
     if not FApplicabilityMap.ContainsKey(Pair.Key) then
       FApplicabilityMap.Add(Pair.Key, Pair.Value.Status);
+  ReloadReviews;
 end;
 
 procedure TMainForm.PopulateAssignedBausteinBox;
@@ -2990,7 +3317,7 @@ var
 begin
   if FActiveRequirementId = 0 then
     Exit;
-  if IsInheritedBaustein(FActiveBausteinId) then
+  if IsInheritedBaustein(FActiveBausteinId) or ActiveRequirementLocked then
     Exit;
   FillChar(M, SizeOf(M), 0);
   M.ProjectId := FActiveProject.Id;
@@ -3035,7 +3362,7 @@ begin
     end;
   if M.Id = 0 then
     Exit;
-  if IsInheritedBaustein(FActiveBausteinId) or not CanEditActiveProject then
+  if IsInheritedBaustein(FActiveBausteinId) or not CanEditActiveProject or ActiveRequirementLocked then
   begin
     TMeasureForm.ExecuteView(M);
     Exit;
@@ -3053,10 +3380,16 @@ begin
     end;
     if SaveResult.Status = mssVersionConflict then
     begin
-      MessageDlg('Ein anderer Benutzer hat diese Maßnahme zwischenzeitlich geändert. ' +
+      MessageDlg('Ein anderer Benutzer hat diese Ma'#223'nahme zwischenzeitlich ge'#$00E4'ndert. ' +
         'Die Liste wurde neu geladen.', mtWarning, [mbOK], 0);
       LoadMeasuresForCurrentRequirement;
       ReloadProgress;
+      Exit;
+    end;
+    if SaveResult.Status = mssReviewLocked then
+    begin
+      ApplyInheritedUiState;
+      MessageDlg(FContext.MeasureRepository.LastError, mtWarning, [mbOK], 0);
       Exit;
     end;
     MessageDlg('Speichern fehlgeschlagen: ' + FContext.MeasureRepository.LastError,
@@ -3072,7 +3405,7 @@ var
   MeasureId: Integer;
 begin
   Row := sgMeasures.Row;
-  if (Row < 1) or IsInheritedBaustein(FActiveBausteinId) then
+  if (Row < 1) or IsInheritedBaustein(FActiveBausteinId) or ActiveRequirementLocked then
     Exit;
   MeasureId := Integer(sgMeasures.Objects[0, Row]);
   if MessageDlg('Maßnahme wirklich löschen?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then

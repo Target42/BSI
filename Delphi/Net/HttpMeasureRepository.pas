@@ -135,7 +135,10 @@ begin
     try
       if (Status <> 201) or not (Doc is TJSONObject) then
       begin
-        FLastError := FClient.LastError;
+        if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
+          FLastError := ReviewLockMessage
+        else
+          FLastError := FClient.LastError;
         Exit;
       end;
       Result := MeasureFromJson(TJSONObject(Doc));
@@ -178,6 +181,11 @@ begin
         Current := Obj.GetValue('current');
         if (Current <> nil) and (Current is TJSONObject) then
           Exit(MeasureSaveConflict(MeasureFromJson(TJSONObject(Current))));
+        if IsReviewLockedJson(Obj) then
+        begin
+          FLastError := ReviewLockMessage;
+          Exit(MeasureSaveReviewLocked);
+        end;
         FLastError := 'Datensatz wurde zwischenzeitlich geändert. Bitte neu laden.';
         Exit;
       end;
@@ -199,7 +207,12 @@ var
 begin
   Result := FClient.Delete(Format('/api/v1/measures/%d', [AMeasureId]), Status) and (Status = 204);
   if not Result then
-    FLastError := FClient.LastError;
+  begin
+    if FClient.LastError = 'review_locked' then
+      FLastError := ReviewLockMessage
+    else
+      FLastError := FClient.LastError;
+  end;
 end;
 
 function THttpMeasureRepository.GetLastError: string;

@@ -23,6 +23,7 @@ type
     Visibility: string;
     Role: string;
     IsMember: Boolean;
+    WorkflowEnabled: Boolean;
     CreatedAt: TDateTime;
     UpdatedAt: TDateTime;
   end;
@@ -148,6 +149,7 @@ type
   TCockpitKind = (ckAssessment, ckMeasure);
   TCockpitKindFilter = (ckfAll, ckfAssessments, ckfMeasures);
   TCockpitDueFilter = (cdfAll, cdfOverdue, cdfThisWeek, cdfHasDate, cdfNoDate);
+  TCockpitReviewFilter = (crfAll, crfSubmitted, crfReturned);
 
   TCockpitItem = record
     Kind: TCockpitKind;
@@ -165,11 +167,13 @@ type
     MeasureId: Integer;
     AssessmentStatus: TAssessmentStatus;
     MeasureStatus: TMeasureStatus;
+    ReviewState: string;
   end;
 
   TCockpitFilter = record
     Kind: TCockpitKindFilter;
     Due: TCockpitDueFilter;
+    Review: TCockpitReviewFilter;
     HideDone: Boolean;
     MineOnly: Boolean;
     CurrentUserName: string;
@@ -183,6 +187,8 @@ type
     MeasureCount: Integer;
     OverdueCount: Integer;
     DueThisWeekCount: Integer;
+    SubmittedCount: Integer;
+    ReturnedCount: Integer;
   end;
 
   TBausteinRecommendationTier = (brtCore, brtSupplementary);
@@ -208,16 +214,31 @@ type
     RequirementId: Integer;
   end;
 
-  TAssessmentSaveStatus = (assOk, assVersionConflict, assForbidden, assFailed);
+  TAssessmentSaveStatus = (assOk, assVersionConflict, assForbidden, assReviewLocked, assFailed);
   TAssessmentSaveResult = record
     Status: TAssessmentSaveStatus;
     Assessment: TRequirementAssessment;
   end;
 
-  TMeasureSaveStatus = (mssOk, mssVersionConflict, mssForbidden, mssFailed);
+  TMeasureSaveStatus = (mssOk, mssVersionConflict, mssForbidden, mssReviewLocked, mssFailed);
   TMeasureSaveResult = record
     Status: TMeasureSaveStatus;
     Measure: TMeasure;
+  end;
+
+  TBausteinReview = record
+    ProjectId: Integer;
+    TargetObjectId: Integer;
+    BausteinId: Integer;
+    State: string;
+    ReviewNote: string;
+    ReturnedRequirementIds: TArray<Integer>;
+  end;
+
+  TReviewSaveStatus = (rssOk, rssForbidden, rssNoteRequired, rssInvalid, rssFailed);
+  TReviewSaveResult = record
+    Status: TReviewSaveStatus;
+    Review: TBausteinReview;
   end;
 
   TServerUser = record
@@ -300,11 +321,42 @@ function ProjectVisibilityLabel(const AValue: string): string;
 function AssessmentSaveOk(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
 function AssessmentSaveConflict(const AAssessment: TRequirementAssessment): TAssessmentSaveResult;
 function AssessmentSaveForbidden: TAssessmentSaveResult;
+function AssessmentSaveReviewLocked: TAssessmentSaveResult;
 function AssessmentSaveFailed: TAssessmentSaveResult;
 function MeasureSaveOk(const AMeasure: TMeasure): TMeasureSaveResult;
 function MeasureSaveConflict(const AMeasure: TMeasure): TMeasureSaveResult;
 function MeasureSaveForbidden: TMeasureSaveResult;
+function MeasureSaveReviewLocked: TMeasureSaveResult;
 function MeasureSaveFailed: TMeasureSaveResult;
+
+function NormalizeReviewState(const AValue: string): string;
+function ReviewStateLabel(const AValue: string): string;
+function DefaultBausteinReview(AProjectId, ATargetObjectId, ABausteinId: Integer): TBausteinReview;
+function ReviewAllowsContentEdit(AWorkflowEnabled: Boolean; const AState: string): Boolean;
+function ReviewAllowsBausteinEdit(AWorkflowEnabled: Boolean; const AState: string;
+  const AReturnedIds: TArray<Integer>): Boolean;
+function ReviewAllowsRequirementEdit(AWorkflowEnabled: Boolean; const AState: string;
+  const AReturnedIds: TArray<Integer>; ARequirementId: Integer): Boolean;
+function CanEditContentRole(const ARole: string): Boolean;
+function CanReviewRole(const ARole: string): Boolean;
+function CanSubmitReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+function CanReturnReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+function ReviewLockMessage(const AState: string = ''): string;
+function ReviewActionMessage(const AAction: string): string;
+function ReviewClientErrorMessage(const ACode: string): string;
+function ContainsReturnedRequirementId(const AIds: TArray<Integer>; ARequirementId: Integer): Boolean;
+function ReviewSaveOk(const AReview: TBausteinReview): TReviewSaveResult;
+function ReviewSaveFailed(AStatus: TReviewSaveStatus = rssFailed): TReviewSaveResult;
+
+const
+  ReviewStateInProgress = 'in_progress';
+  ReviewStateSubmitted = 'submitted';
+  ReviewStateReturned = 'returned';
+  ReviewStateAccepted = 'accepted';
+  ReviewActionSubmit = 'submit';
+  ReviewActionReturn = 'return';
+  ReviewActionAccept = 'accept';
 
 implementation
 
@@ -940,6 +992,7 @@ begin
   Result.Kind := ckfAll;
   Result.Due := cdfAll;
   Result.HideDone := True;
+  Result.Review := crfAll;
 end;
 
 function ProjectMemberRoleLabel(const ARole: string): string;
@@ -948,6 +1001,8 @@ begin
     Exit('Besitzer');
   if ARole = 'editor' then
     Exit('Bearbeiter');
+  if ARole = 'reviewer' then
+    Exit('Pr'#$00FC'fer');
   if ARole = 'viewer' then
     Exit('Leser');
   Result := ARole;
@@ -955,7 +1010,7 @@ end;
 
 function ProjectMemberRoleOptions: TArray<string>;
 begin
-  Result := TArray<string>.Create('owner', 'editor', 'viewer');
+  Result := TArray<string>.Create('owner', 'reviewer', 'editor', 'viewer');
 end;
 
 function NormalizeProjectVisibility(const AValue: string): string;
@@ -995,6 +1050,12 @@ begin
   FillChar(Result.Assessment, SizeOf(Result.Assessment), 0);
 end;
 
+function AssessmentSaveReviewLocked: TAssessmentSaveResult;
+begin
+  Result.Status := assReviewLocked;
+  FillChar(Result.Assessment, SizeOf(Result.Assessment), 0);
+end;
+
 function AssessmentSaveFailed: TAssessmentSaveResult;
 begin
   Result.Status := assFailed;
@@ -1019,10 +1080,185 @@ begin
   FillChar(Result.Measure, SizeOf(Result.Measure), 0);
 end;
 
+function MeasureSaveReviewLocked: TMeasureSaveResult;
+begin
+  Result.Status := mssReviewLocked;
+  FillChar(Result.Measure, SizeOf(Result.Measure), 0);
+end;
+
 function MeasureSaveFailed: TMeasureSaveResult;
 begin
   Result.Status := mssFailed;
   FillChar(Result.Measure, SizeOf(Result.Measure), 0);
+end;
+
+function NormalizeReviewState(const AValue: string): string;
+begin
+  Result := Trim(AValue);
+  if (Result = ReviewStateSubmitted) or (Result = ReviewStateReturned) or
+     (Result = ReviewStateAccepted) then
+    Exit;
+  Result := ReviewStateInProgress;
+end;
+
+function ReviewStateLabel(const AValue: string): string;
+begin
+  Result := NormalizeReviewState(AValue);
+  if Result = ReviewStateSubmitted then
+    Exit('Zur Pr'#$00FC'fung');
+  if Result = ReviewStateReturned then
+    Exit('Zur'#$00FC'ckgegeben');
+  if Result = ReviewStateAccepted then
+    Exit('Abgenommen');
+  Result := 'In Bearbeitung';
+end;
+
+function DefaultBausteinReview(AProjectId, ATargetObjectId, ABausteinId: Integer): TBausteinReview;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.ProjectId := AProjectId;
+  Result.TargetObjectId := ATargetObjectId;
+  Result.BausteinId := ABausteinId;
+  Result.State := ReviewStateInProgress;
+end;
+
+function ReviewAllowsContentEdit(AWorkflowEnabled: Boolean; const AState: string): Boolean;
+var
+  State: string;
+begin
+  if not AWorkflowEnabled then
+    Exit(True);
+  State := NormalizeReviewState(AState);
+  Result := (State <> ReviewStateSubmitted) and (State <> ReviewStateAccepted);
+end;
+
+function ContainsReturnedRequirementId(const AIds: TArray<Integer>; ARequirementId: Integer): Boolean;
+var
+  Id: Integer;
+begin
+  if ARequirementId <= 0 then
+    Exit(False);
+  for Id in AIds do
+    if Id = ARequirementId then
+      Exit(True);
+  Result := False;
+end;
+
+function ReviewAllowsBausteinEdit(AWorkflowEnabled: Boolean; const AState: string;
+  const AReturnedIds: TArray<Integer>): Boolean;
+begin
+  if not ReviewAllowsContentEdit(AWorkflowEnabled, AState) then
+    Exit(False);
+  Result := not (AWorkflowEnabled and (NormalizeReviewState(AState) = ReviewStateReturned) and
+    (Length(AReturnedIds) > 0));
+end;
+
+function ReviewAllowsRequirementEdit(AWorkflowEnabled: Boolean; const AState: string;
+  const AReturnedIds: TArray<Integer>; ARequirementId: Integer): Boolean;
+var
+  State: string;
+begin
+  if not AWorkflowEnabled then
+    Exit(True);
+  State := NormalizeReviewState(AState);
+  if (State = ReviewStateSubmitted) or (State = ReviewStateAccepted) then
+    Exit(False);
+  if (State = ReviewStateReturned) and (Length(AReturnedIds) > 0) then
+    Exit(ContainsReturnedRequirementId(AReturnedIds, ARequirementId));
+  Result := True;
+end;
+
+function CanEditContentRole(const ARole: string): Boolean;
+begin
+  Result := (ARole = 'owner') or (ARole = 'editor');
+end;
+
+function CanReviewRole(const ARole: string): Boolean;
+begin
+  Result := (ARole = 'owner') or (ARole = 'reviewer');
+end;
+
+function CanSubmitReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+var
+  State: string;
+begin
+  if (not AWorkflowEnabled) or AInherited or not CanEditContentRole(ARole) then
+    Exit(False);
+  State := NormalizeReviewState(AState);
+  Result := (State = ReviewStateInProgress) or (State = ReviewStateReturned);
+end;
+
+function CanReturnReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+var
+  State: string;
+begin
+  if (not AWorkflowEnabled) or AInherited or not CanReviewRole(ARole) then
+    Exit(False);
+  State := NormalizeReviewState(AState);
+  Result := (State = ReviewStateSubmitted) or (State = ReviewStateAccepted);
+end;
+
+function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+begin
+  if (not AWorkflowEnabled) or AInherited or not CanReviewRole(ARole) then
+    Exit(False);
+  Result := NormalizeReviewState(AState) = ReviewStateSubmitted;
+end;
+
+function ReviewLockMessage(const AState: string): string;
+var
+  State: string;
+begin
+  State := NormalizeReviewState(AState);
+  if State = ReviewStateAccepted then
+    Exit('Dieser Baustein ist abgenommen und kann nicht ge'#$00E4'ndert werden.');
+  if State = ReviewStateSubmitted then
+    Exit('Dieser Baustein ist zur Pr'#$00FC'fung eingereicht und kann nicht ge'#$00E4'ndert werden.');
+  if State = ReviewStateReturned then
+    Exit('Nur die zur'#$00FC'ckgegebenen Anforderungen k'#$00F6'nnen bearbeitet werden.');
+  Result := 'Dieser Baustein ist zur Pr'#$00FC'fung oder abgenommen und kann nicht ge'#$00E4'ndert werden.';
+end;
+
+function ReviewActionMessage(const AAction: string): string;
+begin
+  if AAction = ReviewActionSubmit then
+    Exit('Baustein zur Pr'#$00FC'fung eingereicht.');
+  if AAction = ReviewActionReturn then
+    Exit('Baustein zur'#$00FC'ckgegeben.');
+  if AAction = ReviewActionAccept then
+    Exit('Baustein abgenommen.');
+  Result := 'Laufzettel gespeichert.';
+end;
+
+function ReviewClientErrorMessage(const ACode: string): string;
+begin
+  if ACode = 'review_locked' then
+    Exit(ReviewLockMessage);
+  if ACode = 'review_note_required' then
+    Exit('Bitte eine Begr'#$00FC'ndung f'#$00FC'r die R'#$00FC'ckgabe eintragen.');
+  if ACode = 'invalid_returned_requirements' then
+    Exit('Bitte nur Anforderungen dieses Bausteins zur'#$00FC'ckgeben.');
+  if ACode = 'invalid_review_transition' then
+    Exit('Diese Aktion ist im aktuellen Laufzettel-Zustand nicht m'#$00F6'glich.');
+  if ACode = 'workflow_disabled' then
+    Exit('Der Pr'#$00FC'fkreislauf ist f'#$00FC'r dieses Projekt ausgeschaltet.');
+  if ACode = 'baustein_not_applicable' then
+    Exit('Nur eigene, anwendbare Bausteine k'#$00F6'nnen eingereicht werden.');
+  if ACode = 'forbidden' then
+    Exit('Daf'#$00FC'r fehlt die Berechtigung.');
+  Result := 'Laufzettel konnte nicht gespeichert werden.';
+end;
+
+function ReviewSaveOk(const AReview: TBausteinReview): TReviewSaveResult;
+begin
+  Result.Status := rssOk;
+  Result.Review := AReview;
+end;
+
+function ReviewSaveFailed(AStatus: TReviewSaveStatus): TReviewSaveResult;
+begin
+  Result.Status := AStatus;
+  FillChar(Result.Review, SizeOf(Result.Review), 0);
 end;
 
 end.

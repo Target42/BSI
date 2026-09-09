@@ -72,6 +72,7 @@ HEADERS += \
     src/domain/BausteinApplicability.h \
     src/domain/BausteinRecommendation.h \
     src/domain/Baustein.h \
+    src/domain/BausteinReview.h \
     src/domain/CockpitItem.h \
     src/domain/Measure.h \
     src/domain/MeasureStatus.h \

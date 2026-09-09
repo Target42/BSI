@@ -516,11 +516,19 @@ func (u *webUI) applicabilitySave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status == "" || status == "Ungesetzt" {
+		if err := u.store.RequireBausteinWritable(r.Context(), project.ID, target.ID, bausteinID); err != nil {
+			u.renderApplicability(w, r, user, project, true, target, reviewWebError(err))
+			return
+		}
 		if err := u.store.DeleteApplicability(r.Context(), project.ID, target.ID, bausteinID); err != nil {
 			u.renderApplicability(w, r, user, project, true, target, "Anwendbarkeit konnte nicht gelöscht werden.")
 			return
 		}
 	} else {
+		if err := u.store.RequireBausteinWritable(r.Context(), project.ID, target.ID, bausteinID); err != nil {
+			u.renderApplicability(w, r, user, project, true, target, reviewWebError(err))
+			return
+		}
 		if _, err := u.store.SaveApplicability(r.Context(), domain.BausteinApplicability{
 			ProjectID:      project.ID,
 			TargetObjectID: target.ID,

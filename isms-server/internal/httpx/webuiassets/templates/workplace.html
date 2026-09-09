@@ -58,6 +58,7 @@
               <tr>
                 <th>Baustein</th>
                 <th>Status</th>
+                <th>Laufzettel</th>
                 <th>Offen</th>
               </tr>
             </thead>
@@ -70,6 +71,15 @@
                   {{if .Inherited}}<div class="muted">↓ von {{.SourceCaption}}</div>{{end}}
                 </td>
                 <td>{{if .Status}}<span class="{{statusClass .Status false}}">{{.Status}}</span>{{else}}—{{end}}</td>
+                <td>
+                  {{if $.Project.WorkflowEnabled}}
+                    {{if .Inherited}}
+                      <span class="muted">am übergeordneten Objekt</span>
+                    {{else}}
+                      <span class="{{statusClass .ReviewLabel false}}">{{.ReviewLabel}}</span>
+                    {{end}}
+                  {{else}}—{{end}}
+                </td>
                 <td>{{.OpenCount}} / {{.TotalCount}}</td>
               </tr>
               {{end}}
@@ -81,6 +91,20 @@
       {{if .Baustein.ID}}
         <h2>{{.Baustein.ExternalID}} {{.Baustein.Title}}</h2>
         <p class="muted"><a href="{{href (printf "/catalog/bausteine/%d" .Baustein.ID)}}">Im Katalog anzeigen</a></p>
+        {{if $.Project.WorkflowEnabled}}
+          <p>
+            Laufzettel:
+            <span class="{{statusClass (reviewLabel .Review.State) false}}">{{reviewLabel .Review.State}}</span>
+          </p>
+          {{if .Review.ReviewNote}}
+            <div class="notice">Rückgabe: {{.Review.ReviewNote}}</div>
+          {{end}}
+        {{end}}
+        {{if .ReviewLocked}}
+          <p class="muted">Bewertungen und Maßnahmen sind gesperrt, solange der Baustein zur Prüfung oder abgenommen ist.</p>
+        {{else if and (eq .Review.State "returned") .Review.ReturnedRequirementIDs}}
+          <p class="muted">Nur die zurückgegebenen Anforderungen können bearbeitet werden. Anwendbarkeit und Massenstatus bleiben gesperrt.</p>
+        {{end}}
         {{if not .WorkReqs}}
           <p class="muted">Keine Anforderungen für den Schutzbedarf dieses Zielobjekts.</p>
         {{else}}
@@ -98,6 +122,7 @@
                 <tr>
                   <td>
                     <a href="{{href (printf "/projects/%d/targets/%d/requirements/%d" $.Project.ID $.Target.ID .ID)}}">{{.ExternalID}} {{.Title}}</a>
+                    {{if .Returned}}<span class="muted"> · zurückgegeben</span>{{end}}
                   </td>
                   <td>{{if .Level}}{{.Level}}{{else}}—{{end}}</td>
                   <td>
@@ -111,7 +136,7 @@
             </table>
           </div>
         {{end}}
-        {{if and $.CanEdit (not $.Inherited) $.WorkReqs}}
+        {{if and $.CanEdit (not $.Inherited) (not $.ReviewLocked) $.WorkReqs}}
         <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/assessments/bulk" $.Project.ID $.Target.ID)}}">
           {{template "csrf" $}}
           <input type="hidden" name="bausteinID" value="{{$.Baustein.ID}}">
@@ -141,6 +166,61 @@
         </form>
         {{else if and $.CanEdit $.Inherited}}
         <p class="muted">Geerbter Baustein: Bewertungsstatus am übergeordneten Zielobjekt ändern.</p>
+        {{end}}
+        {{if or $.CanSubmit $.CanReview}}
+        <div class="card">
+          <h2>Prüfung</h2>
+          {{if $.CanSubmit}}
+          <form method="post" action="{{href (printf "/projects/%d/targets/%d/review" $.Project.ID $.Target.ID)}}">
+            {{template "csrf" $}}
+            <input type="hidden" name="bausteinID" value="{{$.Baustein.ID}}">
+            <input type="hidden" name="q" value="{{$.Query}}">
+            <input type="hidden" name="filter" value="{{$.StatusFilter}}">
+            <input type="hidden" name="highlight" value="{{if $.HighlightRecs}}1{{else}}0{{end}}">
+            <p class="muted">Reicht den Baustein zur Prüfung ein. Danach sind Bewertungen und Maßnahmen gesperrt.</p>
+            <button class="btn" type="submit" name="action" value="submit">Zur Prüfung einreichen</button>
+          </form>
+          {{end}}
+          {{if $.CanReview}}
+          {{if eq $.Review.State "submitted"}}
+          <form method="post" action="{{href (printf "/projects/%d/targets/%d/review" $.Project.ID $.Target.ID)}}">
+            {{template "csrf" $}}
+            <input type="hidden" name="bausteinID" value="{{$.Baustein.ID}}">
+            <input type="hidden" name="q" value="{{$.Query}}">
+            <input type="hidden" name="filter" value="{{$.StatusFilter}}">
+            <input type="hidden" name="highlight" value="{{if $.HighlightRecs}}1{{else}}0{{end}}">
+            <p class="muted">Nimmt den Baustein mit den hinterlegten Bewertungen und Maßnahmen ab.</p>
+            <button class="btn" type="submit" name="action" value="accept">Abnehmen</button>
+          </form>
+          {{end}}
+          {{if or (eq $.Review.State "submitted") (eq $.Review.State "accepted")}}
+          <form method="post" action="{{href (printf "/projects/%d/targets/%d/review" $.Project.ID $.Target.ID)}}">
+            {{template "csrf" $}}
+            <input type="hidden" name="bausteinID" value="{{$.Baustein.ID}}">
+            <input type="hidden" name="q" value="{{$.Query}}">
+            <input type="hidden" name="filter" value="{{$.StatusFilter}}">
+            <input type="hidden" name="highlight" value="{{if $.HighlightRecs}}1{{else}}0{{end}}">
+            {{if $.WorkReqs}}
+            <p class="muted">Keine Auswahl gibt den ganzen Baustein zurück. Mit Auswahl bleiben die anderen Anforderungen gesperrt.</p>
+            <fieldset>
+              <legend>Anforderungen zurückgeben</legend>
+              {{range $.WorkReqs}}
+              <label class="check">
+                <input type="checkbox" name="requirementID" value="{{.ID}}" {{if .Returned}}checked{{end}}>
+                {{.ExternalID}} {{.Title}}
+              </label>
+              {{end}}
+            </fieldset>
+            {{end}}
+            <div class="field">
+              <label for="reviewNote">Begründung der Rückgabe</label>
+              <textarea id="reviewNote" name="note" rows="3" required></textarea>
+            </div>
+            <button class="btn btn-secondary" type="submit" name="action" value="return">Zurückgeben</button>
+          </form>
+          {{end}}
+          {{end}}
+        </div>
         {{end}}
       {{end}}
     </main>
