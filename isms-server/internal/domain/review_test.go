@@ -101,20 +101,38 @@ func TestReviewActionFlags(t *testing.T) {
 	if CanSubmitReview(true, false, ReviewInProgress, RoleReviewer) {
 		t.Fatal("reviewer cannot submit")
 	}
-	if !CanReturnReview(true, false, ReviewAccepted, RoleOwner) {
+	if !CanReturnReview(true, false, ReviewAccepted, RoleOwner, 0, 1) {
 		t.Fatal("owner can reopen accepted")
 	}
-	if !CanReturnReview(true, false, ReviewSubmitted, RoleReviewer) {
+	if !CanReturnReview(true, false, ReviewSubmitted, RoleReviewer, 0, 2) {
 		t.Fatal("reviewer can return")
 	}
-	if CanAcceptReview(true, false, ReviewInProgress, RoleOwner) {
+	if CanAcceptReview(true, false, ReviewInProgress, RoleOwner, 0, 1) {
 		t.Fatal("accept only from submitted")
 	}
-	if CanAcceptReview(true, false, ReviewSubmitted, RoleEditor) {
+	if CanAcceptReview(true, false, ReviewSubmitted, RoleEditor, 0, 3) {
 		t.Fatal("editor cannot accept")
 	}
-	if !CanAcceptReview(true, false, ReviewSubmitted, RoleReviewer) {
+	if !CanAcceptReview(true, false, ReviewSubmitted, RoleReviewer, 0, 2) {
 		t.Fatal("reviewer can accept")
+	}
+	if !CanAcceptReview(true, false, ReviewSubmitted, RoleReviewer, 2, 2) {
+		t.Fatal("assigned reviewer can accept")
+	}
+	if CanAcceptReview(true, false, ReviewSubmitted, RoleReviewer, 9, 2) {
+		t.Fatal("other reviewer cannot accept assigned baustein")
+	}
+	if !CanAcceptReview(true, false, ReviewSubmitted, RoleOwner, 9, 1) {
+		t.Fatal("owner can accept assigned baustein")
+	}
+	if !CanAssignReviewer(RoleEditor) || !CanAssignReviewer(RoleOwner) {
+		t.Fatal("owner and editor can assign")
+	}
+	if CanAssignReviewer(RoleReviewer) {
+		t.Fatal("reviewer cannot assign")
+	}
+	if !CanBeAssignedReviewer(RoleReviewer) || !CanBeAssignedReviewer(RoleOwner) || CanBeAssignedReviewer(RoleEditor) {
+		t.Fatal("only reviewer and owner can be assigned")
 	}
 }
 

@@ -9,15 +9,20 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const bausteinReviewColumns = `
-	project_id, target_object_id, baustein_id, state, review_note, returned_requirement_ids,
-	submitted_by, submitted_at, reviewed_by, reviewed_at, updated_at`
+const bausteinReviewSelect = `
+	r.project_id, r.target_object_id, r.baustein_id, r.state, r.review_note, r.returned_requirement_ids,
+	r.submitted_by, r.submitted_at, r.reviewed_by, r.reviewed_at, r.assigned_reviewer_id,
+	COALESCE(NULLIF(u.display_name, ''), u.email, ''), r.updated_at`
+
+const bausteinReviewFrom = `
+	baustein_reviews r
+	LEFT JOIN users u ON u.id = r.assigned_reviewer_id`
 
 func (s *Store) GetBausteinReview(ctx context.Context, projectID, targetObjectID, bausteinID int64) (domain.BausteinReview, error) {
 	review, err := scanBausteinReview(s.pool.QueryRow(ctx, `
-		SELECT `+bausteinReviewColumns+`
-		FROM baustein_reviews
-		WHERE project_id = $1 AND target_object_id = $2 AND baustein_id = $3`,
+		SELECT `+bausteinReviewSelect+`
+		FROM `+bausteinReviewFrom+`
+		WHERE r.project_id = $1 AND r.target_object_id = $2 AND r.baustein_id = $3`,
 		projectID, targetObjectID, bausteinID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.DefaultBausteinReview(projectID, targetObjectID, bausteinID), nil
@@ -27,9 +32,9 @@ func (s *Store) GetBausteinReview(ctx context.Context, projectID, targetObjectID
 
 func (s *Store) ListBausteinReviews(ctx context.Context, projectID, targetObjectID int64) (map[int64]domain.BausteinReview, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT `+bausteinReviewColumns+`
-		FROM baustein_reviews
-		WHERE project_id = $1 AND target_object_id = $2`,
+		SELECT `+bausteinReviewSelect+`
+		FROM `+bausteinReviewFrom+`
+		WHERE r.project_id = $1 AND r.target_object_id = $2`,
 		projectID, targetObjectID)
 	if err != nil {
 		return nil, err
@@ -49,10 +54,10 @@ func (s *Store) ListBausteinReviews(ctx context.Context, projectID, targetObject
 
 func (s *Store) ListProjectReviews(ctx context.Context, projectID int64) ([]domain.BausteinReview, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT `+bausteinReviewColumns+`
-		FROM baustein_reviews
-		WHERE project_id = $1
-		ORDER BY updated_at DESC, baustein_id`,
+		SELECT `+bausteinReviewSelect+`
+		FROM `+bausteinReviewFrom+`
+		WHERE r.project_id = $1
+		ORDER BY r.updated_at DESC, r.baustein_id`,
 		projectID)
 	if err != nil {
 		return nil, err
@@ -73,11 +78,11 @@ func (s *Store) ListProjectReviews(ctx context.Context, projectID int64) ([]doma
 func (s *Store) SaveBausteinReview(ctx context.Context, review domain.BausteinReview) (domain.BausteinReview, error) {
 	review.State = domain.NormalizeReviewState(review.State)
 	review.ReturnedRequirementIDs = domain.NormalizeReturnedRequirementIDs(review.ReturnedRequirementIDs)
-	saved, err := scanBausteinReview(s.pool.QueryRow(ctx, `
+	_, err := s.pool.Exec(ctx, `
 		INSERT INTO baustein_reviews (
 			project_id, target_object_id, baustein_id, state, review_note, returned_requirement_ids,
-			submitted_by, submitted_at, reviewed_by, reviewed_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			submitted_by, submitted_at, reviewed_by, reviewed_at, assigned_reviewer_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (project_id, target_object_id, baustein_id) DO UPDATE SET
 			state = EXCLUDED.state,
 			review_note = EXCLUDED.review_note,
@@ -86,14 +91,38 @@ func (s *Store) SaveBausteinReview(ctx context.Context, review domain.BausteinRe
 			submitted_at = EXCLUDED.submitted_at,
 			reviewed_by = EXCLUDED.reviewed_by,
 			reviewed_at = EXCLUDED.reviewed_at,
-			updated_at = now()
-		RETURNING `+bausteinReviewColumns,
+			assigned_reviewer_id = EXCLUDED.assigned_reviewer_id,
+			updated_at = now()`,
 		review.ProjectID, review.TargetObjectID, review.BausteinID, review.State, review.ReviewNote,
 		review.ReturnedRequirementIDs,
 		nullableInt64(review.SubmittedBy), review.SubmittedAt,
 		nullableInt64(review.ReviewedBy), review.ReviewedAt,
-	))
-	return saved, err
+		nullableInt64(review.AssignedReviewerID),
+	)
+	if err != nil {
+		return domain.BausteinReview{}, err
+	}
+	return s.GetBausteinReview(ctx, review.ProjectID, review.TargetObjectID, review.BausteinID)
+}
+
+func (s *Store) ResolveAssignedReviewer(ctx context.Context, projectID, reviewerID int64) (int64, string, error) {
+	if reviewerID <= 0 {
+		return 0, "", nil
+	}
+	members, err := s.ListProjectMembers(ctx, projectID)
+	if err != nil {
+		return 0, "", err
+	}
+	for _, member := range members {
+		if member.UserID == reviewerID && domain.CanBeAssignedReviewer(member.Role) {
+			name := member.DisplayName
+			if name == "" {
+				name = member.Email
+			}
+			return member.UserID, name, nil
+		}
+	}
+	return 0, "", domain.ErrInvalidReviewer
 }
 
 func (s *Store) RequireBausteinWritable(ctx context.Context, projectID, targetObjectID, bausteinID int64) error {
@@ -136,12 +165,13 @@ func (s *Store) RequireMeasureWritable(ctx context.Context, measure domain.Measu
 
 func scanBausteinReview(scanner interface{ Scan(dest ...any) error }) (domain.BausteinReview, error) {
 	var review domain.BausteinReview
-	var submittedBy, reviewedBy *int64
+	var submittedBy, reviewedBy, assignedReviewerID *int64
 	var submittedAt, reviewedAt *time.Time
 	err := scanner.Scan(
 		&review.ProjectID, &review.TargetObjectID, &review.BausteinID, &review.State, &review.ReviewNote,
 		&review.ReturnedRequirementIDs,
-		&submittedBy, &submittedAt, &reviewedBy, &reviewedAt, &review.UpdatedAt,
+		&submittedBy, &submittedAt, &reviewedBy, &reviewedAt, &assignedReviewerID,
+		&review.AssignedReviewerName, &review.UpdatedAt,
 	)
 	if err != nil {
 		return domain.BausteinReview{}, err
@@ -156,5 +186,8 @@ func scanBausteinReview(scanner interface{ Scan(dest ...any) error }) (domain.Ba
 		review.ReviewedBy = *reviewedBy
 	}
 	review.ReviewedAt = reviewedAt
+	if assignedReviewerID != nil {
+		review.AssignedReviewerID = *assignedReviewerID
+	}
 	return review, nil
 }

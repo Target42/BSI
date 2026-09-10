@@ -19,6 +19,7 @@ public:
         TitleColumn,
         StatusColumn,
         ReviewColumn,
+        ReviewerColumn,
         ResponsibleColumn,
         DueDateColumn,
         ColumnCount

@@ -20,7 +20,7 @@ class CockpitDialog : public QDialog
 
 public:
     CockpitDialog(AppContext &context, const Project &project, const QString &userName,
-                  const QString &userEmail, QWidget *parent = nullptr);
+                  const QString &userEmail, int userId = 0, QWidget *parent = nullptr);
 
     CockpitItem selectedItem() const { return m_selected; }
 

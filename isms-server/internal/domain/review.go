@@ -28,6 +28,7 @@ var (
 	ErrReviewInherited             = errors.New("inherited baustein")
 	ErrReviewNotApplicable         = errors.New("baustein not applicable")
 	ErrInvalidReturnedRequirements = errors.New("invalid returned requirements")
+	ErrInvalidReviewer             = errors.New("invalid reviewer")
 )
 
 type BausteinReview struct {
@@ -41,6 +42,8 @@ type BausteinReview struct {
 	SubmittedAt            *time.Time `json:"submittedAt,omitempty"`
 	ReviewedBy             int64      `json:"reviewedBy,omitempty"`
 	ReviewedAt             *time.Time `json:"reviewedAt,omitempty"`
+	AssignedReviewerID     int64      `json:"assignedReviewerId,omitempty"`
+	AssignedReviewerName   string     `json:"assignedReviewerName,omitempty"`
 	UpdatedAt              time.Time  `json:"updatedAt,omitempty"`
 }
 
@@ -183,23 +186,44 @@ func CanSubmitReview(workflowEnabled, inherited bool, state, role string) bool {
 	}
 }
 
-func CanReturnReview(workflowEnabled, inherited bool, state, role string) bool {
+func CanAssignReviewer(role string) bool {
+	return CanEditContent(role)
+}
+
+func CanBeAssignedReviewer(role string) bool {
+	return CanReview(role)
+}
+
+func ReviewAssignmentAllows(assignedReviewerID, userID int64, role string) bool {
+	if assignedReviewerID <= 0 {
+		return true
+	}
+	if role == RoleOwner {
+		return true
+	}
+	return assignedReviewerID == userID
+}
+
+func CanReturnReview(workflowEnabled, inherited bool, state, role string, assignedReviewerID, userID int64) bool {
 	if !workflowEnabled || inherited || !CanReview(role) {
 		return false
 	}
 	switch NormalizeReviewState(state) {
 	case ReviewSubmitted, ReviewAccepted:
-		return true
+		return ReviewAssignmentAllows(assignedReviewerID, userID, role)
 	default:
 		return false
 	}
 }
 
-func CanAcceptReview(workflowEnabled, inherited bool, state, role string) bool {
+func CanAcceptReview(workflowEnabled, inherited bool, state, role string, assignedReviewerID, userID int64) bool {
 	if !workflowEnabled || inherited || !CanReview(role) {
 		return false
 	}
-	return NormalizeReviewState(state) == ReviewSubmitted
+	if NormalizeReviewState(state) != ReviewSubmitted {
+		return false
+	}
+	return ReviewAssignmentAllows(assignedReviewerID, userID, role)
 }
 
 func ReviewTransition(workflowEnabled bool, state, action, role, note string) (string, error) {

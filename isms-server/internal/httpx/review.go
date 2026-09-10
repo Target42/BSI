@@ -36,6 +36,12 @@ func applyBausteinReview(
 	if err != nil {
 		return domain.BausteinReview{}, err
 	}
+	action = strings.TrimSpace(action)
+	if action == domain.ReviewActionReturn || action == domain.ReviewActionAccept {
+		if !domain.ReviewAssignmentAllows(current.AssignedReviewerID, userID, role) {
+			return domain.BausteinReview{}, domain.ErrForbiddenReview
+		}
+	}
 	next, err := domain.ReviewTransition(project.WorkflowEnabled, current.State, action, role, note)
 	if err != nil {
 		return domain.BausteinReview{}, err
@@ -80,6 +86,32 @@ func applyBausteinReview(
 	return store.SaveBausteinReview(r.Context(), current)
 }
 
+func assignBausteinReviewer(
+	r *http.Request,
+	store *repository.Store,
+	project domain.Project,
+	targetObjectID, bausteinID, reviewerID int64,
+) (domain.BausteinReview, error) {
+	own, err := store.ApplicabilityMap(r.Context(), project.ID, targetObjectID)
+	if err != nil {
+		return domain.BausteinReview{}, err
+	}
+	if !domain.ApplicabilityCountsForReport(own[bausteinID]) {
+		return domain.BausteinReview{}, domain.ErrReviewNotApplicable
+	}
+	reviewerID, name, err := store.ResolveAssignedReviewer(r.Context(), project.ID, reviewerID)
+	if err != nil {
+		return domain.BausteinReview{}, err
+	}
+	current, err := store.GetBausteinReview(r.Context(), project.ID, targetObjectID, bausteinID)
+	if err != nil {
+		return domain.BausteinReview{}, err
+	}
+	current.AssignedReviewerID = reviewerID
+	current.AssignedReviewerName = name
+	return store.SaveBausteinReview(r.Context(), current)
+}
+
 func mapReviewError(w http.ResponseWriter, err error) bool {
 	switch {
 	case errors.Is(err, domain.ErrWorkflowDisabled):
@@ -98,6 +130,8 @@ func mapReviewError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusConflict, "review_locked")
 	case errors.Is(err, domain.ErrForbiddenReview), errors.Is(err, repository.ErrForbidden):
 		writeError(w, http.StatusForbidden, "forbidden")
+	case errors.Is(err, domain.ErrInvalidReviewer):
+		writeError(w, http.StatusBadRequest, "invalid_reviewer")
 	default:
 		return false
 	}
@@ -142,6 +176,8 @@ func reviewWebError(err error) string {
 		return "Diese Aktion ist im aktuellen Laufzettel-Zustand nicht möglich."
 	case errors.Is(err, domain.ErrForbiddenReview):
 		return "Dafür fehlt die Berechtigung."
+	case errors.Is(err, domain.ErrInvalidReviewer):
+		return "Bitte einen Prüfer oder Besitzer des Projekts zuweisen."
 	case errors.Is(err, domain.ErrReviewNotApplicable), errors.Is(err, domain.ErrReviewInherited):
 		return "Nur eigene, anwendbare Bausteine können eingereicht werden."
 	case errors.Is(err, domain.ErrReviewLocked):

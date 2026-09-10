@@ -33,6 +33,8 @@ type
     function ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
       const AAction, ANote: string;
       const ARequirementIds: TArray<Integer>): TReviewSaveResult; override;
+    function AssignReviewer(AProjectId, ATargetObjectId, ABausteinId,
+      AAssignedReviewerId: Integer): TReviewSaveResult; override;
     function GetLastError: string; override;
   end;
 
@@ -442,6 +444,13 @@ end;
 
 function TTargetObjectRepository.ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
   const AAction, ANote: string; const ARequirementIds: TArray<Integer>): TReviewSaveResult;
+begin
+  FLastError := 'Pr'#$00FC'fkreislauf nur im Server-Modus verf'#$00FC'gbar.';
+  Result := ReviewSaveFailed;
+end;
+
+function TTargetObjectRepository.AssignReviewer(AProjectId, ATargetObjectId, ABausteinId,
+  AAssignedReviewerId: Integer): TReviewSaveResult;
 begin
   FLastError := 'Pr'#$00FC'fkreislauf nur im Server-Modus verf'#$00FC'gbar.';
   Result := ReviewSaveFailed;

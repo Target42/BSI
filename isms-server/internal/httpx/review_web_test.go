@@ -10,6 +10,7 @@ import (
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/domain"
+	"github.com/Target42/BSI/isms-server/internal/repository"
 )
 
 func TestWorkplaceReviewActions(t *testing.T) {
@@ -143,6 +144,30 @@ func TestCockpitReviewQueueTemplate(t *testing.T) {
 	}
 }
 
+func TestWorkplaceReviewerAssignForm(t *testing.T) {
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
+	var buf bytes.Buffer
+	err := ui.tmpl.ExecuteTemplate(&buf, "workplace", webPage{
+		CanAssign:    true,
+		CanSubmit:    true,
+		Project:      domain.Project{ID: 1, WorkflowEnabled: true},
+		Target:       domain.TargetObject{ID: 2},
+		Baustein:     domain.Baustein{ID: 9, ExternalID: "APP.1", Title: "Office"},
+		StatusFilters: []string{"Anwendbar"},
+		StatusFilter:  "Anwendbar",
+		Reviewers: []repository.ProjectMember{{
+			UserID: 4, DisplayName: "Anna Prüfer", Role: domain.RoleReviewer,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, "Prüfer zuweisen") || !strings.Contains(body, "Anna Prüfer") {
+		t.Fatalf("assign form missing: %s", body)
+	}
+}
+
 func TestWorkplaceModelLockActions(t *testing.T) {
 	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
 	page := webPage{
@@ -187,7 +212,7 @@ func TestFilterMeasureRowsByReview(t *testing.T) {
 		{Measure: domain.Measure{Title: "Patch", Status: "Offen"}, ReviewState: domain.ReviewSubmitted, ReviewLabel: "Zur Prüfung"},
 		{Measure: domain.Measure{Title: "Backup", Status: "Erledigt"}, ReviewState: domain.ReviewReturned, ReviewLabel: "Zurückgegeben"},
 	}
-	got := filterMeasureRows(items, "", "Alle", true, domain.ReviewReturned)
+	got := filterMeasureRows(items, "", "Alle", true, domain.ReviewReturned, 0)
 	if len(got) != 1 || got[0].Title != "Backup" {
 		t.Fatalf("review filter should keep returned even if done: %+v", got)
 	}

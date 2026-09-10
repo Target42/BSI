@@ -43,12 +43,16 @@ struct CockpitItem {
     AssessmentStatus assessmentStatus = AssessmentStatus::Open;
     MeasureStatus measureStatus = MeasureStatus::Open;
     QString reviewState;
+    int assignedReviewerId = 0;
+    QString assignedReviewerName;
 };
 
 enum class CockpitReviewFilter {
     All,
     Submitted,
-    Returned
+    Returned,
+    AssignedToMe,
+    Unassigned
 };
 
 struct CockpitFilter {
@@ -57,6 +61,7 @@ struct CockpitFilter {
     CockpitReviewFilter review = CockpitReviewFilter::All;
     bool hideDone = true;
     bool mineOnly = false;
+    int currentUserId = 0;
     QString currentUserName;
     QString currentUserEmail;
     QString responsibleNeedle;

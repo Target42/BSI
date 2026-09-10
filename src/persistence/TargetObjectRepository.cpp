@@ -361,6 +361,17 @@ ReviewSaveResult TargetObjectRepository::applyReview(int projectId, int targetOb
     return ReviewSaveResult::failed();
 }
 
+ReviewSaveResult TargetObjectRepository::assignReviewer(int projectId, int targetObjectId, int bausteinId,
+                                                        int assignedReviewerId)
+{
+    Q_UNUSED(projectId)
+    Q_UNUSED(targetObjectId)
+    Q_UNUSED(bausteinId)
+    Q_UNUSED(assignedReviewerId)
+    m_lastError = QStringLiteral("Prüfkreislauf nur im Server-Modus verfügbar.");
+    return ReviewSaveResult::failed();
+}
+
 QString TargetObjectRepository::lastError() const
 {
     return m_lastError;

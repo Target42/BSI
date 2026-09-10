@@ -115,7 +115,7 @@ var
   Linked: TReportRow;
   Reviews: TArray<TBausteinReview>;
   Review: TBausteinReview;
-  ReviewStateByKey: TDictionary<string, string>;
+  ReviewByKey: TDictionary<string, TBausteinReview>;
   I: Integer;
 begin
   List := TList<TCockpitItem>.Create;
@@ -191,20 +191,24 @@ begin
     end;
 
     Reviews := FTarget.LoadProjectReviews(AProjectId);
-    ReviewStateByKey := TDictionary<string, string>.Create;
+    ReviewByKey := TDictionary<string, TBausteinReview>.Create;
     try
       for Review in Reviews do
-        ReviewStateByKey.AddOrSetValue(Format('%d:%d', [Review.TargetObjectId, Review.BausteinId]),
-          NormalizeReviewState(Review.State));
+        ReviewByKey.AddOrSetValue(Format('%d:%d', [Review.TargetObjectId, Review.BausteinId]), Review);
       for I := 0 to List.Count - 1 do
       begin
         Item := List[I];
-        if (Item.BausteinDbId > 0) and ReviewStateByKey.TryGetValue(
-          Format('%d:%d', [Item.TargetObjectId, Item.BausteinDbId]), Item.ReviewState) then
+        if (Item.BausteinDbId > 0) and ReviewByKey.TryGetValue(
+          Format('%d:%d', [Item.TargetObjectId, Item.BausteinDbId]), Review) then
+        begin
+          Item.ReviewState := NormalizeReviewState(Review.State);
+          Item.AssignedReviewerId := Review.AssignedReviewerId;
+          Item.AssignedReviewerName := Review.AssignedReviewerName;
           List[I] := Item;
+        end;
       end;
     finally
-      ReviewStateByKey.Free;
+      ReviewByKey.Free;
     end;
 
     List.Sort(TComparer<TCockpitItem>.Construct(
@@ -248,6 +252,16 @@ begin
             Continue;
         crfReturned:
           if NormalizeReviewState(Item.ReviewState) <> ReviewStateReturned then
+            Continue;
+        crfAssignedToMe:
+          if (AFilter.CurrentUserId <= 0) or (Item.AssignedReviewerId <> AFilter.CurrentUserId) or
+            ((NormalizeReviewState(Item.ReviewState) <> ReviewStateSubmitted) and
+             (NormalizeReviewState(Item.ReviewState) <> ReviewStateReturned)) then
+            Continue;
+        crfUnassigned:
+          if (Item.AssignedReviewerId > 0) or
+            ((NormalizeReviewState(Item.ReviewState) <> ReviewStateSubmitted) and
+             (NormalizeReviewState(Item.ReviewState) <> ReviewStateReturned)) then
             Continue;
       end;
       case AFilter.Due of

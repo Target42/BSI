@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/Target42/BSI/isms-server/internal/domain"
 )
 
 func (u *webUI) reviewApply(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +42,48 @@ func (u *webUI) reviewApply(w http.ResponseWriter, r *http.Request) {
 		sep = "&"
 	}
 	http.Redirect(w, r, path+sep+"saved="+action, http.StatusSeeOther)
+}
+
+func (u *webUI) reviewerAssign(w http.ResponseWriter, r *http.Request) {
+	user, project, role, ok := u.projectMemberAccess(w, r, "editor")
+	if !ok {
+		return
+	}
+	if !domain.CanAssignReviewer(role) {
+		target, ok := u.loadProjectTarget(w, r, project)
+		if !ok {
+			return
+		}
+		u.renderWorkplace(w, r, user, project, role, target, "Dafür fehlt die Berechtigung.")
+		return
+	}
+	target, ok := u.loadProjectTarget(w, r, project)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		u.renderWorkplace(w, r, user, project, role, target, "Ungültige Anfrage.")
+		return
+	}
+	bausteinID, err := strconv.ParseInt(r.FormValue("bausteinID"), 10, 64)
+	if err != nil || bausteinID <= 0 {
+		u.renderWorkplace(w, r, user, project, role, target, "Ungültiger Baustein.")
+		return
+	}
+	reviewerID, _ := strconv.ParseInt(r.FormValue("assignedReviewerId"), 10, 64)
+	if _, err := assignBausteinReviewer(r, u.store, project, target.ID, bausteinID, reviewerID); err != nil {
+		u.renderWorkplace(w, r, user, project, role, target, reviewWebError(err))
+		return
+	}
+	query := strings.TrimSpace(r.FormValue("q"))
+	filter := r.FormValue("filter")
+	highlight := r.FormValue("highlight") != "0"
+	path := u.workplaceURL(project.ID, target.ID, bausteinID, query, filter, highlight)
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	http.Redirect(w, r, path+sep+"saved=reviewer", http.StatusSeeOther)
 }
 
 func parseFormInt64s(r *http.Request, key string) []int64 {

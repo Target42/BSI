@@ -29,6 +29,8 @@ public:
     ReviewSaveResult applyReview(int projectId, int targetObjectId, int bausteinId,
                                  const QString &action, const QString &note,
                                  const QList<int> &requirementIds = {}) override;
+    ReviewSaveResult assignReviewer(int projectId, int targetObjectId, int bausteinId,
+                                    int assignedReviewerId) override;
 
     QString lastError() const override;
 

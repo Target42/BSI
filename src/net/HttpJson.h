@@ -148,6 +148,8 @@ inline BausteinReview bausteinReviewFromJson(const QJsonObject &obj)
         for (const QJsonValue &value : returned.toArray())
             review.returnedRequirementIds.append(value.toInt());
     }
+    review.assignedReviewerId = obj.value(QStringLiteral("assignedReviewerId")).toInt();
+    review.assignedReviewerName = obj.value(QStringLiteral("assignedReviewerName")).toString();
     return review;
 }
 

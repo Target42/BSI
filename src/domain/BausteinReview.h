@@ -20,6 +20,8 @@ struct BausteinReview {
     QString state = ReviewStateInProgress;
     QString reviewNote;
     QList<int> returnedRequirementIds;
+    int assignedReviewerId = 0;
+    QString assignedReviewerName;
 };
 
 struct ReviewSaveResult {
@@ -123,21 +125,44 @@ inline bool canSubmitReview(bool workflowEnabled, bool inherited, const QString 
     return normalized == ReviewStateInProgress || normalized == ReviewStateReturned;
 }
 
+inline bool canAssignReviewer(const QString &role)
+{
+    return canEditContentRole(role);
+}
+
+inline bool canBeAssignedReviewer(const QString &role)
+{
+    return canReviewRole(role);
+}
+
+inline bool reviewAssignmentAllows(int assignedReviewerId, int userId, const QString &role)
+{
+    if (assignedReviewerId <= 0)
+        return true;
+    if (role == QStringLiteral("owner"))
+        return true;
+    return assignedReviewerId == userId;
+}
+
 inline bool canReturnReview(bool workflowEnabled, bool inherited, const QString &state,
-                            const QString &role)
+                            const QString &role, int assignedReviewerId = 0, int userId = 0)
 {
     if (!workflowEnabled || inherited || !canReviewRole(role))
         return false;
     const QString normalized = normalizeReviewState(state);
-    return normalized == ReviewStateSubmitted || normalized == ReviewStateAccepted;
+    if (normalized != ReviewStateSubmitted && normalized != ReviewStateAccepted)
+        return false;
+    return reviewAssignmentAllows(assignedReviewerId, userId, role);
 }
 
 inline bool canAcceptReview(bool workflowEnabled, bool inherited, const QString &state,
-                            const QString &role)
+                            const QString &role, int assignedReviewerId = 0, int userId = 0)
 {
     if (!workflowEnabled || inherited || !canReviewRole(role))
         return false;
-    return normalizeReviewState(state) == ReviewStateSubmitted;
+    if (normalizeReviewState(state) != ReviewStateSubmitted)
+        return false;
+    return reviewAssignmentAllows(assignedReviewerId, userId, role);
 }
 
 inline QString reviewLockMessage(const QString &state = QString())
@@ -181,6 +206,8 @@ inline QString reviewClientErrorMessage(const QString &code)
         return QStringLiteral("Nur eigene, anwendbare Bausteine können eingereicht werden.");
     if (code == QStringLiteral("forbidden"))
         return QStringLiteral("Dafür fehlt die Berechtigung.");
+    if (code == QStringLiteral("invalid_reviewer"))
+        return QStringLiteral("Bitte einen Prüfer oder Besitzer des Projekts zuweisen.");
     return QStringLiteral("Laufzettel konnte nicht gespeichert werden.");
 }
 

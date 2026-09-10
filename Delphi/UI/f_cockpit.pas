@@ -52,10 +52,10 @@ type
     function AcceptSelected: Boolean;
   public
     constructor Create(AOwner: TComponent; AContext: TAppContext;
-      const AProject: TProject; const AUserName, AUserEmail: string); reintroduce;
+      const AProject: TProject; const AUserName, AUserEmail: string; AUserId: Integer); reintroduce;
     destructor Destroy; override;
     class function Execute(AOwner: TComponent; AContext: TAppContext;
-      const AProject: TProject; const AUserName, AUserEmail: string;
+      const AProject: TProject; const AUserName, AUserEmail: string; AUserId: Integer;
       out AItem: TCockpitItem): Boolean;
   end;
 
@@ -64,11 +64,12 @@ implementation
 {$R *.dfm}
 
 constructor TCockpitForm.Create(AOwner: TComponent; AContext: TAppContext;
-  const AProject: TProject; const AUserName, AUserEmail: string);
+  const AProject: TProject; const AUserName, AUserEmail: string; AUserId: Integer);
 begin
   FContext := AContext;
   FProject := AProject;
   FFilter := DefaultCockpitFilter;
+  FFilter.CurrentUserId := AUserId;
   FFilter.CurrentUserName := AUserName;
   FFilter.CurrentUserEmail := AUserEmail;
   inherited Create(AOwner);
@@ -81,13 +82,13 @@ begin
 end;
 
 class function TCockpitForm.Execute(AOwner: TComponent; AContext: TAppContext;
-  const AProject: TProject; const AUserName, AUserEmail: string;
+  const AProject: TProject; const AUserName, AUserEmail: string; AUserId: Integer;
   out AItem: TCockpitItem): Boolean;
 var
   Form: TCockpitForm;
 begin
   FillChar(AItem, SizeOf(AItem), 0);
-  Form := TCockpitForm.Create(AOwner, AContext, AProject, AUserName, AUserEmail);
+  Form := TCockpitForm.Create(AOwner, AContext, AProject, AUserName, AUserEmail, AUserId);
   try
     Result := Form.ShowModal = mrOk;
     if Result then
@@ -135,6 +136,8 @@ begin
   cboReview.Items.Add('Alle');
   cboReview.Items.Add('Zur Pr'#$00FC'fung');
   cboReview.Items.Add('Zur'#$00FC'ckgegeben');
+  cboReview.Items.Add('Mir zugewiesen');
+  cboReview.Items.Add('Ohne Pr'#$00FC'fer');
   cboReview.ItemIndex := 0;
   pnlTop.Height := 120;
   lblSummary.Top := 76;
@@ -143,7 +146,7 @@ begin
   chkMine.Enabled := (Trim(FFilter.CurrentUserName) <> '') or
     (Trim(FFilter.CurrentUserEmail) <> '');
 
-  sgItems.ColCount := 9;
+  sgItems.ColCount := 10;
   sgItems.RowCount := 2;
   sgItems.FixedRows := 1;
   sgItems.Cells[0, 0] := 'Art';
@@ -153,17 +156,19 @@ begin
   sgItems.Cells[4, 0] := 'Titel';
   sgItems.Cells[5, 0] := 'Status';
   sgItems.Cells[6, 0] := 'Laufzettel';
-  sgItems.Cells[7, 0] := 'Verantwortlich';
-  sgItems.Cells[8, 0] := 'Frist';
+  sgItems.Cells[7, 0] := 'Pr'#$00FC'fer';
+  sgItems.Cells[8, 0] := 'Verantwortlich';
+  sgItems.Cells[9, 0] := 'Frist';
   sgItems.ColWidths[0] := 90;
-  sgItems.ColWidths[1] := 150;
+  sgItems.ColWidths[1] := 140;
   sgItems.ColWidths[2] := 80;
-  sgItems.ColWidths[3] := 110;
-  sgItems.ColWidths[4] := 220;
-  sgItems.ColWidths[5] := 100;
+  sgItems.ColWidths[3] := 100;
+  sgItems.ColWidths[4] := 200;
+  sgItems.ColWidths[5] := 90;
   sgItems.ColWidths[6] := 110;
-  sgItems.ColWidths[7] := 130;
-  sgItems.ColWidths[8] := 90;
+  sgItems.ColWidths[7] := 120;
+  sgItems.ColWidths[8] := 120;
+  sgItems.ColWidths[9] := 90;
   EnableGridColumnSizing(sgItems);
 
   cboKind.OnChange := KindChange;
@@ -208,6 +213,8 @@ begin
   case cboReview.ItemIndex of
     1: FFilter.Review := crfSubmitted;
     2: FFilter.Review := crfReturned;
+    3: FFilter.Review := crfAssignedToMe;
+    4: FFilter.Review := crfUnassigned;
   else
     FFilter.Review := crfAll;
   end;
@@ -250,11 +257,12 @@ begin
       sgItems.Cells[6, GridRow] := ReviewStateLabel(Item.ReviewState)
     else
       sgItems.Cells[6, GridRow] := '';
-    sgItems.Cells[7, GridRow] := Item.Responsible;
+    sgItems.Cells[7, GridRow] := Item.AssignedReviewerName;
+    sgItems.Cells[8, GridRow] := Item.Responsible;
     if IsValidDate(Item.DueDate) then
-      sgItems.Cells[8, GridRow] := FormatDateTime('dd.mm.yyyy', Item.DueDate)
+      sgItems.Cells[9, GridRow] := FormatDateTime('dd.mm.yyyy', Item.DueDate)
     else
-      sgItems.Cells[8, GridRow] := '';
+      sgItems.Cells[9, GridRow] := '';
     sgItems.Objects[0, GridRow] := TObject(I + 1);
   end;
 end;

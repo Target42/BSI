@@ -16,15 +16,16 @@
 #include <QVBoxLayout>
 
 CockpitDialog::CockpitDialog(AppContext &context, const Project &project, const QString &userName,
-                             const QString &userEmail, QWidget *parent)
+                             const QString &userEmail, int userId, QWidget *parent)
     : QDialog(parent)
     , m_context(context)
     , m_project(project)
 {
     setWindowTitle(tr("Aufgaben-Cockpit"));
-    resize(1100, 650);
+    resize(1180, 650);
 
     m_filter.hideDone = true;
+    m_filter.currentUserId = userId;
     m_filter.currentUserName = userName;
     m_filter.currentUserEmail = userEmail;
 
@@ -44,6 +45,8 @@ CockpitDialog::CockpitDialog(AppContext &context, const Project &project, const 
     m_reviewBox->addItem(tr("Alle"), static_cast<int>(CockpitReviewFilter::All));
     m_reviewBox->addItem(tr("Zur Prüfung"), static_cast<int>(CockpitReviewFilter::Submitted));
     m_reviewBox->addItem(tr("Zurückgegeben"), static_cast<int>(CockpitReviewFilter::Returned));
+    m_reviewBox->addItem(tr("Mir zugewiesen"), static_cast<int>(CockpitReviewFilter::AssignedToMe));
+    m_reviewBox->addItem(tr("Ohne Prüfer"), static_cast<int>(CockpitReviewFilter::Unassigned));
 
     m_hideDoneBox = new QCheckBox(tr("Erledigte ausblenden"), this);
     m_hideDoneBox->setChecked(true);

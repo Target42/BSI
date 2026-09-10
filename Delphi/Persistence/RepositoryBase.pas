@@ -49,6 +49,8 @@ type
     function ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
       const AAction, ANote: string;
       const ARequirementIds: TArray<Integer>): TReviewSaveResult; virtual; abstract;
+    function AssignReviewer(AProjectId, ATargetObjectId, ABausteinId,
+      AAssignedReviewerId: Integer): TReviewSaveResult; virtual; abstract;
     function GetLastError: string; virtual; abstract;
     property LastError: string read GetLastError;
   end;

@@ -29,6 +29,8 @@ type
     function ApplyReview(AProjectId, ATargetObjectId, ABausteinId: Integer;
       const AAction, ANote: string;
       const ARequirementIds: TArray<Integer>): TReviewSaveResult; override;
+    function AssignReviewer(AProjectId, ATargetObjectId, ABausteinId,
+      AAssignedReviewerId: Integer): TReviewSaveResult; override;
     function GetLastError: string; override;
   end;
 
@@ -441,6 +443,43 @@ begin
         Exit(ReviewSaveFailed(rssNoteRequired));
       if (Code = 'invalid_review_transition') or (Code = 'baustein_not_applicable') or
          (Code = 'workflow_disabled') or (Code = 'invalid_returned_requirements') then
+        Exit(ReviewSaveFailed(rssInvalid));
+    finally
+      Doc.Free;
+    end;
+  finally
+    Body.Free;
+  end;
+end;
+
+function THttpTargetObjectRepository.AssignReviewer(AProjectId, ATargetObjectId, ABausteinId,
+  AAssignedReviewerId: Integer): TReviewSaveResult;
+var
+  Body: TJSONObject;
+  Doc: TJSONValue;
+  Status: Integer;
+  Code: string;
+begin
+  Result := ReviewSaveFailed;
+  Body := TJSONObject.Create;
+  try
+    Body.AddPair('assignedReviewerId', TJSONNumber.Create(AAssignedReviewerId));
+    Doc := FClient.PutJson(Format('/api/v1/projects/%d/target-objects/%d/bausteine/%d/reviewer',
+      [AProjectId, ATargetObjectId, ABausteinId]), Body, Status);
+    try
+      if (Status = 200) and (Doc is TJSONObject) then
+        Exit(ReviewSaveOk(BausteinReviewFromJson(TJSONObject(Doc))));
+      if Doc is TJSONObject then
+        Code := JsonErrorCode(TJSONObject(Doc))
+      else
+        Code := '';
+      if Code <> '' then
+        FLastError := ReviewClientErrorMessage(Code)
+      else
+        FLastError := FClient.LastError;
+      if Status = 403 then
+        Exit(ReviewSaveFailed(rssForbidden));
+      if (Code = 'invalid_reviewer') or (Code = 'baustein_not_applicable') then
         Exit(ReviewSaveFailed(rssInvalid));
     finally
       Doc.Free;

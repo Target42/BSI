@@ -150,7 +150,7 @@ type
   TCockpitKind = (ckAssessment, ckMeasure);
   TCockpitKindFilter = (ckfAll, ckfAssessments, ckfMeasures);
   TCockpitDueFilter = (cdfAll, cdfOverdue, cdfThisWeek, cdfHasDate, cdfNoDate);
-  TCockpitReviewFilter = (crfAll, crfSubmitted, crfReturned);
+  TCockpitReviewFilter = (crfAll, crfSubmitted, crfReturned, crfAssignedToMe, crfUnassigned);
 
   TCockpitItem = record
     Kind: TCockpitKind;
@@ -169,6 +169,8 @@ type
     AssessmentStatus: TAssessmentStatus;
     MeasureStatus: TMeasureStatus;
     ReviewState: string;
+    AssignedReviewerId: Integer;
+    AssignedReviewerName: string;
   end;
 
   TCockpitFilter = record
@@ -177,6 +179,7 @@ type
     Review: TCockpitReviewFilter;
     HideDone: Boolean;
     MineOnly: Boolean;
+    CurrentUserId: Integer;
     CurrentUserName: string;
     CurrentUserEmail: string;
     ResponsibleNeedle: string;
@@ -234,6 +237,8 @@ type
     State: string;
     ReviewNote: string;
     ReturnedRequirementIds: TArray<Integer>;
+    AssignedReviewerId: Integer;
+    AssignedReviewerName: string;
   end;
 
   TReviewSaveStatus = (rssOk, rssForbidden, rssNoteRequired, rssInvalid, rssFailed);
@@ -344,8 +349,13 @@ function CanToggleModelLock(const ARole: string; AIsRemote: Boolean): Boolean;
 function ModelAllowsEdit(ALocked: Boolean; const ARole: string; AIsRemote: Boolean): Boolean;
 function ModelLockMessage: string;
 function CanSubmitReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
-function CanReturnReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
-function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+function CanAssignReviewer(const ARole: string): Boolean;
+function CanBeAssignedReviewer(const ARole: string): Boolean;
+function ReviewAssignmentAllows(AAssignedReviewerId, AUserId: Integer; const ARole: string): Boolean;
+function CanReturnReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string;
+  AAssignedReviewerId: Integer = 0; AUserId: Integer = 0): Boolean;
+function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string;
+  AAssignedReviewerId: Integer = 0; AUserId: Integer = 0): Boolean;
 function ReviewLockMessage(const AState: string = ''): string;
 function ReviewActionMessage(const AAction: string): string;
 function ReviewClientErrorMessage(const ACode: string): string;
@@ -1216,21 +1226,46 @@ begin
   Result := (State = ReviewStateInProgress) or (State = ReviewStateReturned);
 end;
 
-function CanReturnReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+function CanAssignReviewer(const ARole: string): Boolean;
+begin
+  Result := CanEditContentRole(ARole);
+end;
+
+function CanBeAssignedReviewer(const ARole: string): Boolean;
+begin
+  Result := CanReviewRole(ARole);
+end;
+
+function ReviewAssignmentAllows(AAssignedReviewerId, AUserId: Integer; const ARole: string): Boolean;
+begin
+  if AAssignedReviewerId <= 0 then
+    Exit(True);
+  if ARole = 'owner' then
+    Exit(True);
+  Result := AAssignedReviewerId = AUserId;
+end;
+
+function CanReturnReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string;
+  AAssignedReviewerId, AUserId: Integer): Boolean;
 var
   State: string;
 begin
   if (not AWorkflowEnabled) or AInherited or not CanReviewRole(ARole) then
     Exit(False);
   State := NormalizeReviewState(AState);
-  Result := (State = ReviewStateSubmitted) or (State = ReviewStateAccepted);
+  if (State <> ReviewStateSubmitted) and (State <> ReviewStateAccepted) then
+    Exit(False);
+  Result := ReviewAssignmentAllows(AAssignedReviewerId, AUserId, ARole);
 end;
 
-function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
+function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string;
+  AAssignedReviewerId, AUserId: Integer): Boolean;
 begin
   if (not AWorkflowEnabled) or AInherited or not CanReviewRole(ARole) then
     Exit(False);
-  Result := NormalizeReviewState(AState) = ReviewStateSubmitted;
+  if NormalizeReviewState(AState) <> ReviewStateSubmitted then
+    Exit(False);
+  Result := ReviewAssignmentAllows(AAssignedReviewerId, AUserId, ARole);
 end;
 
 function ReviewLockMessage(const AState: string): string;
@@ -1274,6 +1309,8 @@ begin
     Exit('Nur eigene, anwendbare Bausteine k'#$00F6'nnen eingereicht werden.');
   if ACode = 'forbidden' then
     Exit('Daf'#$00FC'r fehlt die Berechtigung.');
+  if ACode = 'invalid_reviewer' then
+    Exit('Bitte einen Pr'#$00FC'fer oder Besitzer des Projekts zuweisen.');
   Result := 'Laufzettel konnte nicht gespeichert werden.';
 end;
 

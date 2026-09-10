@@ -310,6 +310,33 @@ ReviewSaveResult HttpTargetObjectRepository::applyReview(int projectId, int targ
     return ReviewSaveResult::failed();
 }
 
+ReviewSaveResult HttpTargetObjectRepository::assignReviewer(int projectId, int targetObjectId, int bausteinId,
+                                                            int assignedReviewerId)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("assignedReviewerId"), assignedReviewerId);
+    int status = 0;
+    const QJsonDocument doc = m_client.put(
+        QStringLiteral("/api/v1/projects/%1/target-objects/%2/bausteine/%3/reviewer")
+            .arg(projectId)
+            .arg(targetObjectId)
+            .arg(bausteinId),
+        body, &status);
+    if (status == 200 && doc.isObject())
+        return ReviewSaveResult::ok(bausteinReviewFromJson(doc.object()));
+
+    const QString code = doc.isObject() ? jsonErrorCode(doc.object()) : QString();
+    if (!code.isEmpty())
+        m_lastError = reviewClientErrorMessage(code);
+    else
+        m_lastError = m_client.lastError();
+    if (status == 403)
+        return ReviewSaveResult::failed(ReviewSaveResult::Status::Forbidden);
+    if (code == QStringLiteral("invalid_reviewer") || code == QStringLiteral("baustein_not_applicable"))
+        return ReviewSaveResult::failed(ReviewSaveResult::Status::Invalid);
+    return ReviewSaveResult::failed();
+}
+
 QString HttpTargetObjectRepository::lastError() const
 {
     if (!m_lastError.isEmpty())

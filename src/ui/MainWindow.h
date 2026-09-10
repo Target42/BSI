@@ -9,6 +9,7 @@
 #include "domain/Project.h"
 #include "domain/Requirement.h"
 #include "domain/RequirementAssessment.h"
+#include "domain/ServerUser.h"
 #include "domain/TargetObject.h"
 #include "services/Inheritance.h"
 #include "ui/models/BausteinTreeModel.h"
@@ -98,6 +99,7 @@ private slots:
     void submitActiveBausteinReview();
     void returnActiveBausteinReview();
     void acceptActiveBausteinReview();
+    void assignActiveReviewer();
 
 private:
     void buildUi();
@@ -127,6 +129,7 @@ private:
     bool bausteinReviewLocked(int bausteinDbId) const;
     BausteinReview currentReview() const;
     void reloadReviews();
+    void reloadProjectMembers();
     void updateReviewUi();
     bool applyReviewAction(const QString &action, const QString &note = {},
                            const QList<int> &requirementIds = {});
@@ -206,6 +209,8 @@ private:
     QHash<int, ApplicabilityStatus> m_applicabilityMap;
     QHash<int, InheritedBaustein> m_inheritedBausteine;
     QHash<int, BausteinReview> m_reviews;
+    QList<ProjectMember> m_projectMembers;
+    bool m_suppressReviewerChange = false;
 
     QList<Baustein> m_catalogBausteine;
     QList<Requirement> m_catalogRequirements;
@@ -230,6 +235,7 @@ private:
     QWidget *m_reviewWidget = nullptr;
     QLabel *m_reviewLabel = nullptr;
     QLabel *m_reviewNoteLabel = nullptr;
+    QComboBox *m_reviewerBox = nullptr;
     QPushButton *m_reviewSubmitButton = nullptr;
     QPushButton *m_reviewReturnButton = nullptr;
     QPushButton *m_reviewAcceptButton = nullptr;

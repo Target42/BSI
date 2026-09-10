@@ -139,6 +139,49 @@ func (h *ReviewHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
+type assignReviewerRequest struct {
+	AssignedReviewerID int64 `json:"assignedReviewerId"`
+}
+
+func (h *ReviewHandler) Assign(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	projectID, targetObjectID, bausteinID, err := parseProjectTargetBaustein(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	project, role, err := h.store.LoadAccessibleProject(r.Context(), projectID, user, "editor", true)
+	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	if !domain.CanAssignReviewer(role) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	var req assignReviewerRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	item, err := assignBausteinReviewer(r, h.store, project, targetObjectID, bausteinID, req.AssignedReviewerID)
+	if err != nil {
+		if mapReviewError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "assign reviewer failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 func parseProjectTargetBaustein(r *http.Request) (int64, int64, int64, error) {
 	projectID, targetObjectID, err := parseProjectTarget(r)
 	if err != nil {

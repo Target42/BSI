@@ -257,6 +257,8 @@ begin
         Result.ReturnedRequirementIds[I] := StrToIntDef(Value.Value, 0);
     end;
   end;
+  Result.AssignedReviewerId := AObj.GetValue<Integer>('assignedReviewerId', 0);
+  Result.AssignedReviewerName := JsonStringValue(AObj, 'assignedReviewerName');
 end;
 
 function ServerUserFromJson(AObj: TJSONObject): TServerUser;

@@ -67,6 +67,7 @@
               <th>Zielobjekt</th>
               <th>Baustein</th>
               <th>Laufzettel</th>
+              <th>Prüfer</th>
               <th></th>
             </tr>
           </thead>
@@ -79,6 +80,7 @@
                 <span class="{{statusClass (reviewLabel .State) false}}">{{reviewLabel .State}}</span>
                 {{if .ReviewNote}}<div class="muted">{{.ReviewNote}}</div>{{end}}
               </td>
+              <td>{{if .AssignedReviewerName}}{{.AssignedReviewerName}}{{else}}—{{end}}</td>
               <td>
                 <a href="{{href (printf "/projects/%d/targets/%d?baustein=%d" $.Project.ID .TargetObjectID .BausteinID)}}">Öffnen</a>
               </td>
@@ -87,7 +89,7 @@
           </tbody>
         </table>
       </div>
-      {{else if and .Project.WorkflowEnabled (or (eq .ReviewFilter "submitted") (eq .ReviewFilter "returned"))}}
+      {{else if and .Project.WorkflowEnabled (or (eq .ReviewFilter "submitted") (eq .ReviewFilter "returned") (eq .ReviewFilter "assigned") (eq .ReviewFilter "unassigned"))}}
         <p class="muted">Keine Bausteine für diesen Laufzettel-Filter.</p>
       {{end}}
 

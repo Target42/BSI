@@ -12,6 +12,7 @@
 #include "domain/Standard.h"
 #include "domain/TargetObject.h"
 #include "domain/TargetObjectType.h"
+#include "net/HttpTeamService.h"
 #include "ui/dialogs/BausteinRecommendationDialog.h"
 #include "ui/dialogs/BausteinViewDialog.h"
 #include "ui/dialogs/CatalogSearchDialog.h"
@@ -402,6 +403,12 @@ void MainWindow::buildUi()
     auto *reviewRow = new QHBoxLayout(m_reviewWidget);
     reviewRow->setContentsMargins(0, 0, 0, 0);
     m_reviewLabel = new QLabel(tr("Laufzettel: In Bearbeitung"), m_reviewWidget);
+    m_reviewerBox = new QComboBox(m_reviewWidget);
+    m_reviewerBox->setMinimumContentsLength(18);
+    m_reviewerBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_reviewerBox->setToolTip(tr("Weist den Baustein einem Prüfer oder Besitzer zu. Ohne Zuweisung darf jeder Prüfer abnehmen."));
+    connect(m_reviewerBox, QOverload<int>::of(&QComboBox::activated), this,
+            &MainWindow::assignActiveReviewer);
     m_reviewSubmitButton = new QPushButton(tr("Einreichen"), m_reviewWidget);
     m_reviewReturnButton = new QPushButton(tr("Zurückgeben"), m_reviewWidget);
     m_reviewAcceptButton = new QPushButton(tr("Abnehmen"), m_reviewWidget);
@@ -412,6 +419,7 @@ void MainWindow::buildUi()
     connect(m_reviewReturnButton, &QPushButton::clicked, this, &MainWindow::returnActiveBausteinReview);
     connect(m_reviewAcceptButton, &QPushButton::clicked, this, &MainWindow::acceptActiveBausteinReview);
     reviewRow->addWidget(m_reviewLabel);
+    reviewRow->addWidget(m_reviewerBox);
     reviewRow->addStretch();
     reviewRow->addWidget(m_reviewSubmitButton);
     reviewRow->addWidget(m_reviewReturnButton);
@@ -1334,6 +1342,16 @@ void MainWindow::reloadReviews()
         return;
     m_reviews = m_context.targetObjectRepository().loadReviews(m_activeProject.id,
                                                                m_activeTargetObject.id);
+    reloadProjectMembers();
+}
+
+void MainWindow::reloadProjectMembers()
+{
+    m_projectMembers.clear();
+    if (!m_context.isRemote() || m_activeProject.id == 0)
+        return;
+    HttpTeamService team(m_context.apiClient());
+    m_projectMembers = team.listMembers(m_activeProject.id);
 }
 
 void MainWindow::updateReviewUi()
@@ -1351,10 +1369,36 @@ void MainWindow::updateReviewUi()
     const BausteinReview review = currentReview();
     const bool inherited = isInheritedBaustein(m_activeBausteinId);
     const QString role = m_activeProject.role;
-    m_reviewLabel->setText(tr("Laufzettel: %1").arg(reviewStateLabel(review.state)));
+    const int userId = m_context.remoteUser().id;
+    QString caption = tr("Laufzettel: %1").arg(reviewStateLabel(review.state));
+    if (!review.assignedReviewerName.trimmed().isEmpty())
+        caption += tr(" · Prüfer: %1").arg(review.assignedReviewerName);
+    m_reviewLabel->setText(caption);
     m_reviewSubmitButton->setVisible(canSubmitReview(true, inherited, review.state, role));
-    m_reviewReturnButton->setVisible(canReturnReview(true, inherited, review.state, role));
-    m_reviewAcceptButton->setVisible(canAcceptReview(true, inherited, review.state, role));
+    m_reviewReturnButton->setVisible(
+        canReturnReview(true, inherited, review.state, role, review.assignedReviewerId, userId));
+    m_reviewAcceptButton->setVisible(
+        canAcceptReview(true, inherited, review.state, role, review.assignedReviewerId, userId));
+    if (m_reviewerBox != nullptr) {
+        const bool canAssign = canAssignReviewer(role) && !inherited;
+        m_reviewerBox->setVisible(canAssign);
+        m_reviewerBox->setEnabled(canAssign);
+        if (canAssign) {
+            m_suppressReviewerChange = true;
+            m_reviewerBox->clear();
+            m_reviewerBox->addItem(tr("Kein Prüfer"), 0);
+            for (const ProjectMember &member : m_projectMembers) {
+                if (!canBeAssignedReviewer(member.role))
+                    continue;
+                const QString name = member.displayName.trimmed().isEmpty() ? member.email
+                                                                           : member.displayName;
+                m_reviewerBox->addItem(name, member.userId);
+            }
+            const int index = m_reviewerBox->findData(review.assignedReviewerId);
+            m_reviewerBox->setCurrentIndex(index >= 0 ? index : 0);
+            m_suppressReviewerChange = false;
+        }
+    }
     if (m_reviewNoteLabel != nullptr) {
         const bool showNote = review.state == ReviewStateReturned && !review.reviewNote.trimmed().isEmpty();
         m_reviewNoteLabel->setVisible(showNote);
@@ -1450,6 +1494,24 @@ bool MainWindow::promptReviewReturn(QString *note, QList<int> *requirementIds)
 void MainWindow::acceptActiveBausteinReview()
 {
     applyReviewAction(ReviewActionAccept);
+}
+
+void MainWindow::assignActiveReviewer()
+{
+    if (m_suppressReviewerChange || !workflowActive() || !hasActiveProjectContext()
+        || m_activeBausteinId <= 0 || m_reviewerBox == nullptr)
+        return;
+    const int reviewerId = m_reviewerBox->currentData().toInt();
+    const ReviewSaveResult result = m_context.targetObjectRepository().assignReviewer(
+        m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId, reviewerId);
+    if (result.status != ReviewSaveResult::Status::Ok) {
+        QMessageBox::warning(this, tr("Prüfer"), m_context.targetObjectRepository().lastError());
+        updateReviewUi();
+        return;
+    }
+    m_reviews.insert(m_activeBausteinId, result.review);
+    updateReviewUi();
+    showTemporaryStatusMessage(tr("Prüfer zugewiesen"));
 }
 
 bool MainWindow::hasApplicableBausteineForActiveTarget() const
@@ -3145,7 +3207,8 @@ void MainWindow::showCockpit()
         userEmail = m_context.remoteUser().email;
     }
 
-    CockpitDialog dialog(m_context, m_activeProject, userName, userEmail, this);
+    CockpitDialog dialog(m_context, m_activeProject, userName, userEmail,
+                         m_context.isRemote() ? m_context.remoteUser().id : 0, this);
     if (dialog.exec() == QDialog::Accepted)
         jumpToCockpitItem(dialog.selectedItem());
 }

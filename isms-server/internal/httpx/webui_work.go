@@ -177,6 +177,8 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 		switch r.URL.Query().Get("saved") {
 		case domain.ReviewActionSubmit, domain.ReviewActionReturn, domain.ReviewActionAccept:
 			notice = reviewActionMessage(r.URL.Query().Get("saved"))
+		case "reviewer":
+			notice = "Prüfer zugewiesen."
 		}
 	}
 
@@ -220,8 +222,10 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 		AssessmentStatuses: webAssessmentStatuses,
 		Review:             selectedReview,
 		CanSubmit:          domain.CanSubmitReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role),
-		CanReview: domain.CanReturnReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role) ||
-			domain.CanAcceptReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role),
+		CanReview: domain.CanReturnReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role, selectedReview.AssignedReviewerID, user.UserID) ||
+			domain.CanAcceptReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role, selectedReview.AssignedReviewerID, user.UserID),
+		CanAssign:    domain.CanAssignReviewer(role) && !selected.Inherited && selected.ID != 0,
+		Reviewers:    u.loadReviewerMembers(r, project.ID),
 		ReviewLocked: reviewLocked,
 		Error:        errMsg,
 		Notice:       notice,

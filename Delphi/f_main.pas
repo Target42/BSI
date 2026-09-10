@@ -7,7 +7,8 @@ uses
   System.Generics.Collections, System.Math, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
   Vcl.Menus, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.Grids, Vcl.CheckLst,
   IsmsDomain, AppContext, AppPaths, FireDAC.UI.Intf, FireDAC.VCLUI.Wait,
-  FireDAC.Stan.Intf, FireDAC.Comp.UI, Vcl.ToolWin, SearchEditHelper, GridHelper;
+  FireDAC.Stan.Intf, FireDAC.Comp.UI, Vcl.ToolWin, SearchEditHelper, GridHelper,
+  HttpTeamService, ApiClient;
 
 type
   TMainForm = class(TForm)
@@ -189,6 +190,9 @@ type
     btnReviewSubmit: TButton;
     btnReviewReturn: TButton;
     btnReviewAccept: TButton;
+    cboReviewer: TComboBox;
+    FProjectMembers: TArray<TProjectMember>;
+    FSuppressReviewerChange: Boolean;
     FMeasureCounts: TDictionary<Integer, Integer>;
     FSummariesByTarget: TDictionary<Integer, TReportSummary>;
     FRecommendedIds: TDictionary<Integer, Byte>;
@@ -292,7 +296,9 @@ type
     function ActiveRequirementLocked: Boolean;
     function CurrentReview: TBausteinReview;
     procedure ReloadReviews;
+    procedure ReloadProjectMembers;
     procedure UpdateReviewUi;
+    procedure AssignReviewerChange(Sender: TObject);
     function ApplyReviewAction(const AAction, ANote: string;
       const ARequirementIds: TArray<Integer>): Boolean;
     function PromptReviewReturn(out ANote: string; out ARequirementIds: TArray<Integer>): Boolean;
@@ -520,6 +526,16 @@ begin
   btnReviewAccept.Hint :=
     'Nimmt den Baustein mit den hinterlegten Bewertungen und Ma'#$00DF'nahmen ab.';
   btnReviewAccept.ShowHint := True;
+  cboReviewer := TComboBox.Create(Self);
+  cboReviewer.Parent := FReviewPanel;
+  cboReviewer.Left := 220;
+  cboReviewer.Top := 2;
+  cboReviewer.Width := 180;
+  cboReviewer.Style := csDropDownList;
+  cboReviewer.Hint :=
+    'Weist den Baustein einem Pr'#$00FC'fer oder Besitzer zu. Ohne Zuweisung darf jeder Pr'#$00FC'fer abnehmen.';
+  cboReviewer.ShowHint := True;
+  cboReviewer.OnChange := AssignReviewerChange;
   btnReviewAccept.Left := FReviewPanel.ClientWidth - btnReviewAccept.Width;
   btnReviewReturn.Left := btnReviewAccept.Left - btnReviewReturn.Width - 8;
   btnReviewSubmit.Left := btnReviewReturn.Left - btnReviewSubmit.Width - 8;
@@ -1376,6 +1392,22 @@ begin
   Map := FContext.TargetObjectRepository.LoadReviews(FActiveProject.Id, FActiveTarget.Id);
   FReviews.Free;
   FReviews := Map;
+  ReloadProjectMembers;
+end;
+
+procedure TMainForm.ReloadProjectMembers;
+var
+  Service: THttpTeamService;
+begin
+  SetLength(FProjectMembers, 0);
+  if (not FContext.IsRemote) or (FActiveProject.Id = 0) then
+    Exit;
+  Service := THttpTeamService.Create(FContext.ApiClient);
+  try
+    FProjectMembers := Service.ListMembers(FActiveProject.Id);
+  finally
+    Service.Free;
+  end;
 end;
 
 procedure TMainForm.UpdateReviewUi;
@@ -1383,6 +1415,11 @@ var
   Review: TBausteinReview;
   InheritedBs: Boolean;
   Role: string;
+  UserId: Integer;
+  Caption: string;
+  Member: TProjectMember;
+  I, Idx: Integer;
+  Name: string;
 begin
   if FReviewPanel = nil then
     Exit;
@@ -1395,18 +1432,83 @@ begin
   Review := CurrentReview;
   InheritedBs := IsInheritedBaustein(FActiveBausteinId);
   Role := FActiveProject.Role;
-  lblReview.Caption := 'Laufzettel: ' + ReviewStateLabel(Review.State);
+  UserId := 0;
+  if FContext.IsRemote then
+    UserId := FContext.RemoteUser.Id;
+  Caption := 'Laufzettel: ' + ReviewStateLabel(Review.State);
+  if Review.AssignedReviewerName <> '' then
+    Caption := Caption + ' · Pr'#$00FC'fer: ' + Review.AssignedReviewerName;
+  lblReview.Caption := Caption;
   lblReview.ShowHint := Review.ReviewNote <> '';
   if Review.ReviewNote <> '' then
     lblReview.Hint := 'R'#$00FC'ckgabe: ' + Review.ReviewNote
   else
     lblReview.Hint := '';
   btnReviewSubmit.Visible := CanSubmitReview(True, InheritedBs, Review.State, Role);
-  btnReviewReturn.Visible := CanReturnReview(True, InheritedBs, Review.State, Role);
-  btnReviewAccept.Visible := CanAcceptReview(True, InheritedBs, Review.State, Role);
+  btnReviewReturn.Visible := CanReturnReview(True, InheritedBs, Review.State, Role,
+    Review.AssignedReviewerId, UserId);
+  btnReviewAccept.Visible := CanAcceptReview(True, InheritedBs, Review.State, Role,
+    Review.AssignedReviewerId, UserId);
+  if cboReviewer <> nil then
+  begin
+    cboReviewer.Visible := CanAssignReviewer(Role) and not InheritedBs;
+    cboReviewer.Enabled := cboReviewer.Visible;
+    if cboReviewer.Visible then
+    begin
+      FSuppressReviewerChange := True;
+      cboReviewer.Items.BeginUpdate;
+      try
+        cboReviewer.Items.Clear;
+        cboReviewer.Items.AddObject('Kein Pr'#$00FC'fer', TObject(0));
+        for Member in FProjectMembers do
+        begin
+          if not CanBeAssignedReviewer(Member.Role) then
+            Continue;
+          Name := Member.DisplayName;
+          if Name = '' then
+            Name := Member.Email;
+          cboReviewer.Items.AddObject(Name, TObject(Member.UserId));
+        end;
+        Idx := 0;
+        for I := 0 to cboReviewer.Items.Count - 1 do
+          if Integer(cboReviewer.Items.Objects[I]) = Review.AssignedReviewerId then
+          begin
+            Idx := I;
+            Break;
+          end;
+        cboReviewer.ItemIndex := Idx;
+      finally
+        cboReviewer.Items.EndUpdate;
+        FSuppressReviewerChange := False;
+      end;
+    end;
+  end;
   btnReviewAccept.Left := FReviewPanel.ClientWidth - btnReviewAccept.Width;
   btnReviewReturn.Left := btnReviewAccept.Left - btnReviewReturn.Width - 8;
   btnReviewSubmit.Left := btnReviewReturn.Left - btnReviewSubmit.Width - 8;
+end;
+
+procedure TMainForm.AssignReviewerChange(Sender: TObject);
+var
+  SaveResult: TReviewSaveResult;
+  ReviewerId: Integer;
+begin
+  if FSuppressReviewerChange or (cboReviewer = nil) or (cboReviewer.ItemIndex < 0) then
+    Exit;
+  if not WorkflowActive or (FActiveTarget.Id = 0) or (FActiveBausteinId <= 0) then
+    Exit;
+  ReviewerId := Integer(cboReviewer.Items.Objects[cboReviewer.ItemIndex]);
+  SaveResult := FContext.TargetObjectRepository.AssignReviewer(
+    FActiveProject.Id, FActiveTarget.Id, FActiveBausteinId, ReviewerId);
+  if SaveResult.Status <> rssOk then
+  begin
+    MessageDlg(FContext.TargetObjectRepository.LastError, mtWarning, [mbOK], 0);
+    UpdateReviewUi;
+    Exit;
+  end;
+  FReviews.AddOrSetValue(FActiveBausteinId, SaveResult.Review);
+  UpdateReviewUi;
+  ShowTemporaryStatusMessage('Pr'#$00FC'fer zugewiesen');
 end;
 
 function TMainForm.ApplyReviewAction(const AAction, ANote: string;
@@ -2049,7 +2151,8 @@ begin
     UserName := FContext.RemoteUser.DisplayName;
     UserEmail := FContext.RemoteUser.Email;
   end;
-  if TCockpitForm.Execute(Self, FContext, FActiveProject, UserName, UserEmail, Item) then
+  if TCockpitForm.Execute(Self, FContext, FActiveProject, UserName, UserEmail,
+    FContext.RemoteUser.Id, Item) then
     JumpToCockpitItem(Item);
 end;
 

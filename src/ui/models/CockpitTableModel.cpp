@@ -68,6 +68,8 @@ QVariant CockpitTableModel::data(const QModelIndex &index, int role) const
         if (item.reviewState.trimmed().isEmpty())
             return {};
         return reviewStateLabel(item.reviewState);
+    case ReviewerColumn:
+        return item.assignedReviewerName;
     case ResponsibleColumn:
         return item.responsible;
     case DueDateColumn:
@@ -99,6 +101,8 @@ QVariant CockpitTableModel::headerData(int section, Qt::Orientation orientation,
         return QStringLiteral("Status");
     case ReviewColumn:
         return QStringLiteral("Laufzettel");
+    case ReviewerColumn:
+        return QStringLiteral("Prüfer");
     case ResponsibleColumn:
         return QStringLiteral("Verantwortlich");
     case DueDateColumn:

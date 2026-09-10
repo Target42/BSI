@@ -34,6 +34,8 @@ public:
     virtual ReviewSaveResult applyReview(int projectId, int targetObjectId, int bausteinId,
                                          const QString &action, const QString &note,
                                          const QList<int> &requirementIds = {}) = 0;
+    virtual ReviewSaveResult assignReviewer(int projectId, int targetObjectId, int bausteinId,
+                                            int assignedReviewerId) = 0;
 
     virtual QString lastError() const = 0;
 };

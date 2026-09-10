@@ -116,18 +116,21 @@ QList<CockpitItem> CockpitService::buildItems(int projectId, const QString &cata
         items.append(item);
     }
 
-    QHash<QString, QString> reviewStateByKey;
+    QHash<QString, BausteinReview> reviewByKey;
     const QList<BausteinReview> reviews = m_targetObjects.loadProjectReviews(projectId);
     for (const BausteinReview &review : reviews) {
-        reviewStateByKey.insert(
+        reviewByKey.insert(
             QStringLiteral("%1:%2").arg(review.targetObjectId).arg(review.bausteinId),
-            normalizeReviewState(review.state));
+            review);
     }
     for (CockpitItem &item : items) {
         if (item.bausteinDbId <= 0)
             continue;
-        item.reviewState = reviewStateByKey.value(
+        const BausteinReview review = reviewByKey.value(
             QStringLiteral("%1:%2").arg(item.targetObjectId).arg(item.bausteinDbId));
+        item.reviewState = normalizeReviewState(review.state);
+        item.assignedReviewerId = review.assignedReviewerId;
+        item.assignedReviewerName = review.assignedReviewerName;
     }
 
     std::sort(items.begin(), items.end(), [](const CockpitItem &left, const CockpitItem &right) {
@@ -161,7 +164,9 @@ QList<CockpitItem> CockpitService::applyFilter(const QList<CockpitItem> &items,
         if (filter.kind == CockpitKindFilter::Measures && item.kind != CockpitKind::Measure)
             continue;
         const bool reviewQueue = filter.review == CockpitReviewFilter::Submitted
-            || filter.review == CockpitReviewFilter::Returned;
+            || filter.review == CockpitReviewFilter::Returned
+            || filter.review == CockpitReviewFilter::AssignedToMe
+            || filter.review == CockpitReviewFilter::Unassigned;
         if (filter.hideDone && !reviewQueue && cockpitItemIsDone(item))
             continue;
         switch (filter.review) {
@@ -173,6 +178,20 @@ QList<CockpitItem> CockpitService::applyFilter(const QList<CockpitItem> &items,
             if (normalizeReviewState(item.reviewState) != ReviewStateReturned)
                 continue;
             break;
+        case CockpitReviewFilter::AssignedToMe: {
+            const QString state = normalizeReviewState(item.reviewState);
+            if (filter.currentUserId <= 0 || item.assignedReviewerId != filter.currentUserId
+                || (state != ReviewStateSubmitted && state != ReviewStateReturned))
+                continue;
+            break;
+        }
+        case CockpitReviewFilter::Unassigned: {
+            const QString state = normalizeReviewState(item.reviewState);
+            if (item.assignedReviewerId > 0
+                || (state != ReviewStateSubmitted && state != ReviewStateReturned))
+                continue;
+            break;
+        }
         case CockpitReviewFilter::All:
             break;
         }

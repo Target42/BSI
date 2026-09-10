@@ -27,7 +27,7 @@ var webMeasureStatusFilters = []string{"Alle", "Offen", "In Bearbeitung", "Erled
 var webMeasureStatuses = []string{"Offen", "In Bearbeitung", "Erledigt"}
 var webAssessmentStatuses = []string{"Offen", "Teilweise", "Erfüllt", "Entfällt"}
 var webMemberRoles = []string{"owner", "editor", "reviewer", "viewer"}
-var webReviewFilters = []string{"Alle", domain.ReviewSubmitted, domain.ReviewReturned}
+var webReviewFilters = []string{"Alle", domain.ReviewSubmitted, domain.ReviewReturned, "assigned", "unassigned"}
 var webCiaLevels = []string{domain.CiaNormal, domain.CiaHigh, domain.CiaVeryHigh}
 var webApplicabilityStatuses = []string{"Benötigt", "Möglicherweise", "Nicht relevant"}
 var webCatalogStandard = "IT-Grundschutz"
@@ -115,6 +115,8 @@ type webPage struct {
 	Review                domain.BausteinReview
 	CanSubmit             bool
 	CanReview             bool
+	CanAssign             bool
+	Reviewers             []repository.ProjectMember
 	ReviewLocked          bool
 	ReviewFilter          string
 	ReviewFilters         []string
@@ -180,9 +182,10 @@ type webCatalogGroup struct {
 
 type webMeasureRow struct {
 	domain.Measure
-	Overdue     bool
-	ReviewState string
-	ReviewLabel string
+	Overdue            bool
+	ReviewState        string
+	ReviewLabel        string
+	AssignedReviewerID int64
 }
 
 type webReviewQueueItem struct {
@@ -293,6 +296,7 @@ func (u *webUI) mount(r chi.Router) {
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/applicability/bulk", u.applicabilityBulk)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/assessments/bulk", u.assessmentsBulk)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/review", u.reviewApply)
+		g.Post("/projects/{projectID}/targets/{targetObjectID}/reviewer", u.reviewerAssign)
 		g.Get("/projects/{projectID}/targets/{targetObjectID}/recommendations", u.recommendationsGet)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/recommendations", u.recommendationsApply)
 		g.Get("/projects/{projectID}/settings", u.projectSettingsGet)
@@ -664,7 +668,7 @@ func (u *webUI) renderCockpit(w http.ResponseWriter, r *http.Request, user *auth
 		})
 		return
 	}
-	queue, err := u.buildReviewQueue(r, project, reviews, reviewFilter)
+	queue, err := u.buildReviewQueue(r, project, reviews, reviewFilter, user.UserID)
 	if err != nil {
 		u.render(w, r, "cockpit", webPage{
 			DisplayName:     user.DisplayName,
@@ -691,8 +695,9 @@ func (u *webUI) renderCockpit(w http.ResponseWriter, r *http.Request, user *auth
 		})
 		return
 	}
-	skipHideDone := reviewFilter == domain.ReviewSubmitted || reviewFilter == domain.ReviewReturned
-	filtered := filterMeasureRows(rows, query, status, hideDone && !skipHideDone, reviewFilter)
+	skipHideDone := reviewFilter == domain.ReviewSubmitted || reviewFilter == domain.ReviewReturned ||
+		reviewFilter == "assigned" || reviewFilter == "unassigned"
+	filtered := filterMeasureRows(rows, query, status, hideDone && !skipHideDone, reviewFilter, user.UserID)
 	if mine {
 		filtered = filterMeasuresMine(filtered, user.UserID, user.DisplayName, user.Email)
 	}
@@ -1484,10 +1489,10 @@ func filterReportRows(rows []domain.ReportRow, query, status string) []domain.Re
 }
 
 func filterMeasures(items []domain.Measure, query, status string, hideDone bool) []webMeasureRow {
-	return filterMeasureRows(toMeasureRows(items), query, status, hideDone, "")
+	return filterMeasureRows(toMeasureRows(items), query, status, hideDone, "", 0)
 }
 
-func filterMeasureRows(items []webMeasureRow, query, status string, hideDone bool, reviewFilter string) []webMeasureRow {
+func filterMeasureRows(items []webMeasureRow, query, status string, hideDone bool, reviewFilter string, userID int64) []webMeasureRow {
 	needle := strings.ToLower(query)
 	reviewFilter = normalizeCockpitReviewFilter(reviewFilter)
 	out := make([]webMeasureRow, 0, len(items))
@@ -1502,6 +1507,24 @@ func filterMeasureRows(items []webMeasureRow, query, status string, hideDone boo
 		}
 		if reviewFilter == domain.ReviewSubmitted || reviewFilter == domain.ReviewReturned {
 			if domain.NormalizeReviewState(item.ReviewState) != reviewFilter {
+				continue
+			}
+		}
+		if reviewFilter == "assigned" {
+			if item.AssignedReviewerID != userID || userID <= 0 {
+				continue
+			}
+			state := domain.NormalizeReviewState(item.ReviewState)
+			if state != domain.ReviewSubmitted && state != domain.ReviewReturned {
+				continue
+			}
+		}
+		if reviewFilter == "unassigned" {
+			if item.AssignedReviewerID > 0 {
+				continue
+			}
+			state := domain.NormalizeReviewState(item.ReviewState)
+			if state != domain.ReviewSubmitted && state != domain.ReviewReturned {
 				continue
 			}
 		}
@@ -1681,6 +1704,10 @@ func normalizeCockpitReviewFilter(value string) string {
 		return domain.ReviewSubmitted
 	case domain.ReviewReturned, "Zurückgegeben":
 		return domain.ReviewReturned
+	case "assigned", "Mir zugewiesen":
+		return "assigned"
+	case "unassigned", "Ohne Prüfer":
+		return "unassigned"
 	default:
 		return "Alle"
 	}
@@ -1692,6 +1719,10 @@ func reviewFilterLabel(value string) string {
 		return "Zur Prüfung"
 	case domain.ReviewReturned:
 		return "Zurückgegeben"
+	case "assigned":
+		return "Mir zugewiesen"
+	case "unassigned":
+		return "Ohne Prüfer"
 	default:
 		return "Alle"
 	}
@@ -1732,6 +1763,7 @@ func (u *webUI) attachMeasureReviews(r *http.Request, project domain.Project, ro
 		}
 		review := byKey[fmt.Sprintf("%d:%d", rows[i].TargetObjectID, bausteinID)]
 		rows[i].ReviewState = domain.NormalizeReviewState(review.State)
+		rows[i].AssignedReviewerID = review.AssignedReviewerID
 		if review.State != "" {
 			rows[i].ReviewLabel = domain.ReviewStateLabel(review.State)
 		}
@@ -1739,7 +1771,7 @@ func (u *webUI) attachMeasureReviews(r *http.Request, project domain.Project, ro
 	return nil
 }
 
-func (u *webUI) buildReviewQueue(r *http.Request, project domain.Project, reviews []domain.BausteinReview, filter string) ([]webReviewQueueItem, error) {
+func (u *webUI) buildReviewQueue(r *http.Request, project domain.Project, reviews []domain.BausteinReview, filter string, userID int64) ([]webReviewQueueItem, error) {
 	if !project.WorkflowEnabled || u.store == nil {
 		return nil, nil
 	}
@@ -1766,8 +1798,17 @@ func (u *webUI) buildReviewQueue(r *http.Request, project domain.Project, review
 		if state != domain.ReviewSubmitted && state != domain.ReviewReturned {
 			continue
 		}
-		if filter == domain.ReviewSubmitted || filter == domain.ReviewReturned {
+		switch filter {
+		case domain.ReviewSubmitted, domain.ReviewReturned:
 			if state != filter {
+				continue
+			}
+		case "assigned":
+			if userID <= 0 || review.AssignedReviewerID != userID {
+				continue
+			}
+		case "unassigned":
+			if review.AssignedReviewerID > 0 {
 				continue
 			}
 		}
@@ -1780,6 +1821,23 @@ func (u *webUI) buildReviewQueue(r *http.Request, project domain.Project, review
 		})
 	}
 	return out, nil
+}
+
+func (u *webUI) loadReviewerMembers(r *http.Request, projectID int64) []repository.ProjectMember {
+	if u.store == nil {
+		return nil
+	}
+	members, err := u.store.ListProjectMembers(r.Context(), projectID)
+	if err != nil {
+		return nil
+	}
+	out := make([]repository.ProjectMember, 0, len(members))
+	for _, member := range members {
+		if domain.CanBeAssignedReviewer(member.Role) {
+			out = append(out, member)
+		}
+	}
+	return out
 }
 
 func formatWebDate(t time.Time) string {

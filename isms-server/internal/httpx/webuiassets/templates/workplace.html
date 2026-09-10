@@ -183,9 +183,33 @@
         {{else if and $.CanEdit $.Inherited}}
         <p class="muted">Geerbter Baustein: Bewertungsstatus am übergeordneten Zielobjekt ändern.</p>
         {{end}}
-        {{if or $.CanSubmit $.CanReview}}
+        {{if or $.CanSubmit $.CanReview $.CanAssign}}
         <div class="card">
           <h2>Prüfung</h2>
+          {{if $.Review.AssignedReviewerName}}
+          <p>Prüfer: {{$.Review.AssignedReviewerName}}</p>
+          {{else if $.Project.WorkflowEnabled}}
+          <p class="muted">Kein Prüfer zugewiesen. Jeder Prüfer oder Besitzer darf abnehmen.</p>
+          {{end}}
+          {{if $.CanAssign}}
+          <form method="post" action="{{href (printf "/projects/%d/targets/%d/reviewer" $.Project.ID $.Target.ID)}}">
+            {{template "csrf" $}}
+            <input type="hidden" name="bausteinID" value="{{$.Baustein.ID}}">
+            <input type="hidden" name="q" value="{{$.Query}}">
+            <input type="hidden" name="filter" value="{{$.StatusFilter}}">
+            <input type="hidden" name="highlight" value="{{if $.HighlightRecs}}1{{else}}0{{end}}">
+            <div class="field">
+              <label for="assignedReviewerId">Prüfer</label>
+              <select id="assignedReviewerId" name="assignedReviewerId">
+                <option value="0" {{if eq $.Review.AssignedReviewerID 0}}selected{{end}}>Kein Prüfer</option>
+                {{range $.Reviewers}}
+                <option value="{{.UserID}}" {{if eq .UserID $.Review.AssignedReviewerID}}selected{{end}}>{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Email}}{{end}}</option>
+                {{end}}
+              </select>
+            </div>
+            <button class="btn btn-secondary" type="submit">Prüfer zuweisen</button>
+          </form>
+          {{end}}
           {{if $.CanSubmit}}
           <form method="post" action="{{href (printf "/projects/%d/targets/%d/review" $.Project.ID $.Target.ID)}}">
             {{template "csrf" $}}
