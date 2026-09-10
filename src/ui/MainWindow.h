@@ -88,6 +88,7 @@ private slots:
     void applyBausteinRecommendations();
     void showSollIstReport();
     void showCockpit();
+    void showNotifications();
     void showProjectMembers();
     void switchUserOrLogout();
     void checkRemoteSession();
@@ -276,6 +277,7 @@ private:
     QAction *m_refreshProjectAction = nullptr;
     QAction *m_applyRecommendationsAction = nullptr;
     QAction *m_manageMembersAction = nullptr;
+    QAction *m_notificationsAction = nullptr;
     QAction *m_switchUserAction = nullptr;
     QAction *m_reloginAction = nullptr;
     QAction *m_sollIstAction = nullptr;

@@ -117,6 +117,16 @@ func TestRouterRegistersReview(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("project reviews route: got %d want 401, body %q", rec.Code, rec.Body.String())
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/notifications", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code == http.StatusNotFound {
+		t.Fatalf("notifications route not registered: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("notifications route: got %d want 401, body %q", rec.Code, rec.Body.String())
+	}
 }
 
 func TestCockpitReviewQueueTemplate(t *testing.T) {

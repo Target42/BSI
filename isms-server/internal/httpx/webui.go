@@ -14,6 +14,7 @@ import (
 	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/catalog"
 	"github.com/Target42/BSI/isms-server/internal/domain"
+	"github.com/Target42/BSI/isms-server/internal/notify"
 	"github.com/Target42/BSI/isms-server/internal/repository"
 	"github.com/Target42/BSI/isms-server/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -36,6 +37,7 @@ type webUI struct {
 	auth    *auth.Service
 	store   *repository.Store
 	reports *service.ReportService
+	notify  *notify.Service
 	base    string
 	tmpl    *template.Template
 	css     []byte
@@ -123,6 +125,8 @@ type webPage struct {
 	ReviewFilters         []string
 	ReviewQueue           []webReviewQueueItem
 	ReviewSummary         string
+	Notifications         []domain.Notification
+	UnreadCount           int
 }
 
 type webWorkBaustein struct {
@@ -242,6 +246,7 @@ func newWebUI(authService *auth.Service, store *repository.Store, reports *servi
 		"reviewLabel":       domain.ReviewStateLabel,
 		"reviewActionLabel": domain.ReviewActionLabel,
 		"reviewFilterLabel": reviewFilterLabel,
+		"notifyKindLabel":   domain.NotificationKindLabel,
 		"formatDateTime":    formatWebDateTime,
 		"padLeft":           padLeft,
 		"reqHTML":           reqHTML,
@@ -323,6 +328,9 @@ func (u *webUI) mount(r chi.Router) {
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/requirements/{requirementID}", u.assessmentSave)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/requirements/{requirementID}/measures", u.measureCreate)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/deviation", u.deviationSave)
+		g.Get("/notifications", u.notificationsGet)
+		g.Post("/notifications/read-all", u.notificationsReadAll)
+		g.Post("/notifications/{notificationID}/read", u.notificationRead)
 		g.Get("/account", u.accountGet)
 		g.Post("/account/password", u.accountPassword)
 		g.Get("/users", u.usersGet)
@@ -1458,6 +1466,7 @@ func (u *webUI) render(w http.ResponseWriter, r *http.Request, name string, data
 					data.IsAdmin = admin
 				}
 			}
+			u.fillUnreadCount(r, &data)
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

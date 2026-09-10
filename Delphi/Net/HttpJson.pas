@@ -15,6 +15,7 @@ function BausteinReviewFromJson(AObj: TJSONObject): TBausteinReview;
 function BausteinReviewEventFromJson(AObj: TJSONObject): TBausteinReviewEvent;
 function ServerUserFromJson(AObj: TJSONObject): TServerUser;
 function ProjectMemberFromJson(AObj: TJSONObject): TProjectMember;
+function NotificationFromJson(AObj: TJSONObject): TNotification;
 function RepairUtf8Mojibake(const S: string): string;
 function JsonStringValue(AObj: TJSONObject; const AName: string;
   const ADefault: string = ''): string;
@@ -310,6 +311,24 @@ begin
   Result.Email := JsonStringValue(AObj, 'email');
   Result.DisplayName := JsonStringValue(AObj, 'displayName');
   Result.Role := JsonStringValue(AObj, 'role');
+end;
+
+function NotificationFromJson(AObj: TJSONObject): TNotification;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Id := AObj.GetValue<Integer>('id', 0);
+  Result.UserId := AObj.GetValue<Integer>('userId', 0);
+  Result.ProjectId := AObj.GetValue<Integer>('projectId', 0);
+  Result.ProjectName := JsonStringValue(AObj, 'projectName');
+  Result.TargetObjectId := AObj.GetValue<Integer>('targetObjectId', 0);
+  Result.BausteinId := AObj.GetValue<Integer>('bausteinId', 0);
+  Result.Kind := JsonStringValue(AObj, 'kind');
+  Result.Title := JsonStringValue(AObj, 'title');
+  Result.Body := JsonStringValue(AObj, 'body');
+  Result.LinkPath := JsonStringValue(AObj, 'linkPath');
+  Result.ReadAt := ParseDateTimeValue(AObj.GetValue('readAt'));
+  Result.CreatedAt := ParseDateTimeValue(AObj.GetValue('createdAt'));
+  Result.Unread := Result.ReadAt = 0;
 end;
 
 end.

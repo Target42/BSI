@@ -42,6 +42,8 @@ uses
 
   HttpTeamService in 'Net\HttpTeamService.pas',
 
+  HttpNotificationService in 'Net\HttpNotificationService.pas',
+
   GrundschutzImporter in 'Catalog\GrundschutzImporter.pas',
 
   RequirementTextFormatter in 'Catalog\RequirementTextFormatter.pas',

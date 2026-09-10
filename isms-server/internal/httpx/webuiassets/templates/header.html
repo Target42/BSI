@@ -9,6 +9,7 @@
   </nav>
   <div class="header-meta">
     {{if .LoggedIn}}
+    <a href="{{href "/notifications"}}"><span class="icon icon-bell" aria-hidden="true"></span> Mitteilungen{{if gt .UnreadCount 0}} <span class="header-badge">{{.UnreadCount}}</span>{{end}}</a>
     <a href="{{href "/account"}}"><span class="icon icon-user" aria-hidden="true"></span> {{.DisplayName}}</a>
     <form method="post" action="{{href "/logout"}}">
       {{template "csrf" .}}

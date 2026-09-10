@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
+	"github.com/Target42/BSI/isms-server/internal/notify"
 	"github.com/Target42/BSI/isms-server/internal/repository"
 	"github.com/Target42/BSI/isms-server/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -14,21 +15,22 @@ import (
 )
 
 type Server struct {
-	authService       *auth.Service
-	authHandler       *AuthHandler
-	projectHandler    *ProjectHandler
-	targetHandler     *TargetObjectHandler
-	assessmentHandler *AssessmentHandler
-	measureHandler    *MeasureHandler
-	catalogHandler    *CatalogHandler
-	reportHandler     *ReportHandler
-	adminHandler      *AdminHandler
-	memberHandler     *MemberHandler
-	reviewHandler     *ReviewHandler
-	webUI             *webUI
-	limiter           *loginLimiter
-	trustedProxies    []*net.IPNet
-	production        bool
+	authService         *auth.Service
+	authHandler         *AuthHandler
+	projectHandler      *ProjectHandler
+	targetHandler       *TargetObjectHandler
+	assessmentHandler   *AssessmentHandler
+	measureHandler      *MeasureHandler
+	catalogHandler      *CatalogHandler
+	reportHandler       *ReportHandler
+	adminHandler        *AdminHandler
+	memberHandler       *MemberHandler
+	reviewHandler       *ReviewHandler
+	notificationHandler *NotificationHandler
+	webUI               *webUI
+	limiter             *loginLimiter
+	trustedProxies      []*net.IPNet
+	production          bool
 }
 
 func NewServer(
@@ -41,20 +43,26 @@ func NewServer(
 	if store != nil && authService != nil {
 		authService.SetTokenVersions(store)
 	}
+	notifier := notify.New(store, notify.SMTPFromEnv())
+	reviewHandler := NewReviewHandler(store)
+	reviewHandler.notify = notifier
+	ui := newWebUI(authService, store, reportService, publicBase, limiter)
+	ui.notify = notifier
 	return &Server{
-		authService:       authService,
-		authHandler:       NewAuthHandler(store, authService),
-		projectHandler:    NewProjectHandler(store),
-		targetHandler:     NewTargetObjectHandler(store),
-		assessmentHandler: NewAssessmentHandler(store),
-		measureHandler:    NewMeasureHandler(store),
-		catalogHandler:    NewCatalogHandler(store),
-		reportHandler:     NewReportHandler(store, reportService),
-		adminHandler:      NewAdminHandler(store),
-		memberHandler:     NewMemberHandler(store),
-		reviewHandler:     NewReviewHandler(store),
-		webUI:             newWebUI(authService, store, reportService, publicBase, limiter),
-		limiter:           limiter,
+		authService:         authService,
+		authHandler:         NewAuthHandler(store, authService),
+		projectHandler:      NewProjectHandler(store),
+		targetHandler:       NewTargetObjectHandler(store),
+		assessmentHandler:   NewAssessmentHandler(store),
+		measureHandler:      NewMeasureHandler(store),
+		catalogHandler:      NewCatalogHandler(store),
+		reportHandler:       NewReportHandler(store, reportService),
+		adminHandler:        NewAdminHandler(store),
+		memberHandler:       NewMemberHandler(store),
+		reviewHandler:       reviewHandler,
+		notificationHandler: NewNotificationHandler(store),
+		webUI:               ui,
+		limiter:             limiter,
 	}
 }
 
@@ -121,6 +129,10 @@ func (s *Server) Router() http.Handler {
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/review/history", s.reviewHandler.History)
 			protected.Post("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/review", s.reviewHandler.Apply)
 			protected.Put("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/reviewer", s.reviewHandler.Assign)
+
+			protected.Get("/notifications", s.notificationHandler.List)
+			protected.Post("/notifications/read-all", s.notificationHandler.MarkAllRead)
+			protected.Post("/notifications/{notificationID}/read", s.notificationHandler.MarkRead)
 
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/measure-counts", s.measureHandler.MeasureCounts)
 			protected.Get("/projects/{projectID}/measures", s.measureHandler.ListProject)

@@ -14,6 +14,7 @@
 #include "domain/TargetObject.h"
 #include "domain/TargetObjectType.h"
 #include "net/HttpTeamService.h"
+#include "net/HttpNotificationService.h"
 #include "ui/dialogs/BausteinRecommendationDialog.h"
 #include "ui/dialogs/BausteinViewDialog.h"
 #include "ui/dialogs/CatalogSearchDialog.h"
@@ -45,6 +46,7 @@
 #include <QDockWidget>
 #include <QInputDialog>
 #include <QFileDialog>
+#include <QFont>
 #include <QHash>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -480,6 +482,8 @@ void MainWindow::buildUi()
     connect(m_deleteProjectAction, &QAction::triggered, this, &MainWindow::deleteProject);
     m_manageMembersAction = projectMenu->addAction(tr("Projektmitglieder..."));
     connect(m_manageMembersAction, &QAction::triggered, this, &MainWindow::showProjectMembers);
+    m_notificationsAction = projectMenu->addAction(tr("Mitteilungen..."));
+    connect(m_notificationsAction, &QAction::triggered, this, &MainWindow::showNotifications);
     m_switchUserAction = projectMenu->addAction(tr("Abmelden / Benutzer wechseln..."));
     connect(m_switchUserAction, &QAction::triggered, this, &MainWindow::switchUserOrLogout);
     m_reloginAction = projectMenu->addAction(tr("Server-Sitzung erneuern..."));
@@ -571,6 +575,8 @@ void MainWindow::updateProjectUiEnabled()
     m_editProjectAction->setEnabled(hasProject && canEdit);
     m_deleteProjectAction->setEnabled(hasProject && canDelete);
     m_manageMembersAction->setEnabled(canManageMembers);
+    m_notificationsAction->setVisible(m_context.isRemote());
+    m_notificationsAction->setEnabled(m_context.isRemote());
     m_switchUserAction->setEnabled(true);
     m_reloginAction->setEnabled(m_context.isRemote());
     m_addTargetAction->setEnabled(hasProject && canModel);
@@ -3290,6 +3296,90 @@ void MainWindow::showCockpit()
                          m_context.isRemote() ? m_context.remoteUser().id : 0, this);
     if (dialog.exec() == QDialog::Accepted)
         jumpToCockpitItem(dialog.selectedItem());
+}
+
+void MainWindow::showNotifications()
+{
+    if (!m_context.isRemote())
+        return;
+
+    HttpNotificationService service(m_context.apiClient());
+    QList<NotificationItem> items = service.list();
+    if (items.isEmpty() && !service.lastError().isEmpty()) {
+        QMessageBox::warning(this, tr("Mitteilungen"), service.lastError());
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Mitteilungen"));
+    dialog.resize(780, 400);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *table = new QTableWidget(&dialog);
+    table->setColumnCount(4);
+    table->setHorizontalHeaderLabels({tr("Zeit"), tr("Art"), tr("Projekt"), tr("Text")});
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->verticalHeader()->setVisible(false);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setRowCount(items.size());
+    const QLocale locale;
+    for (int row = 0; row < items.size(); ++row) {
+        const NotificationItem &item = items.at(row);
+        const QString when = item.createdAt.isValid()
+            ? locale.toString(item.createdAt.toLocalTime(), QStringLiteral("dd.MM.yyyy HH:mm"))
+            : QString();
+        table->setItem(row, 0, new QTableWidgetItem(when));
+        table->setItem(row, 1, new QTableWidgetItem(notificationKindLabel(item.kind)));
+        table->setItem(row, 2, new QTableWidgetItem(item.projectName));
+        table->setItem(row, 3, new QTableWidgetItem(item.body));
+        if (item.unread) {
+            QFont font = table->item(row, 0)->font();
+            font.setBold(true);
+            for (int col = 0; col < 4; ++col)
+                table->item(row, col)->setFont(font);
+        }
+    }
+    if (items.isEmpty()) {
+        table->setRowCount(1);
+        table->setItem(0, 0, new QTableWidgetItem(tr("Keine Mitteilungen.")));
+        table->setItem(0, 1, new QTableWidgetItem(QString()));
+        table->setItem(0, 2, new QTableWidgetItem(QString()));
+        table->setItem(0, 3, new QTableWidgetItem(QString()));
+    }
+    layout->addWidget(table, 1);
+    auto *buttons = new QDialogButtonBox(&dialog);
+    QPushButton *openButton = buttons->addButton(tr("Öffnen"), QDialogButtonBox::AcceptRole);
+    QPushButton *allButton = buttons->addButton(tr("Alle gelesen"), QDialogButtonBox::ActionRole);
+    buttons->addButton(QDialogButtonBox::Close);
+    openButton->setEnabled(!items.isEmpty());
+    allButton->setEnabled(!items.isEmpty());
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(openButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(allButton, &QPushButton::clicked, this, [&]() {
+        if (!service.markAllRead())
+            QMessageBox::warning(&dialog, tr("Mitteilungen"), service.lastError());
+        dialog.reject();
+    });
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const int row = table->currentRow();
+    if (row < 0 || row >= items.size())
+        return;
+    const NotificationItem chosen = items.at(row);
+    service.markRead(chosen.id);
+    if (chosen.projectId != m_activeProject.id) {
+        QMessageBox::information(this, tr("Mitteilungen"),
+                                 tr("Bitte zuerst das Projekt \"%1\" öffnen.").arg(chosen.projectName));
+        return;
+    }
+    CockpitItem jump;
+    jump.targetObjectId = chosen.targetObjectId;
+    jump.bausteinDbId = chosen.bausteinId;
+    jump.title = chosen.title;
+    jumpToCockpitItem(jump);
 }
 
 void MainWindow::ensureRequirementFilterAllows(AssessmentStatus status)

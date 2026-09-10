@@ -2,11 +2,14 @@ package httpx
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/domain"
+	"github.com/Target42/BSI/isms-server/internal/notify"
 	"github.com/Target42/BSI/isms-server/internal/repository"
 )
 
@@ -196,5 +199,22 @@ func reviewWebError(err error) string {
 		return reviewLockMessage(domain.ReviewSubmitted)
 	default:
 		return "Laufzettel konnte nicht gespeichert werden."
+	}
+}
+
+func notifyAfterReview(n *notify.Service, r *http.Request, project domain.Project, targetID, bausteinID int64, action string, user *auth.Claims, item domain.BausteinReview) {
+	if n == nil || r == nil || user == nil {
+		return
+	}
+	if err := n.OnReview(r.Context(), notify.Event{
+		Project:        project,
+		TargetObjectID: targetID,
+		BausteinID:     bausteinID,
+		Action:         action,
+		ActorID:        user.UserID,
+		ActorName:      user.DisplayName,
+		Review:         item,
+	}); err != nil {
+		slog.Error("review notification failed", "err", err, "action", action, "projectId", project.ID)
 	}
 }

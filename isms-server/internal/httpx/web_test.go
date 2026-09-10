@@ -43,6 +43,7 @@ func TestEmbeddedWebUIServesPagesAndLeavesAPI(t *testing.T) {
 	for _, path := range []string{
 		"/projects/1/members",
 		"/account",
+		"/notifications",
 		"/users",
 		"/projects/new",
 		"/catalog",

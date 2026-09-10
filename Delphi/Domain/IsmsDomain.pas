@@ -276,6 +276,22 @@ type
     Role: string;
   end;
 
+  TNotification = record
+    Id: Integer;
+    UserId: Integer;
+    ProjectId: Integer;
+    ProjectName: string;
+    TargetObjectId: Integer;
+    BausteinId: Integer;
+    Kind: string;
+    Title: string;
+    Body: string;
+    LinkPath: string;
+    ReadAt: TDateTime;
+    CreatedAt: TDateTime;
+    Unread: Boolean;
+  end;
+
 function StandardTypeToString(AValue: TStandardType): string;
 function StandardTypeFromString(const AValue: string): TStandardType;
 function AssessmentStatusToString(AValue: TAssessmentStatus): string;
@@ -374,6 +390,7 @@ function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, AR
 function ReviewLockMessage(const AState: string = ''): string;
 function ReviewActionMessage(const AAction: string): string;
 function ReviewActionLabel(const AAction: string): string;
+function NotificationKindLabel(const AKind: string): string;
 function ReviewClientErrorMessage(const ACode: string): string;
 function ContainsReturnedRequirementId(const AIds: TArray<Integer>; ARequirementId: Integer): Boolean;
 function ReviewSaveOk(const AReview: TBausteinReview): TReviewSaveResult;
@@ -1318,6 +1335,17 @@ begin
   if AAction = ReviewActionAccept then
     Exit('Abgenommen');
   Result := AAction;
+end;
+
+function NotificationKindLabel(const AKind: string): string;
+begin
+  if AKind = 'review_submitted' then
+    Exit('Zur Pr'#$00FC'fung');
+  if AKind = 'review_returned' then
+    Exit('Zur'#$00FC'ckgegeben');
+  if AKind = 'review_accepted' then
+    Exit('Abgenommen');
+  Result := AKind;
 end;
 
 function ReviewClientErrorMessage(const ACode: string): string;

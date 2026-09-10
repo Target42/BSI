@@ -29,10 +29,12 @@ func (u *webUI) reviewApply(w http.ResponseWriter, r *http.Request) {
 	action := strings.TrimSpace(r.FormValue("action"))
 	note := strings.TrimSpace(r.FormValue("note"))
 	requirementIDs := parseFormInt64s(r, "requirementID")
-	if _, err := applyBausteinReview(r, u.store, project, role, user.UserID, target.ID, bausteinID, action, note, requirementIDs); err != nil {
+	item, err := applyBausteinReview(r, u.store, project, role, user.UserID, target.ID, bausteinID, action, note, requirementIDs)
+	if err != nil {
 		u.renderWorkplace(w, r, user, project, role, target, reviewWebError(err))
 		return
 	}
+	notifyAfterReview(u.notify, r, project, target.ID, bausteinID, action, user, item)
 	query := strings.TrimSpace(r.FormValue("q"))
 	filter := r.FormValue("filter")
 	highlight := r.FormValue("highlight") != "0"

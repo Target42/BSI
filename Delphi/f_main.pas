@@ -192,6 +192,7 @@ type
     btnReviewAccept: TButton;
     cboReviewer: TComboBox;
     btnReviewHistory: TButton;
+    mnuNotifications: TMenuItem;
     FProjectMembers: TArray<TProjectMember>;
     FSuppressReviewerChange: Boolean;
     FMeasureCounts: TDictionary<Integer, Integer>;
@@ -308,6 +309,8 @@ type
     procedure ReviewAcceptClick(Sender: TObject);
     procedure ReviewHistoryClick(Sender: TObject);
     procedure ShowReviewHistory;
+    procedure DoShowNotifications(Sender: TObject);
+    procedure ShowNotifications;
     function IsAssessmentDueDateOverdue(const AAssessment: TRequirementAssessment): Boolean;
     procedure SetBausteinApplicability(AStatus: TApplicabilityStatus; ABausteinId: Integer = 0);
   public
@@ -323,7 +326,7 @@ uses
   f_project, f_projectopen, f_targetobject, f_movetarget, f_measure, f_report, f_cockpit,
   ReportService, RequirementTextFormatter, BausteinRecommendationService, AppSession,
   f_bausteinview, f_catalogsearch, f_bausteinrecommendation, f_projectmembers,
-  InheritanceService, f_texteditor;
+  InheritanceService, f_texteditor, HttpNotificationService;
 
 {$R *.dfm}
 
@@ -562,6 +565,11 @@ begin
   lblReviewNote.Anchors := [akLeft, akTop, akRight];
   lblReviewNote.Font.Color := clMaroon;
   lblReviewNote.Visible := False;
+
+  mnuNotifications := TMenuItem.Create(Self);
+  mnuNotifications.Caption := 'Mitteilungen'#$2026;
+  mnuNotifications.OnClick := DoShowNotifications;
+  mnuProject.Insert(mnuManageMembers.MenuIndex + 1, mnuNotifications);
 end;
 
 procedure TMainForm.ClearProjectSession;
@@ -750,6 +758,11 @@ begin
   mnuCloseProject.Enabled := HasProject;
   mnuEditProject.Enabled := HasProject and CanEdit;
   mnuManageMembers.Enabled := CanManageProjectMembers;
+	if mnuNotifications <> nil then
+  begin
+    mnuNotifications.Visible := (FContext <> nil) and FContext.IsRemote;
+    mnuNotifications.Enabled := (FContext <> nil) and FContext.IsRemote;
+  end;
   mnuDeleteProject.Enabled := HasProject and CanDelete;
   mnuAddTarget.Enabled := HasProject and CanModel;
   mnuEditTarget.Enabled := HasProject and CanModel and (FActiveTarget.Id > 0);
@@ -1686,6 +1699,147 @@ begin
     Dlg.ShowModal;
   finally
     Dlg.Free;
+  end;
+end;
+
+procedure TMainForm.DoShowNotifications(Sender: TObject);
+begin
+  ShowNotifications;
+end;
+
+procedure TMainForm.ShowNotifications;
+var
+  Dlg: TForm;
+  Grid: TStringGrid;
+  BtnOpen, BtnAll, BtnClose: TButton;
+  Svc: THttpNotificationService;
+  Items: TArray<TNotification>;
+  Item: TNotification;
+  I, Row: Integer;
+  When: string;
+  Cockpit: TCockpitItem;
+begin
+  if (FContext = nil) or (not FContext.IsRemote) or (FContext.ApiClient = nil) then
+    Exit;
+  Svc := THttpNotificationService.Create(FContext.ApiClient);
+  try
+    Items := Svc.List;
+    if (Length(Items) = 0) and (Svc.LastError <> '') then
+    begin
+      MessageDlg(Svc.LastError, mtWarning, [mbOK], 0);
+      Exit;
+    end;
+    Dlg := TForm.Create(Self);
+    try
+      Dlg.Caption := 'Mitteilungen';
+      Dlg.BorderStyle := bsDialog;
+      Dlg.Position := poOwnerFormCenter;
+      Dlg.ClientWidth := 780;
+      Dlg.ClientHeight := 380;
+      Dlg.Font.Name := 'Segoe UI';
+      Dlg.Font.Height := -12;
+      Grid := TStringGrid.Create(Dlg);
+      Grid.Parent := Dlg;
+      Grid.Left := 12;
+      Grid.Top := 12;
+      Grid.Width := Dlg.ClientWidth - 24;
+      Grid.Height := 310;
+      Grid.Anchors := [akLeft, akTop, akRight, akBottom];
+      Grid.ColCount := 4;
+      Grid.RowCount := 2;
+      Grid.FixedRows := 1;
+      Grid.Options := Grid.Options + [goRowSelect, goColSizing] - [goRangeSelect];
+      Grid.Cells[0, 0] := 'Zeit';
+      Grid.Cells[1, 0] := 'Art';
+      Grid.Cells[2, 0] := 'Projekt';
+      Grid.Cells[3, 0] := 'Text';
+      Grid.ColWidths[0] := 120;
+      Grid.ColWidths[1] := 120;
+      Grid.ColWidths[2] := 160;
+      Grid.ColWidths[3] := 330;
+      if Length(Items) = 0 then
+      begin
+        Grid.Cells[0, 1] := 'Keine Mitteilungen.';
+        Grid.Cells[1, 1] := '';
+        Grid.Cells[2, 1] := '';
+        Grid.Cells[3, 1] := '';
+      end
+      else
+      begin
+        Grid.RowCount := Length(Items) + 1;
+        for I := 0 to High(Items) do
+        begin
+          Item := Items[I];
+          Row := I + 1;
+          if Item.CreatedAt > 0 then
+            When := FormatDateTime('dd.mm.yyyy hh:nn', Item.CreatedAt)
+          else
+            When := '';
+          Grid.Cells[0, Row] := When;
+          Grid.Cells[1, Row] := NotificationKindLabel(Item.Kind);
+          Grid.Cells[2, Row] := Item.ProjectName;
+          Grid.Cells[3, Row] := Item.Body;
+        end;
+      end;
+      EnableGridColumnSizing(Grid);
+      BtnOpen := TButton.Create(Dlg);
+      BtnOpen.Parent := Dlg;
+      BtnOpen.Caption := #$00D6'ffnen';
+      BtnOpen.ModalResult := mrYes;
+      BtnOpen.Width := 90;
+      BtnOpen.Height := 25;
+      BtnOpen.Left := 12;
+      BtnOpen.Top := Dlg.ClientHeight - BtnOpen.Height - 12;
+      BtnOpen.Anchors := [akLeft, akBottom];
+      BtnOpen.Enabled := Length(Items) > 0;
+      BtnAll := TButton.Create(Dlg);
+      BtnAll.Parent := Dlg;
+      BtnAll.Caption := 'Alle gelesen';
+      BtnAll.ModalResult := mrAll;
+      BtnAll.Width := 110;
+      BtnAll.Height := 25;
+      BtnAll.Left := BtnOpen.Left + BtnOpen.Width + 8;
+      BtnAll.Top := BtnOpen.Top;
+      BtnAll.Anchors := [akLeft, akBottom];
+      BtnAll.Enabled := Length(Items) > 0;
+      BtnClose := TButton.Create(Dlg);
+      BtnClose.Parent := Dlg;
+      BtnClose.Caption := 'Schlie'#$00DF'en';
+      BtnClose.ModalResult := mrOk;
+      BtnClose.Default := True;
+      BtnClose.Cancel := True;
+      BtnClose.Width := 90;
+      BtnClose.Height := 25;
+      BtnClose.Left := Dlg.ClientWidth - BtnClose.Width - 12;
+      BtnClose.Top := BtnOpen.Top;
+      BtnClose.Anchors := [akRight, akBottom];
+      case Dlg.ShowModal of
+        mrYes:
+          if (Grid.Row > 0) and (Grid.Row <= Length(Items)) then
+          begin
+            Item := Items[Grid.Row - 1];
+            Svc.MarkRead(Item.Id);
+            if Item.ProjectId <> FActiveProject.Id then
+              MessageDlg('Bitte zuerst das Projekt "' + Item.ProjectName + '" ' +
+                #$00F6'ffnen.', mtInformation, [mbOK], 0)
+            else
+            begin
+              FillChar(Cockpit, SizeOf(Cockpit), 0);
+              Cockpit.TargetObjectId := Item.TargetObjectId;
+              Cockpit.BausteinDbId := Item.BausteinId;
+              Cockpit.Title := Item.Title;
+              JumpToCockpitItem(Cockpit);
+            end;
+          end;
+        mrAll:
+          if not Svc.MarkAllRead then
+            MessageDlg(Svc.LastError, mtWarning, [mbOK], 0);
+      end;
+    finally
+      Dlg.Free;
+    end;
+  finally
+    Svc.Free;
   end;
 end;
 

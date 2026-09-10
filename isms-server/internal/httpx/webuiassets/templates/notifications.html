@@ -1,0 +1,62 @@
+{{define "notifications"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mitteilungen · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <h1>Mitteilungen</h1>
+      <p class="lede">Laufzettel-Wechsel an Bausteinen, die Sie betreffen.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+      {{if .Notifications}}
+      <p class="row-actions">
+        <form method="post" action="{{href "/notifications/read-all"}}">
+          {{template "csrf" .}}
+          <button class="btn btn-ghost" type="submit">Alle als gelesen markieren</button>
+        </form>
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Zeit</th>
+              <th>Art</th>
+              <th>Projekt</th>
+              <th>Text</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Notifications}}
+            <tr{{if not .ReadAt}} class="notify-unread"{{end}}>
+              <td>{{formatDateTime .CreatedAt}}</td>
+              <td>{{notifyKindLabel .Kind}}</td>
+              <td>{{.ProjectName}}</td>
+              <td>{{.Body}}</td>
+              <td>
+                <form method="post" action="{{href (printf "/notifications/%d/read" .ID)}}">
+                  {{template "csrf" $}}
+                  <button class="btn btn-ghost" type="submit">Öffnen</button>
+                </form>
+              </td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <p class="muted">Keine Mitteilungen.</p>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -21,6 +21,7 @@ SOURCES += \
     src/net/HttpProjectRepository.cpp \
     src/net/HttpTargetObjectRepository.cpp \
     src/net/HttpTeamService.cpp \
+    src/net/HttpNotificationService.cpp \
     src/persistence/CatalogRepository.cpp \
     src/persistence/Database.cpp \
     src/persistence/MeasureRepository.cpp \
@@ -67,6 +68,7 @@ HEADERS += \
     src/net/HttpProjectRepository.h \
     src/net/HttpTargetObjectRepository.h \
     src/net/HttpTeamService.h \
+    src/net/HttpNotificationService.h \
     src/domain/ApplicabilityStatus.h \
     src/domain/AssessmentStatus.h \
     src/domain/BausteinApplicability.h \
@@ -75,6 +77,7 @@ HEADERS += \
     src/domain/BausteinReview.h \
     src/domain/CockpitItem.h \
     src/domain/Measure.h \
+    src/domain/Notification.h \
     src/domain/MeasureStatus.h \
     src/domain/Project.h \
     src/domain/ProtectionNeed.h \

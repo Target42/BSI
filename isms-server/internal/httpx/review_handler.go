@@ -7,12 +7,14 @@ import (
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/domain"
+	"github.com/Target42/BSI/isms-server/internal/notify"
 	"github.com/Target42/BSI/isms-server/internal/repository"
 	"github.com/go-chi/chi/v5"
 )
 
 type ReviewHandler struct {
-	store *repository.Store
+	store  *repository.Store
+	notify *notify.Service
 }
 
 func NewReviewHandler(store *repository.Store) *ReviewHandler {
@@ -136,6 +138,7 @@ func (h *ReviewHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "save review failed")
 		return
 	}
+	notifyAfterReview(h.notify, r, project, targetObjectID, bausteinID, req.Action, user, item)
 	writeJSON(w, http.StatusOK, item)
 }
 

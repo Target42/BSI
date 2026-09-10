@@ -177,6 +177,7 @@
         <DCCReference Include="Net\HttpTargetObjectRepository.pas"/>
         <DCCReference Include="Net\HttpMeasureRepository.pas"/>
         <DCCReference Include="Net\HttpTeamService.pas"/>
+        <DCCReference Include="Net\HttpNotificationService.pas"/>
         <DCCReference Include="Catalog\GrundschutzImporter.pas"/>
         <DCCReference Include="Catalog\RequirementTextFormatter.pas"/>
         <DCCReference Include="Services\ReportService.pas"/>
