@@ -307,14 +307,14 @@ func (s *Store) DeleteProject(ctx context.Context, projectID int64) error {
 const targetObjectColumns = `
 	id, project_id, parent_id, type, protection_need,
 	confidentiality, integrity, availability, inherit_protection_need, protection_need_note,
-	name, description, created_at, updated_at`
+	name, description, model_locked, created_at, updated_at`
 
 func scanTargetObject(scanner interface{ Scan(dest ...any) error }) (domain.TargetObject, error) {
 	var t domain.TargetObject
 	err := scanner.Scan(
 		&t.ID, &t.ProjectID, &t.ParentID, &t.Type, &t.ProtectionNeed,
 		&t.Confidentiality, &t.Integrity, &t.Availability, &t.InheritProtectionNeed, &t.ProtectionNeedNote,
-		&t.Name, &t.Description, &t.CreatedAt, &t.UpdatedAt,
+		&t.Name, &t.Description, &t.ModelLocked, &t.CreatedAt, &t.UpdatedAt,
 	)
 	return t, err
 }
@@ -402,17 +402,61 @@ func (s *Store) GetTargetObject(ctx context.Context, id int64) (domain.TargetObj
 	return t, nil
 }
 
+func (s *Store) RequireModelWritable(ctx context.Context, targetID int64, role string) error {
+	if targetID <= 0 {
+		return nil
+	}
+	t, err := s.GetTargetObject(ctx, targetID)
+	if err != nil {
+		return err
+	}
+	if !domain.ModelAllowsEdit(t.ModelLocked, role) {
+		return domain.ErrModelLocked
+	}
+	return nil
+}
+
+func (s *Store) RequireSubtreeModelWritable(ctx context.Context, rootID int64, role string) error {
+	if domain.CanToggleModelLock(role) {
+		return nil
+	}
+	t, err := s.GetTargetObject(ctx, rootID)
+	if err != nil {
+		return err
+	}
+	items, err := s.listTargetObjectsRaw(ctx, t.ProjectID)
+	if err != nil {
+		return err
+	}
+	if domain.SubtreeHasLockedModel(items, rootID) {
+		return domain.ErrModelLocked
+	}
+	return nil
+}
+
+func (s *Store) SetModelLocked(ctx context.Context, id int64, locked bool) (domain.TargetObject, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE target_objects SET model_locked = $2, updated_at = now() WHERE id = $1`, id, locked)
+	if err != nil {
+		return domain.TargetObject{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.TargetObject{}, ErrNotFound
+	}
+	return s.GetTargetObject(ctx, id)
+}
+
 func (s *Store) CreateTargetObject(ctx context.Context, t domain.TargetObject) (domain.TargetObject, error) {
 	created, err := scanTargetObject(s.pool.QueryRow(ctx, `
 		INSERT INTO target_objects (
 			project_id, parent_id, type, protection_need,
 			confidentiality, integrity, availability, inherit_protection_need, protection_need_note,
-			name, description)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			name, description, model_locked)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING `+targetObjectColumns,
 		t.ProjectID, t.ParentID, t.Type, t.ProtectionNeed,
 		t.Confidentiality, t.Integrity, t.Availability, t.InheritProtectionNeed, t.ProtectionNeedNote,
-		t.Name, t.Description,
+		t.Name, t.Description, t.ModelLocked,
 	))
 	return created, err
 }
@@ -423,12 +467,12 @@ func (s *Store) UpdateTargetObject(ctx context.Context, t domain.TargetObject) (
 		SET parent_id = $2, type = $3, protection_need = $4,
 			confidentiality = $5, integrity = $6, availability = $7,
 			inherit_protection_need = $8, protection_need_note = $9,
-			name = $10, description = $11, updated_at = now()
+			name = $10, description = $11, model_locked = $12, updated_at = now()
 		WHERE id = $1
 		RETURNING `+targetObjectColumns,
 		t.ID, t.ParentID, t.Type, t.ProtectionNeed,
 		t.Confidentiality, t.Integrity, t.Availability, t.InheritProtectionNeed, t.ProtectionNeedNote,
-		t.Name, t.Description,
+		t.Name, t.Description, t.ModelLocked,
 	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.TargetObject{}, ErrNotFound

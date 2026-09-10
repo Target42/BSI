@@ -37,6 +37,7 @@ type TargetObject struct {
 	ProtectionNeedNote    string    `json:"protectionNeedNote"`
 	Name                  string    `json:"name"`
 	Description           string    `json:"description"`
+	ModelLocked           bool      `json:"modelLocked"`
 	CreatedAt             time.Time `json:"createdAt"`
 	UpdatedAt             time.Time `json:"updatedAt"`
 }

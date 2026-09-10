@@ -17,14 +17,30 @@
         / {{.Target.Name}}
       </p>
       <h1>{{.Target.Name}}</h1>
-      <p class="lede">{{.Target.Type}}{{if .Target.ProtectionNeed}} · {{.Target.ProtectionNeed}}{{end}}</p>
+      <p class="lede">{{.Target.Type}}{{if .Target.ProtectionNeed}} · {{.Target.ProtectionNeed}}{{end}}{{if .Target.ModelLocked}} · Modell festgezogen{{end}}</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+      {{if and .Target.ModelLocked (not .CanEditModel)}}
+      <p class="muted">Das Modell ist festgezogen. Bewertungen, Maßnahmen und der Laufzettel bleiben möglich.</p>
+      {{end}}
 
       <p class="row-actions">
         <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/applicability" .Project.ID .Target.ID)}}">Anwendbarkeit</a>
         <a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/recommendations" .Project.ID .Target.ID)}}">Empfehlungen</a>
-        {{if .CanEdit}}<a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">Bearbeiten</a>{{end}}
+        {{if .CanEdit}}<a class="btn btn-secondary" href="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">{{if .CanEditModel}}Bearbeiten{{else}}Anzeigen{{end}}</a>{{end}}
+        {{if .CanOwn}}
+        <form class="inline-form" method="post" action="{{href (printf "/projects/%d/targets/%d/model-lock" .Project.ID .Target.ID)}}">
+          {{template "csrf" .}}
+          <input type="hidden" name="next" value="workplace">
+          {{if .Target.ModelLocked}}
+          <input type="hidden" name="locked" value="0">
+          <button class="btn btn-secondary" type="submit">Modell lösen</button>
+          {{else}}
+          <input type="hidden" name="locked" value="1">
+          <button class="btn btn-secondary" type="submit">Modell festziehen</button>
+          {{end}}
+        </form>
+        {{end}}
       </p>
 
       <form class="toolbar" method="get" action="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">

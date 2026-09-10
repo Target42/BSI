@@ -76,6 +76,7 @@ private slots:
     void editTargetObject();
     void moveTargetObject();
     void deleteTargetObject();
+    void toggleTargetModelLock();
     void refreshProject();
     void showTargetObjectContextMenu(const QPoint &pos);
     void showBausteinContextMenu(const QPoint &pos);
@@ -153,6 +154,9 @@ private:
     void updateProjectUiEnabled();
     void updateSessionInfoLabel();
     bool canEditActiveProject() const;
+    bool canOwnActiveProject() const;
+    bool canEditActiveModel() const;
+    QString activeProjectRole() const;
     bool canDeleteActiveProject() const;
     bool canManageProjectMembers() const;
     void notifySaveFailure(const QString &repositoryError, bool useDialog);
@@ -260,6 +264,7 @@ private:
     QAction *m_editTargetAction = nullptr;
     QAction *m_moveTargetAction = nullptr;
     QAction *m_deleteTargetAction = nullptr;
+    QAction *m_lockTargetAction = nullptr;
     QAction *m_refreshProjectAction = nullptr;
     QAction *m_applyRecommendationsAction = nullptr;
     QAction *m_manageMembersAction = nullptr;

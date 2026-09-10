@@ -193,9 +193,18 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 	reviewLocked := selected.ID != 0 && !selected.Inherited &&
 		!domain.ReviewAllowsBausteinEdit(project.WorkflowEnabled, selectedReview.State, selectedReview.ReturnedRequirementIDs)
 
+	if errMsg == "" && notice == "" && r.URL.Query().Get("saved") == "lock" {
+		if target.ModelLocked {
+			notice = "Modell festgezogen. Bearbeiter können Struktur und Bausteinauswahl nicht mehr ändern."
+		} else {
+			notice = "Modell wieder geöffnet."
+		}
+	}
+
 	u.render(w, r, "workplace", webPage{
 		DisplayName:        user.DisplayName,
 		CanEdit:            canEdit,
+		CanEditModel:       domain.ModelAllowsEdit(target.ModelLocked, role),
 		CanOwn:             roleCanOwn(role),
 		Project:            project,
 		Target:             target,
@@ -290,12 +299,16 @@ func (u *webUI) workplaceURL(projectID, targetID, bausteinID int64, query, statu
 }
 
 func (u *webUI) deviationSave(w http.ResponseWriter, r *http.Request) {
-	_, project, _, ok := u.projectAccess(w, r, "editor")
+	_, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
 	target, ok := u.loadProjectTarget(w, r, project)
 	if !ok {
+		return
+	}
+	if !domain.ModelAllowsEdit(target.ModelLocked, role) {
+		http.Error(w, domain.ModelLockMessage(), http.StatusConflict)
 		return
 	}
 	if err := r.ParseForm(); err != nil {

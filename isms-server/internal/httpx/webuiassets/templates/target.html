@@ -21,8 +21,25 @@
       <h1>{{.Target.Name}}</h1>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+      {{if .Target.ModelLocked}}
+      <p class="muted">Modell festgezogen. Bearbeiter können Struktur und Bausteinauswahl nicht ändern.</p>
+      {{end}}
+      {{if .CanOwn}}
+      <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/model-lock" .Project.ID .Target.ID)}}">
+        {{template "csrf" .}}
+        {{if .Target.ModelLocked}}
+        <input type="hidden" name="locked" value="0">
+        <p>Das Modell ist festgezogen. Fachteams dürfen nur noch belegen und einreichen.</p>
+        <button class="btn btn-secondary" type="submit">Modell lösen</button>
+        {{else}}
+        <input type="hidden" name="locked" value="1">
+        <p>Festziehen sperrt Struktur und Bausteinauswahl für Bearbeiter. Bewertungen bleiben möglich.</p>
+        <button class="btn" type="submit">Modell festziehen</button>
+        {{end}}
+      </form>
+      {{end}}
 
-      {{if .CanEdit}}
+      {{if .CanEditModel}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">
         {{template "csrf" .}}
         <div class="field">

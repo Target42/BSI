@@ -21,7 +21,9 @@ function JsonBoolValue(AObj: TJSONObject; const AName: string;
   ADefault: Boolean = False): Boolean;
 function JsonErrorCode(AObj: TJSONObject): string;
 function IsReviewLockedJson(AObj: TJSONObject): Boolean;
-procedure AddTargetObjectJsonFields(ABody: TJSONObject; const ATarget: TTargetObject);
+function IsModelLockedJson(AObj: TJSONObject): Boolean;
+procedure AddTargetObjectJsonFields(ABody: TJSONObject; const ATarget: TTargetObject;
+  AIncludeLock: Boolean = False);
 
 implementation
 
@@ -70,7 +72,8 @@ begin
     Result := TJSONBool(V).AsBoolean;
 end;
 
-procedure AddTargetObjectJsonFields(ABody: TJSONObject; const ATarget: TTargetObject);
+procedure AddTargetObjectJsonFields(ABody: TJSONObject; const ATarget: TTargetObject;
+  AIncludeLock: Boolean);
 begin
   ABody.AddPair('parentId', TJSONNumber.Create(ATarget.ParentId));
   ABody.AddPair('type', TargetObjectTypeToString(ATarget.ObjType));
@@ -82,6 +85,8 @@ begin
   ABody.AddPair('protectionNeedNote', ATarget.ProtectionNeedNote);
   ABody.AddPair('name', ATarget.Name);
   ABody.AddPair('description', ATarget.Description);
+  if AIncludeLock then
+    ABody.AddPair('modelLocked', TJSONBool.Create(ATarget.ModelLocked));
 end;
 
 function ParseDateTimeValue(AValue: TJSONValue): TDateTime;
@@ -144,6 +149,7 @@ begin
   Result.ProtectionNeedNote := JsonStringValue(AObj, 'protectionNeedNote');
   Result.Name := JsonStringValue(AObj, 'name');
   Result.Description := JsonStringValue(AObj, 'description');
+  Result.ModelLocked := JsonBoolValue(AObj, 'modelLocked');
   if (JsonStringValue(AObj, 'confidentiality') = '') and
      (JsonStringValue(AObj, 'integrity') = '') and
      (Result.ProtectionNeed = pnElevated) then
@@ -220,6 +226,11 @@ end;
 function IsReviewLockedJson(AObj: TJSONObject): Boolean;
 begin
   Result := JsonErrorCode(AObj) = 'review_locked';
+end;
+
+function IsModelLockedJson(AObj: TJSONObject): Boolean;
+begin
+  Result := JsonErrorCode(AObj) = 'model_locked';
 end;
 
 function BausteinReviewFromJson(AObj: TJSONObject): TBausteinReview;

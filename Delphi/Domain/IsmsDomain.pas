@@ -41,6 +41,7 @@ type
     ProtectionNeedNote: string;
     Name: string;
     Description: string;
+    ModelLocked: Boolean;
   end;
 
   TTargetMoveDestination = record
@@ -339,6 +340,9 @@ function ReviewAllowsRequirementEdit(AWorkflowEnabled: Boolean; const AState: st
   const AReturnedIds: TArray<Integer>; ARequirementId: Integer): Boolean;
 function CanEditContentRole(const ARole: string): Boolean;
 function CanReviewRole(const ARole: string): Boolean;
+function CanToggleModelLock(const ARole: string; AIsRemote: Boolean): Boolean;
+function ModelAllowsEdit(ALocked: Boolean; const ARole: string; AIsRemote: Boolean): Boolean;
+function ModelLockMessage: string;
 function CanSubmitReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
 function CanReturnReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
 function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;
@@ -618,6 +622,8 @@ begin
   Result := Format('%s ' + EnDash + ' %s [%s]',
     [TargetObjectTypeToString(ATarget.ObjType), ATarget.Name,
      ProtectionNeedSummary(ATarget)]);
+  if ATarget.ModelLocked then
+    Result := Result + ' [festgezogen]';
 end;
 
 function AllowedChildTargetTypes(AParentType: TTargetObjectType): TArray<TTargetObjectType>;
@@ -1176,6 +1182,28 @@ end;
 function CanReviewRole(const ARole: string): Boolean;
 begin
   Result := (ARole = 'owner') or (ARole = 'reviewer');
+end;
+
+function CanToggleModelLock(const ARole: string; AIsRemote: Boolean): Boolean;
+begin
+  if not AIsRemote then
+    Exit(True);
+  Result := ARole = 'owner';
+end;
+
+function ModelAllowsEdit(ALocked: Boolean; const ARole: string; AIsRemote: Boolean): Boolean;
+begin
+  if AIsRemote and not CanEditContentRole(ARole) then
+    Exit(False);
+  if not ALocked then
+    Exit(True);
+  Result := CanToggleModelLock(ARole, AIsRemote);
+end;
+
+function ModelLockMessage: string;
+begin
+  Result := 'Das Modell dieses Zielobjekts ist festgezogen. Nur der Besitzer kann Struktur und Bausteinauswahl ' +
+    'a'#$00E4'ndern.';
 end;
 
 function CanSubmitReview(AWorkflowEnabled, AInherited: Boolean; const AState, ARole: string): Boolean;

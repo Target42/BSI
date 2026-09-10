@@ -28,6 +28,7 @@ TargetObject TargetObjectRepository::readTargetObject(const QSqlQuery &query) co
     object.protectionNeedNote = query.value(9).toString();
     object.name = query.value(10).toString();
     object.description = query.value(11).toString();
+    object.modelLocked = query.value(12).toInt() != 0;
     if (object.confidentiality == CiaLevel::Normal && object.integrity == CiaLevel::Normal
         && object.availability == CiaLevel::Normal
         && object.protectionNeed == ProtectionNeed::Elevated) {
@@ -54,7 +55,7 @@ QList<TargetObject> TargetObjectRepository::loadTargetObjectsRaw(int projectId) 
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
         "SELECT id, project_id, parent_id, type, protection_need, confidentiality, integrity, "
-        "availability, inherit_protection_need, protection_need_note, name, description "
+        "availability, inherit_protection_need, protection_need_note, name, description, model_locked "
         "FROM target_objects WHERE project_id = ? ORDER BY parent_id, name"));
     query.addBindValue(projectId);
     if (!query.exec())
@@ -100,13 +101,14 @@ TargetObject TargetObjectRepository::createTargetObject(const TargetObject &targ
     query.prepare(QStringLiteral(
         "INSERT INTO target_objects (project_id, parent_id, type, protection_need, "
         "confidentiality, integrity, availability, inherit_protection_need, protection_need_note, "
-        "name, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "name, description, model_locked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(object.projectId);
     query.addBindValue(object.parentId);
     query.addBindValue(targetObjectTypeToString(object.type));
     bindProtectionNeed(query, object);
     query.addBindValue(object.name);
     query.addBindValue(object.description);
+    query.addBindValue(object.modelLocked ? 1 : 0);
 
     if (!query.exec()) {
         m_lastError = query.lastError().text();
@@ -125,12 +127,13 @@ bool TargetObjectRepository::updateTargetObject(const TargetObject &targetObject
     query.prepare(QStringLiteral(
         "UPDATE target_objects SET parent_id = ?, type = ?, protection_need = ?, "
         "confidentiality = ?, integrity = ?, availability = ?, inherit_protection_need = ?, "
-        "protection_need_note = ?, name = ?, description = ? WHERE id = ?"));
+        "protection_need_note = ?, name = ?, description = ?, model_locked = ? WHERE id = ?"));
     query.addBindValue(object.parentId);
     query.addBindValue(targetObjectTypeToString(object.type));
     bindProtectionNeed(query, object);
     query.addBindValue(object.name);
     query.addBindValue(object.description);
+    query.addBindValue(object.modelLocked ? 1 : 0);
     query.addBindValue(object.id);
 
     if (!query.exec()) {

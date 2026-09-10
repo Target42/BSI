@@ -32,6 +32,7 @@ func flattenTargets(items []domain.TargetObject, progress map[int64]domain.Repor
 			Type:           item.Type,
 			Depth:          depth,
 			ProtectionNeed: item.ProtectionNeed,
+			ModelLocked:    item.ModelLocked,
 			IsRoot:         domain.IsRootScopeTarget(item.ParentID, item.Type),
 			ChildTypes:     domain.AllowedChildTargetTypes(item.Type),
 		}
@@ -132,7 +133,7 @@ func (u *webUI) projectCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *webUI) targetCreate(w http.ResponseWriter, r *http.Request) {
-	user, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -149,6 +150,10 @@ func (u *webUI) targetCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateTargetObjectPlacement(r.Context(), u.store, project.ID, parentID, objectType, 0); err != nil {
 		u.renderProjectError(w, r, user, project, true, err.Error())
+		return
+	}
+	if err := u.store.RequireModelWritable(r.Context(), parentID, role); err != nil {
+		u.renderProjectError(w, r, user, project, true, domain.ModelLockMessage())
 		return
 	}
 	item := domain.TargetObject{
@@ -220,10 +225,10 @@ func (u *webUI) targetEditGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	u.renderTargetEdit(w, r, user, project, roleCanEdit(role), target, "")
+	u.renderTargetEdit(w, r, user, project, role, target, "")
 }
 
-func (u *webUI) renderTargetEdit(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, canEdit bool, target domain.TargetObject, errMsg string) {
+func (u *webUI) renderTargetEdit(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, role string, target domain.TargetObject, errMsg string) {
 	objects, err := u.store.ListTargetObjects(r.Context(), project.ID)
 	if err != nil {
 		http.Error(w, "Zielobjekte konnten nicht geladen werden.", http.StatusInternalServerError)
@@ -258,16 +263,25 @@ func (u *webUI) renderTargetEdit(w http.ResponseWriter, r *http.Request, user *a
 	if errMsg == "" && r.URL.Query().Get("saved") == "1" {
 		notice = "Zielobjekt gespeichert."
 	}
+	if errMsg == "" && r.URL.Query().Get("saved") == "lock" {
+		if target.ModelLocked {
+			notice = "Modell festgezogen. Bearbeiter können Struktur und Bausteinauswahl nicht mehr ändern."
+		} else {
+			notice = "Modell wieder geöffnet."
+		}
+	}
 	u.render(w, r, "target", webPage{
-		DisplayName:   user.DisplayName,
-		CanEdit:       canEdit,
-		Project:       project,
-		Target:        target,
+		DisplayName:  user.DisplayName,
+		CanEdit:      roleCanEdit(role),
+		CanEditModel: domain.ModelAllowsEdit(target.ModelLocked, role),
+		CanOwn:       roleCanOwn(role),
+		Project:      project,
+		Target:       target,
 		ParentOptions: parents,
-		AddTypes:      addTypes,
-		CiaLevels:     webCiaLevels,
-		Error:         errMsg,
-		Notice:        notice,
+		AddTypes:     addTypes,
+		CiaLevels:    webCiaLevels,
+		Error:        errMsg,
+		Notice:       notice,
 	})
 }
 
@@ -295,7 +309,7 @@ func descendantIDs(items []domain.TargetObject, rootID int64) map[int64]struct{}
 }
 
 func (u *webUI) targetEditSave(w http.ResponseWriter, r *http.Request) {
-	user, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -304,12 +318,16 @@ func (u *webUI) targetEditSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		u.renderTargetEdit(w, r, user, project, true, current, "Ungültige Anfrage.")
+		u.renderTargetEdit(w, r, user, project, role, current, "Ungültige Anfrage.")
+		return
+	}
+	if !domain.ModelAllowsEdit(current.ModelLocked, role) {
+		u.renderTargetEdit(w, r, user, project, role, current, domain.ModelLockMessage())
 		return
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		u.renderTargetEdit(w, r, user, project, true, current, "Name ist erforderlich.")
+		u.renderTargetEdit(w, r, user, project, role, current, "Name ist erforderlich.")
 		return
 	}
 	parentID := current.ParentID
@@ -321,8 +339,14 @@ func (u *webUI) targetEditSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := validateTargetObjectPlacement(r.Context(), u.store, project.ID, parentID, objectType, current.ID); err != nil {
-		u.renderTargetEdit(w, r, user, project, true, current, err.Error())
+		u.renderTargetEdit(w, r, user, project, role, current, err.Error())
 		return
+	}
+	if parentID != current.ParentID {
+		if err := u.store.RequireModelWritable(r.Context(), parentID, role); err != nil {
+			u.renderTargetEdit(w, r, user, project, role, current, domain.ModelLockMessage())
+			return
+		}
 	}
 	inherit := current.InheritProtectionNeed
 	if parentID > 0 {
@@ -342,12 +366,13 @@ func (u *webUI) targetEditSave(w http.ResponseWriter, r *http.Request) {
 		ProtectionNeedNote:    strings.TrimSpace(r.FormValue("protectionNeedNote")),
 		Name:                  name,
 		Description:           strings.TrimSpace(r.FormValue("description")),
+		ModelLocked:           current.ModelLocked,
 	}
 	var parent *domain.TargetObject
 	if parentID > 0 {
 		p, err := u.store.GetTargetObject(r.Context(), parentID)
 		if err != nil {
-			u.renderTargetEdit(w, r, user, project, true, current, "Übergeordnetes Zielobjekt nicht gefunden.")
+			u.renderTargetEdit(w, r, user, project, role, current, "Übergeordnetes Zielobjekt nicht gefunden.")
 			return
 		}
 		parent = &p
@@ -355,7 +380,7 @@ func (u *webUI) targetEditSave(w http.ResponseWriter, r *http.Request) {
 	domain.ApplyTargetObjectProtectionNeed(&item, parent)
 	updated, err := u.store.UpdateTargetObject(r.Context(), item)
 	if err != nil {
-		u.renderTargetEdit(w, r, user, project, true, current, "Zielobjekt konnte nicht gespeichert werden.")
+		u.renderTargetEdit(w, r, user, project, role, current, "Zielobjekt konnte nicht gespeichert werden.")
 		return
 	}
 	http.Redirect(w, r, u.href(fmt.Sprintf("/projects/%d/targets/%d/edit?saved=1", project.ID, updated.ID)), http.StatusSeeOther)
@@ -370,7 +395,7 @@ func formLast(r *http.Request, name string) string {
 }
 
 func (u *webUI) targetDelete(w http.ResponseWriter, r *http.Request) {
-	_, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -382,11 +407,46 @@ func (u *webUI) targetDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Der Informationsverbund kann nicht gelöscht werden.", http.StatusConflict)
 		return
 	}
+	if err := u.store.RequireSubtreeModelWritable(r.Context(), target.ID, role); err != nil {
+		u.renderTargetEdit(w, r, user, project, role, target, domain.ModelLockMessage())
+		return
+	}
 	if err := u.store.DeleteTargetObject(r.Context(), target.ID); err != nil {
 		http.Error(w, "Zielobjekt konnte nicht gelöscht werden.", http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, u.href(fmt.Sprintf("/projects/%d?saved=1", project.ID)), http.StatusSeeOther)
+}
+
+func (u *webUI) targetModelLock(w http.ResponseWriter, r *http.Request) {
+	user, project, role, ok := u.projectAccess(w, r, "editor")
+	if !ok {
+		return
+	}
+	target, ok := u.loadProjectTarget(w, r, project)
+	if !ok {
+		return
+	}
+	if !domain.CanToggleModelLock(role) {
+		http.Error(w, "Nur der Besitzer kann das Modell festziehen.", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		u.renderTargetEdit(w, r, user, project, role, target, "Ungültige Anfrage.")
+		return
+	}
+	locked := r.FormValue("locked") == "1"
+	updated, err := u.store.SetModelLocked(r.Context(), target.ID, locked)
+	if err != nil {
+		u.renderTargetEdit(w, r, user, project, role, target, "Modellschloss konnte nicht gespeichert werden.")
+		return
+	}
+	next := r.FormValue("next")
+	if next == "workplace" {
+		http.Redirect(w, r, u.href(fmt.Sprintf("/projects/%d/targets/%d?saved=lock", project.ID, updated.ID)), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, u.href(fmt.Sprintf("/projects/%d/targets/%d/edit?saved=lock", project.ID, updated.ID)), http.StatusSeeOther)
 }
 
 func (u *webUI) applicabilityGet(w http.ResponseWriter, r *http.Request) {
@@ -398,10 +458,10 @@ func (u *webUI) applicabilityGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	u.renderApplicability(w, r, user, project, roleCanEdit(role), target, "")
+	u.renderApplicability(w, r, user, project, role, target, "")
 }
 
-func (u *webUI) renderApplicability(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, canEdit bool, target domain.TargetObject, errMsg string) {
+func (u *webUI) renderApplicability(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, role string, target domain.TargetObject, errMsg string) {
 	bausteine, err := u.store.ListBausteine(r.Context(), webCatalogStandard, project.CatalogVersion)
 	if err != nil {
 		http.Error(w, "Katalog konnte nicht geladen werden.", http.StatusInternalServerError)
@@ -478,7 +538,9 @@ func (u *webUI) renderApplicability(w http.ResponseWriter, r *http.Request, user
 	}
 	u.render(w, r, "applicability", webPage{
 		DisplayName:           user.DisplayName,
-		CanEdit:               canEdit,
+		CanEdit:               domain.ModelAllowsEdit(target.ModelLocked, role),
+		CanEditModel:          domain.ModelAllowsEdit(target.ModelLocked, role),
+		CanOwn:                roleCanOwn(role),
 		Project:               project,
 		Target:                target,
 		Query:                 query,
@@ -493,7 +555,7 @@ func (u *webUI) renderApplicability(w http.ResponseWriter, r *http.Request, user
 }
 
 func (u *webUI) applicabilitySave(w http.ResponseWriter, r *http.Request) {
-	user, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -501,32 +563,36 @@ func (u *webUI) applicabilitySave(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !domain.ModelAllowsEdit(target.ModelLocked, role) {
+		u.renderApplicability(w, r, user, project, role, target, domain.ModelLockMessage())
+		return
+	}
 	if err := r.ParseForm(); err != nil {
-		u.renderApplicability(w, r, user, project, true, target, "Ungültige Anfrage.")
+		u.renderApplicability(w, r, user, project, role, target, "Ungültige Anfrage.")
 		return
 	}
 	bausteinID, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("bausteinID")), 10, 64)
 	if err != nil || bausteinID <= 0 {
-		u.renderApplicability(w, r, user, project, true, target, "Ungültiger Baustein.")
+		u.renderApplicability(w, r, user, project, role, target, "Ungültiger Baustein.")
 		return
 	}
 	status := strings.TrimSpace(r.FormValue("status"))
 	if !validApplicabilityStatus(status) {
-		u.renderApplicability(w, r, user, project, true, target, "Ungültiger Anwendbarkeitsstatus.")
+		u.renderApplicability(w, r, user, project, role, target, "Ungültiger Anwendbarkeitsstatus.")
 		return
 	}
 	if status == "" || status == "Ungesetzt" {
 		if err := u.store.RequireBausteinWritable(r.Context(), project.ID, target.ID, bausteinID); err != nil {
-			u.renderApplicability(w, r, user, project, true, target, reviewWebError(err))
+			u.renderApplicability(w, r, user, project, role, target, reviewWebError(err))
 			return
 		}
 		if err := u.store.DeleteApplicability(r.Context(), project.ID, target.ID, bausteinID); err != nil {
-			u.renderApplicability(w, r, user, project, true, target, "Anwendbarkeit konnte nicht gelöscht werden.")
+			u.renderApplicability(w, r, user, project, role, target, "Anwendbarkeit konnte nicht gelöscht werden.")
 			return
 		}
 	} else {
 		if err := u.store.RequireBausteinWritable(r.Context(), project.ID, target.ID, bausteinID); err != nil {
-			u.renderApplicability(w, r, user, project, true, target, reviewWebError(err))
+			u.renderApplicability(w, r, user, project, role, target, reviewWebError(err))
 			return
 		}
 		if _, err := u.store.SaveApplicability(r.Context(), domain.BausteinApplicability{
@@ -535,7 +601,7 @@ func (u *webUI) applicabilitySave(w http.ResponseWriter, r *http.Request) {
 			BausteinID:     bausteinID,
 			Status:         status,
 		}); err != nil {
-			u.renderApplicability(w, r, user, project, true, target, "Anwendbarkeit konnte nicht gespeichert werden.")
+			u.renderApplicability(w, r, user, project, role, target, "Anwendbarkeit konnte nicht gespeichert werden.")
 			return
 		}
 	}

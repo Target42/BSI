@@ -50,7 +50,10 @@ TargetObject HttpTargetObjectRepository::createTargetObject(const TargetObject &
     const QJsonDocument doc = m_client.post(
         QStringLiteral("/api/v1/projects/%1/target-objects").arg(targetObject.projectId), body, &status);
     if (status != 201 || !doc.isObject()) {
-        m_lastError = m_client.lastError();
+        if (status == 409 && doc.isObject() && isModelLockedJson(doc.object()))
+            m_lastError = modelLockMessage();
+        else
+            m_lastError = m_client.lastError();
         return {};
     }
     return targetObjectFromJson(doc.object());
@@ -69,11 +72,18 @@ bool HttpTargetObjectRepository::updateTargetObject(const TargetObject &targetOb
     body.insert(QStringLiteral("protectionNeedNote"), targetObject.protectionNeedNote);
     body.insert(QStringLiteral("name"), targetObject.name);
     body.insert(QStringLiteral("description"), targetObject.description);
+    body.insert(QStringLiteral("modelLocked"), targetObject.modelLocked);
 
     int status = 0;
-    m_client.patch(QStringLiteral("/api/v1/target-objects/%1").arg(targetObject.id), body, &status);
+    const QJsonDocument doc =
+        m_client.patch(QStringLiteral("/api/v1/target-objects/%1").arg(targetObject.id), body, &status);
     if (status != 200) {
-        m_lastError = m_client.lastError();
+        if (status == 409 && doc.isObject() && isModelLockedJson(doc.object()))
+            m_lastError = modelLockMessage();
+        else if (status == 409 && doc.isObject() && isReviewLockedJson(doc.object()))
+            m_lastError = reviewLockMessage();
+        else
+            m_lastError = m_client.lastError();
         return false;
     }
     return true;
@@ -83,7 +93,10 @@ bool HttpTargetObjectRepository::deleteTargetObject(int targetObjectId)
 {
     int status = 0;
     if (!m_client.del(QStringLiteral("/api/v1/target-objects/%1").arg(targetObjectId), &status)) {
-        m_lastError = m_client.lastError();
+        if (m_client.lastError() == QStringLiteral("model_locked"))
+            m_lastError = modelLockMessage();
+        else
+            m_lastError = m_client.lastError();
         return false;
     }
     return status == 204;
@@ -144,7 +157,12 @@ bool HttpTargetObjectRepository::saveApplicability(const BausteinApplicability &
     int status = 0;
     if (applicability.status == ApplicabilityStatus::Undefined) {
         if (!m_client.del(path, &status)) {
-            m_lastError = m_client.lastError();
+            if (m_client.lastError() == QStringLiteral("model_locked"))
+                m_lastError = modelLockMessage();
+            else if (m_client.lastError() == QStringLiteral("review_locked"))
+                m_lastError = reviewLockMessage();
+            else
+                m_lastError = m_client.lastError();
             return false;
         }
         return status == 204;
@@ -155,7 +173,9 @@ bool HttpTargetObjectRepository::saveApplicability(const BausteinApplicability &
 
     const QJsonDocument doc = m_client.put(path, body, &status);
     if (status != 200) {
-        if (status == 409 && doc.isObject() && isReviewLockedJson(doc.object()))
+        if (status == 409 && doc.isObject() && isModelLockedJson(doc.object()))
+            m_lastError = modelLockMessage();
+        else if (status == 409 && doc.isObject() && isReviewLockedJson(doc.object()))
             m_lastError = reviewLockMessage();
         else
             m_lastError = m_client.lastError();
@@ -194,7 +214,9 @@ bool HttpTargetObjectRepository::saveDeviation(int projectId, int targetObjectId
                          .arg(bausteinDbId),
                      body, &status);
     if (status != 200) {
-        if (status == 409 && doc.isObject() && isReviewLockedJson(doc.object()))
+        if (status == 409 && doc.isObject() && isModelLockedJson(doc.object()))
+            m_lastError = modelLockMessage();
+        else if (status == 409 && doc.isObject() && isReviewLockedJson(doc.object()))
             m_lastError = reviewLockMessage();
         else
             m_lastError = m_client.lastError();

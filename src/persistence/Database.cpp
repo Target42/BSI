@@ -109,6 +109,8 @@ bool Database::migrateSchema()
         return false;
     if (!migrateTargetObjectCiaColumns())
         return false;
+    if (!migrateTargetObjectModelLockColumn())
+        return false;
     return true;
 }
 
@@ -241,6 +243,21 @@ bool Database::migrateTargetObjectCiaColumns()
     return true;
 }
 
+bool Database::migrateTargetObjectModelLockColumn()
+{
+    if (!tableExists(QStringLiteral("target_objects")))
+        return true;
+    if (tableHasColumn(QStringLiteral("target_objects"), QStringLiteral("model_locked")))
+        return true;
+    QSqlQuery query(m_db);
+    if (!query.exec(QStringLiteral(
+            "ALTER TABLE target_objects ADD COLUMN model_locked INTEGER NOT NULL DEFAULT 0"))) {
+        m_lastError = QStringLiteral("Migration (Modellschloss): %1").arg(query.lastError().text());
+        return false;
+    }
+    return true;
+}
+
 bool Database::ensureIndexes()
 {
     QSqlQuery query(m_db);
@@ -334,6 +351,7 @@ bool Database::initializeSchema()
             "protection_need_note TEXT NOT NULL DEFAULT '',"
             "name TEXT NOT NULL,"
             "description TEXT,"
+            "model_locked INTEGER NOT NULL DEFAULT 0,"
             "FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE"
             ")"),
         QStringLiteral(

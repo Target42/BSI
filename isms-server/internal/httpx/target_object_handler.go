@@ -44,6 +44,7 @@ type updateTargetObjectRequest struct {
 	ProtectionNeedNote    string `json:"protectionNeedNote"`
 	Name                  string `json:"name"`
 	Description           string `json:"description"`
+	ModelLocked           *bool  `json:"modelLocked"`
 }
 
 func (h *TargetObjectHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +87,8 @@ func (h *TargetObjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid project id")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+	role, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor")
+	if err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -108,6 +110,13 @@ func (h *TargetObjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.store.RequireModelWritable(r.Context(), req.ParentID, role); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
 		return
 	}
 	item := domain.TargetObject{
@@ -170,7 +179,8 @@ func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "target lookup failed")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+	role, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor")
+	if err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -190,6 +200,27 @@ func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, http.StatusInternalServerError, "target lookup failed")
 		return
+	}
+	lockOnly := req.ModelLocked != nil && *req.ModelLocked != current.ModelLocked
+	if lockOnly && !domain.CanToggleModelLock(role) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if err := h.store.RequireModelWritable(r.Context(), current.ID, role); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	if req.ParentID != current.ParentID {
+		if err := h.store.RequireModelWritable(r.Context(), req.ParentID, role); err != nil {
+			if mapRepoError(w, err) {
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "access check failed")
+			return
+		}
 	}
 	if domain.IsRootScopeTarget(current.ParentID, current.Type) && req.ParentID != current.ParentID {
 		writeError(w, http.StatusBadRequest, "Der Informationsverbund kann nicht verschoben werden")
@@ -215,6 +246,10 @@ func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ProtectionNeedNote:    req.ProtectionNeedNote,
 		Name:                  req.Name,
 		Description:           req.Description,
+		ModelLocked:           current.ModelLocked,
+	}
+	if req.ModelLocked != nil && domain.CanToggleModelLock(role) {
+		item.ModelLocked = *req.ModelLocked
 	}
 	if req.InheritProtectionNeed != nil {
 		item.InheritProtectionNeed = *req.InheritProtectionNeed
@@ -271,7 +306,8 @@ func (h *TargetObjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "target lookup failed")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+	role, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor")
+	if err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -288,6 +324,13 @@ func (h *TargetObjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if domain.IsRootScopeTarget(current.ParentID, current.Type) {
 		writeError(w, http.StatusConflict, "Der Informationsverbund kann nicht gelöscht werden")
+		return
+	}
+	if err := h.store.RequireSubtreeModelWritable(r.Context(), targetID, role); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
 		return
 	}
 	if err := h.store.DeleteTargetObject(r.Context(), targetID); err != nil {

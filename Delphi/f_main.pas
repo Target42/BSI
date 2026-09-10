@@ -38,6 +38,7 @@ type
     mniTargetEdit: TMenuItem;
     mniTargetMove: TMenuItem;
     mniTargetDelete: TMenuItem;
+    mniTargetLock: TMenuItem;
     mniTargetSep: TMenuItem;
     mniTargetRecommendations: TMenuItem;
     mniBausteinView: TMenuItem;
@@ -99,6 +100,7 @@ type
     mnuEditTarget: TMenuItem;
     mnuMoveTarget: TMenuItem;
     mnuDeleteTarget: TMenuItem;
+    mnuLockTarget: TMenuItem;
     mnuSep3: TMenuItem;
     mnuApplyRecommendations: TMenuItem;
     mnuReports: TMenuItem;
@@ -122,6 +124,7 @@ type
     procedure DoMoveTarget(Sender: TObject);
     procedure DoRefreshProject(Sender: TObject);
     procedure DoDeleteTarget(Sender: TObject);
+    procedure DoToggleModelLock(Sender: TObject);
     procedure DoShowSollIstReport(Sender: TObject);
     procedure DoShowCockpit(Sender: TObject);
     procedure tvTargetsClick(Sender: TObject);
@@ -217,6 +220,9 @@ type
     procedure ShowTemporaryStatusMessage(const AMessage: string; ATimeoutMs: Integer = 5000);
     procedure StatusTimerElapsed(Sender: TObject);
     function CanEditActiveProject: Boolean;
+    function CanOwnActiveProject: Boolean;
+    function CanEditActiveModel: Boolean;
+    function ActiveProjectRole: string;
     function CanDeleteActiveProject: Boolean;
     function CanManageProjectMembers: Boolean;
     procedure ReloadCatalog;
@@ -394,26 +400,24 @@ begin
   pbTargetProgress.Max := 100;
 
   sgRequirements.FixedRows := 1;
-  sgRequirements.ColCount := 9;
+  sgRequirements.ColCount := 8;
   sgRequirements.DefaultDrawing := False;
   sgRequirements.Cells[0, 0] := 'ID';
-  sgRequirements.Cells[1, 0] := 'Anforderung';
-  sgRequirements.Cells[2, 0] := 'Stufe';
-  sgRequirements.Cells[3, 0] := 'Rolle';
-  sgRequirements.Cells[4, 0] := 'Status';
-  sgRequirements.Cells[5, 0] := 'Umsetzung durch';
-  sgRequirements.Cells[6, 0] := 'Frist';
-  sgRequirements.Cells[7, 0] := 'Ma'#223'nahmen';
-  sgRequirements.Cells[8, 0] := 'Anforderungstext';
+  sgRequirements.Cells[1, 0] := 'Stufe';
+  sgRequirements.Cells[2, 0] := 'Rolle';
+  sgRequirements.Cells[3, 0] := 'Status';
+  sgRequirements.Cells[4, 0] := 'Umsetzung durch';
+  sgRequirements.Cells[5, 0] := 'Frist';
+  sgRequirements.Cells[6, 0] := 'Ma'#223'nahmen';
+  sgRequirements.Cells[7, 0] := 'Anforderung';
   sgRequirements.ColWidths[0] := 90;
-  sgRequirements.ColWidths[1] := 200;
-  sgRequirements.ColWidths[2] := 60;
-  sgRequirements.ColWidths[3] := 90;
-  sgRequirements.ColWidths[4] := 80;
-  sgRequirements.ColWidths[5] := 120;
-  sgRequirements.ColWidths[6] := 80;
-  sgRequirements.ColWidths[7] := 70;
-  sgRequirements.ColWidths[8] := 300;
+  sgRequirements.ColWidths[1] := 60;
+  sgRequirements.ColWidths[2] := 90;
+  sgRequirements.ColWidths[3] := 80;
+  sgRequirements.ColWidths[4] := 120;
+  sgRequirements.ColWidths[5] := 80;
+  sgRequirements.ColWidths[6] := 70;
+  sgRequirements.ColWidths[7] := 200;
 
   sgMeasures.FixedRows := 1;
   sgMeasures.Cells[0, 0] := 'Titel';
@@ -554,6 +558,24 @@ begin
   Result := (FActiveProject.Role = 'owner') or (FActiveProject.Role = 'editor');
 end;
 
+function TMainForm.ActiveProjectRole: string;
+begin
+  if not FContext.IsRemote then
+    Exit('owner');
+  Result := FActiveProject.Role;
+end;
+
+function TMainForm.CanOwnActiveProject: Boolean;
+begin
+  Result := CanToggleModelLock(ActiveProjectRole, FContext.IsRemote) and HasActiveProject;
+end;
+
+function TMainForm.CanEditActiveModel: Boolean;
+begin
+  Result := CanEditActiveProject and
+    ModelAllowsEdit(FActiveTarget.ModelLocked, ActiveProjectRole, FContext.IsRemote);
+end;
+
 function TMainForm.CanDeleteActiveProject: Boolean;
 begin
   if FActiveProject.Id = 0 then
@@ -688,24 +710,30 @@ end;
 procedure TMainForm.UpdateProjectUi;
 var
   HasProject: Boolean;
-  CanEdit, CanDelete: Boolean;
+  CanEdit, CanDelete, CanModel: Boolean;
 begin
   HasProject := HasActiveProject;
   CanEdit := CanEditActiveProject;
   CanDelete := CanDeleteActiveProject;
+  CanModel := CanEditActiveModel;
   mnuCloseProject.Enabled := HasProject;
   mnuEditProject.Enabled := HasProject and CanEdit;
   mnuManageMembers.Enabled := CanManageProjectMembers;
   mnuDeleteProject.Enabled := HasProject and CanDelete;
-  mnuAddTarget.Enabled := HasProject and CanEdit;
-  mnuEditTarget.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
-  mnuMoveTarget.Enabled := CanDeleteActiveTarget;
-  mnuDeleteTarget.Enabled := CanDeleteActiveTarget;
+  mnuAddTarget.Enabled := HasProject and CanModel;
+  mnuEditTarget.Enabled := HasProject and CanModel and (FActiveTarget.Id > 0);
+  mnuMoveTarget.Enabled := CanDeleteActiveTarget and CanModel;
+  mnuDeleteTarget.Enabled := CanDeleteActiveTarget and CanModel;
+  mnuLockTarget.Enabled := HasProject and CanOwnActiveProject and (FActiveTarget.Id > 0);
+  if (FActiveTarget.Id > 0) and FActiveTarget.ModelLocked then
+    mnuLockTarget.Caption := 'Modell l'#$00F6'sen'
+  else
+    mnuLockTarget.Caption := 'Modell festziehen';
   mnuRefreshProject.Enabled := HasProject;
   btnToolRefresh.Enabled := HasProject;
   mnuSollIst.Enabled := HasProject;
   mnuCockpit.Enabled := HasProject;
-  mnuApplyRecommendations.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0);
+  mnuApplyRecommendations.Enabled := HasProject and CanModel and (FActiveTarget.Id > 0);
   mnuRelogin.Enabled := FContext.IsRemote;
   mnuSwitchUser.Enabled := True;
   mnuViewBaustein.Enabled := True;
@@ -719,13 +747,13 @@ begin
   chkReqFilterPartial.Enabled := HasProject and (FActiveTarget.Id > 0);
   chkReqFilterFulfilled.Enabled := HasProject and (FActiveTarget.Id > 0);
   chkReqFilterNotApplicable.Enabled := HasProject and (FActiveTarget.Id > 0);
-  cboAssignedBausteine.Enabled := HasProject and CanEdit and (FActiveTarget.Id > 0) and
+  cboAssignedBausteine.Enabled := HasProject and CanModel and (FActiveTarget.Id > 0) and
     (cboAssignedBausteine.ItemIndex >= 0) and
     (Integer(cboAssignedBausteine.Items.Objects[cboAssignedBausteine.ItemIndex]) > 0);
   ApplyInheritedUiState;
   btnToolNewProject.Enabled := True;
   btnToolOpenProject.Enabled := True;
-  btnToolAddTarget.Enabled := HasProject and CanEdit;
+  btnToolAddTarget.Enabled := HasProject and CanModel;
   btnToolImportCatalog.Enabled := True;
   if HasActiveProject then
   begin
@@ -847,7 +875,7 @@ begin
       sgRequirements.Canvas.Brush.Color := clHighlight;
       sgRequirements.Canvas.Font.Color := clHighlightText;
     end
-    else if (ACol = 6) and (sgRequirements.Objects[2, ARow] <> nil) then
+    else if (ACol = 5) and (sgRequirements.Objects[2, ARow] <> nil) then
       sgRequirements.Canvas.Font.Color := clRed
     else
       sgRequirements.Canvas.Font.Color := clWindowText;
@@ -1289,6 +1317,8 @@ begin
   if not HasActiveProject or (FActiveTarget.Id = 0) or (FActiveBausteinId = 0) then
     Exit;
   if not CanEditActiveProject or ActiveBausteinLocked then
+    Exit;
+  if not CanEditActiveModel then
     Exit;
   Result := FContext.TargetObjectRepository.SaveDeviation(
     FActiveProject.Id, FActiveTarget.Id, FActiveBausteinId, memAssessmentNote.Text);
@@ -1753,20 +1783,19 @@ begin
     else
       MeasureCnt := 0;
     sgRequirements.Cells[0, Row] := R.ExternalId;
-    sgRequirements.Cells[1, Row] := R.Title;
-    sgRequirements.Cells[2, Row] := RequirementLevelToString(R.Level);
-    sgRequirements.Cells[3, Row] := R.ResponsibleRole;
-    sgRequirements.Cells[4, Row] := AssessmentStatusToString(Assessment.Status);
-    sgRequirements.Cells[5, Row] := Assessment.Responsible;
+    sgRequirements.Cells[1, Row] := RequirementLevelToString(R.Level);
+    sgRequirements.Cells[2, Row] := R.ResponsibleRole;
+    sgRequirements.Cells[3, Row] := AssessmentStatusToString(Assessment.Status);
+    sgRequirements.Cells[4, Row] := Assessment.Responsible;
     if IsValidDate(Assessment.DueDate) then
-      sgRequirements.Cells[6, Row] := FormatDateTime('dd.mm.yyyy', Assessment.DueDate)
+      sgRequirements.Cells[5, Row] := FormatDateTime('dd.mm.yyyy', Assessment.DueDate)
+    else
+      sgRequirements.Cells[5, Row] := '';
+    if MeasureCnt > 0 then
+      sgRequirements.Cells[6, Row] := IntToStr(MeasureCnt)
     else
       sgRequirements.Cells[6, Row] := '';
-    if MeasureCnt > 0 then
-      sgRequirements.Cells[7, Row] := IntToStr(MeasureCnt)
-    else
-      sgRequirements.Cells[7, Row] := '';
-    sgRequirements.Cells[8, Row] := R.Text;
+    sgRequirements.Cells[7, Row] := R.Title;
     sgRequirements.Objects[0, Row] := TObject(R.Id);
     if IsAssessmentDueDateOverdue(Assessment) then
       sgRequirements.Objects[2, Row] := TObject(1)
@@ -2242,6 +2271,11 @@ begin
       mtWarning, [mbOK], 0);
     Exit;
   end;
+  if not ModelAllowsEdit(Parent.ModelLocked, ActiveProjectRole, FContext.IsRemote) then
+  begin
+    MessageDlg(ModelLockMessage, mtInformation, [mbOK], 0);
+    Exit;
+  end;
   if not CanHaveChildTargetObjects(Parent.ObjType) then
   begin
     MessageDlg('Unter diesem Zielobjekt können keine Unterobjekte angelegt werden.',
@@ -2277,9 +2311,12 @@ var
 begin
   if not HasActiveProject then
     Exit;
-  if not CanEditActiveProject then
+  if not CanEditActiveModel then
   begin
-    MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
+    if FActiveTarget.ModelLocked then
+      MessageDlg(ModelLockMessage, mtInformation, [mbOK], 0)
+    else
+      MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
     Exit;
   end;
   if FActiveTarget.Id = 0 then
@@ -2299,6 +2336,32 @@ begin
     Exit;
   end;
   ReloadTargetObjects(O.Id);
+end;
+
+procedure TMainForm.DoToggleModelLock(Sender: TObject);
+var
+  Target: TTargetObject;
+begin
+  if not HasActiveProject or (FActiveTarget.Id = 0) then
+    Exit;
+  if not CanOwnActiveProject then
+  begin
+    MessageDlg('Nur der Besitzer kann das Modell festziehen.', mtWarning, [mbOK], 0);
+    Exit;
+  end;
+  Target := FActiveTarget;
+  Target.ModelLocked := not Target.ModelLocked;
+  if not FContext.TargetObjectRepository.UpdateTargetObject(Target) then
+  begin
+    MessageDlg('Speichern fehlgeschlagen: ' + FContext.TargetObjectRepository.LastError,
+      mtError, [mbOK], 0);
+    Exit;
+  end;
+  ReloadTargetObjects(Target.Id);
+  if Target.ModelLocked then
+    ShowTemporaryStatusMessage('Modell festgezogen')
+  else
+    ShowTemporaryStatusMessage('Modell wieder ge'#$00F6'ffnet');
 end;
 
 procedure TMainForm.DoRefreshProject(Sender: TObject);
@@ -2325,6 +2388,14 @@ begin
     Exit;
   Objects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
   O := FindTargetById(Objects, AObjectId);
+  Parent := FindTargetById(Objects, ANewParentId);
+  if not ModelAllowsEdit(O.ModelLocked, ActiveProjectRole, FContext.IsRemote) or
+     not ModelAllowsEdit(Parent.ModelLocked, ActiveProjectRole, FContext.IsRemote) then
+  begin
+    if AShowErrors then
+      MessageDlg(ModelLockMessage, mtInformation, [mbOK], 0);
+    Exit;
+  end;
   Error := TargetMoveRejectedReason(Objects, O, ANewParentId);
   if Error <> '' then
   begin
@@ -2406,9 +2477,12 @@ procedure TMainForm.DoDeleteTarget(Sender: TObject);
 begin
   if not HasActiveProject then
     Exit;
-  if not CanEditActiveProject then
+  if not CanEditActiveModel then
   begin
-    MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
+    if FActiveTarget.ModelLocked then
+      MessageDlg(ModelLockMessage, mtInformation, [mbOK], 0)
+    else
+      MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
     Exit;
   end;
   if FActiveTarget.Id = 0 then
@@ -2728,6 +2802,11 @@ begin
     MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
     Exit;
   end;
+  if not CanEditActiveModel then
+  begin
+    MessageDlg(ModelLockMessage, mtInformation, [mbOK], 0);
+    Exit;
+  end;
   if BausteinReviewLocked(BausteinId) then
   begin
     MessageDlg(ReviewLockMessage, mtInformation, [mbOK], 0);
@@ -2803,12 +2882,12 @@ begin
   tvBausteine.SetFocus;
   FContextMenuBausteinId := NativeInt(Node.Data);
 
-  mniBausteinRequired.Visible := CanEditActiveProject;
-  mniBausteinPossible.Visible := CanEditActiveProject;
-  mniBausteinNotApplicable.Visible := CanEditActiveProject;
-  mniBausteinReset.Visible := CanEditActiveProject and not IsInheritedBaustein(FContextMenuBausteinId);
-  mniBausteinSep1.Visible := CanEditActiveProject;
-  mniBausteinSep2.Visible := CanEditActiveProject and not IsInheritedBaustein(FContextMenuBausteinId);
+  mniBausteinRequired.Visible := CanEditActiveModel;
+  mniBausteinPossible.Visible := CanEditActiveModel;
+  mniBausteinNotApplicable.Visible := CanEditActiveModel;
+  mniBausteinReset.Visible := CanEditActiveModel and not IsInheritedBaustein(FContextMenuBausteinId);
+  mniBausteinSep1.Visible := CanEditActiveModel;
+  mniBausteinSep2.Visible := CanEditActiveModel and not IsInheritedBaustein(FContextMenuBausteinId);
 end;
 
 procedure TMainForm.sgRequirementsSelectCell(Sender: TObject; ACol, ARow: Integer;
@@ -3156,6 +3235,11 @@ begin
     MessageDlg('Keine Berechtigung zum Bearbeiten dieses Projekts.', mtWarning, [mbOK], 0);
     Exit;
   end;
+  if not CanEditActiveModel then
+  begin
+    MessageDlg(ModelLockMessage, mtInformation, [mbOK], 0);
+    Exit;
+  end;
   if FActiveTarget.Id = 0 then
   begin
     MessageDlg('Bitte zuerst ein Zielobjekt wählen.', mtInformation, [mbOK], 0);
@@ -3226,7 +3310,7 @@ begin
   OnLayer := IsLayerGroupNode(tvTargets.Selected, Layer);
   HasTarget := FActiveTarget.Id > 0;
   mniTargetAdd.Visible := True;
-  mniTargetAdd.Enabled := True;
+  mniTargetAdd.Enabled := CanEditActiveModel or OnLayer;
   if OnLayer then
     mniTargetAdd.Caption := TargetObjectTypeToString(Layer) + ' hinzuf'#$00FC'gen'#$2026
   else if HasTarget and CanHaveChildTargetObjects(FActiveTarget.ObjType) then
@@ -3234,14 +3318,20 @@ begin
   else
     mniTargetAdd.Caption := 'Zielobjekt hinzuf'#$00FC'gen'#$2026;
   mniTargetEdit.Visible := HasTarget and not OnLayer;
-  mniTargetEdit.Enabled := HasTarget and not OnLayer;
+  mniTargetEdit.Enabled := HasTarget and not OnLayer and CanEditActiveModel;
   mniTargetMove.Visible := CanDeleteActiveTarget and not OnLayer;
-  mniTargetMove.Enabled := CanDeleteActiveTarget and not OnLayer;
+  mniTargetMove.Enabled := CanDeleteActiveTarget and not OnLayer and CanEditActiveModel;
   mniTargetDelete.Visible := HasTarget and not OnLayer;
-  mniTargetDelete.Enabled := CanDeleteActiveTarget and not OnLayer;
+  mniTargetDelete.Enabled := CanDeleteActiveTarget and not OnLayer and CanEditActiveModel;
+  mniTargetLock.Visible := HasTarget and not OnLayer and CanOwnActiveProject;
+  mniTargetLock.Enabled := HasTarget and not OnLayer and CanOwnActiveProject;
+  if HasTarget and FActiveTarget.ModelLocked then
+    mniTargetLock.Caption := 'Modell l'#$00F6'sen'
+  else
+    mniTargetLock.Caption := 'Modell festziehen';
   mniTargetSep.Visible := HasTarget and not OnLayer;
   mniTargetRecommendations.Visible := HasTarget and not OnLayer;
-  mniTargetRecommendations.Enabled := HasTarget and not OnLayer;
+  mniTargetRecommendations.Enabled := HasTarget and not OnLayer and CanEditActiveModel;
 end;
 
 procedure TMainForm.tvTargetsStartDrag(Sender: TObject; var DragObject: TDragObject);
@@ -3256,6 +3346,8 @@ begin
     Exit;
   FDragSourceId := Integer(tvTargets.Selected.Data);
   if FDragSourceId <= 0 then
+    Exit;
+  if not CanEditActiveModel then
     Exit;
   FDragObjects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
 end;

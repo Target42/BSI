@@ -198,7 +198,15 @@ func (h *AssessmentHandler) SaveApplicability(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "invalid baustein id")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+	role, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor")
+	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	if err := h.store.RequireModelWritable(r.Context(), targetObjectID, role); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -250,7 +258,15 @@ func (h *AssessmentHandler) DeleteApplicability(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusBadRequest, "invalid baustein id")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+	role, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor")
+	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	if err := h.store.RequireModelWritable(r.Context(), targetObjectID, role); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}
@@ -322,7 +338,15 @@ func (h *AssessmentHandler) SaveDeviation(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid baustein id")
 		return
 	}
-	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor"); err != nil {
+	role, err := h.store.RequireProjectRole(r.Context(), projectID, user, "editor")
+	if err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	if err := h.store.RequireModelWritable(r.Context(), targetObjectID, role); err != nil {
 		if mapRepoError(w, err) {
 			return
 		}

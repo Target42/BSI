@@ -65,7 +65,7 @@ func germanCount(n int, singular, plural string) string {
 }
 
 func (u *webUI) applicabilityBulk(w http.ResponseWriter, r *http.Request) {
-	user, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -74,12 +74,16 @@ func (u *webUI) applicabilityBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		u.renderApplicability(w, r, user, project, true, target, "Ungültige Anfrage.")
+		u.renderApplicability(w, r, user, project, role, target, "Ungültige Anfrage.")
+		return
+	}
+	if !domain.ModelAllowsEdit(target.ModelLocked, role) {
+		u.renderApplicability(w, r, user, project, role, target, domain.ModelLockMessage())
 		return
 	}
 	status := strings.TrimSpace(r.FormValue("status"))
 	if !validApplicabilityStatus(status) || status == "" {
-		u.renderApplicability(w, r, user, project, true, target, "Bitte einen Anwendbarkeitsstatus wählen.")
+		u.renderApplicability(w, r, user, project, role, target, "Bitte einen Anwendbarkeitsstatus wählen.")
 		return
 	}
 	if status == "Ungesetzt" {
@@ -128,21 +132,21 @@ func (u *webUI) applicabilityBulk(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, b.ID)
 	}
 	if len(ids) == 0 {
-		u.renderApplicability(w, r, user, project, true, target, "Keine Bausteine für diesen Filter.")
+		u.renderApplicability(w, r, user, project, role, target, "Keine Bausteine für diesen Filter.")
 		return
 	}
 	for _, id := range ids {
 		if err := u.store.RequireBausteinWritable(r.Context(), project.ID, target.ID, id); err != nil {
 			if errors.Is(err, domain.ErrReviewLocked) {
-				u.renderApplicability(w, r, user, project, true, target, "Mindestens ein Baustein ist zur Prüfung oder abgenommen und kann nicht geändert werden.")
+				u.renderApplicability(w, r, user, project, role, target, "Mindestens ein Baustein ist zur Prüfung oder abgenommen und kann nicht geändert werden.")
 				return
 			}
-			u.renderApplicability(w, r, user, project, true, target, "Anwendbarkeit konnte nicht gespeichert werden.")
+			u.renderApplicability(w, r, user, project, role, target, "Anwendbarkeit konnte nicht gespeichert werden.")
 			return
 		}
 		if status == "" {
 			if err := u.store.DeleteApplicability(r.Context(), project.ID, target.ID, id); err != nil {
-				u.renderApplicability(w, r, user, project, true, target, "Anwendbarkeit konnte nicht gelöscht werden.")
+				u.renderApplicability(w, r, user, project, role, target, "Anwendbarkeit konnte nicht gelöscht werden.")
 				return
 			}
 			continue
@@ -153,7 +157,7 @@ func (u *webUI) applicabilityBulk(w http.ResponseWriter, r *http.Request) {
 			BausteinID:     id,
 			Status:         status,
 		}); err != nil {
-			u.renderApplicability(w, r, user, project, true, target, "Anwendbarkeit konnte nicht gespeichert werden.")
+			u.renderApplicability(w, r, user, project, role, target, "Anwendbarkeit konnte nicht gespeichert werden.")
 			return
 		}
 	}

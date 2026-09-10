@@ -99,7 +99,7 @@
           <p class="muted">Nur Lesen. Bearbeiten erfordert die Rolle Bearbeiter oder Besitzer.</p>
         {{end}}
       </div>
-      {{if and .Inherited .CanEdit}}
+      {{if and .Inherited .CanEditModel}}
       <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/deviation" .Project.ID .Target.ID)}}">
         {{template "csrf" .}}
         <input type="hidden" name="bausteinID" value="{{.Baustein.ID}}">

@@ -81,7 +81,10 @@ begin
     try
       if (Status <> 201) or not (Doc is TJSONObject) then
       begin
-        FLastError := FClient.LastError;
+        if (Status = 409) and (Doc is TJSONObject) and IsModelLockedJson(TJSONObject(Doc)) then
+          FLastError := ModelLockMessage
+        else
+          FLastError := FClient.LastError;
         Exit;
       end;
       Result := TargetObjectFromJson(TJSONObject(Doc));
@@ -102,12 +105,14 @@ begin
   Result := False;
   Body := TJSONObject.Create;
   try
-    AddTargetObjectJsonFields(Body, ATargetObject);
+    AddTargetObjectJsonFields(Body, ATargetObject, True);
     Doc := FClient.PatchJson(Format('/api/v1/target-objects/%d', [ATargetObject.Id]), Body, Status);
     try
       if Status <> 200 then
       begin
-        if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
+        if (Status = 409) and (Doc is TJSONObject) and IsModelLockedJson(TJSONObject(Doc)) then
+          FLastError := ModelLockMessage
+        else if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
           FLastError := ReviewLockMessage
         else
           FLastError := FClient.LastError;
@@ -128,7 +133,12 @@ var
 begin
   Result := FClient.Delete(Format('/api/v1/target-objects/%d', [ATargetObjectId]), Status) and (Status = 204);
   if not Result then
-    FLastError := FClient.LastError;
+  begin
+    if FClient.LastError = 'model_locked' then
+      FLastError := ModelLockMessage
+    else
+      FLastError := FClient.LastError;
+  end;
 end;
 
 function THttpTargetObjectRepository.CreateDefaultScope(AProjectId: Integer;
@@ -236,7 +246,9 @@ begin
     Result := FClient.Delete(Path, Status) and (Status = 204);
     if not Result then
     begin
-      if FClient.LastError = 'review_locked' then
+      if FClient.LastError = 'model_locked' then
+        FLastError := ModelLockMessage
+      else if FClient.LastError = 'review_locked' then
         FLastError := ReviewLockMessage
       else
         FLastError := FClient.LastError;
@@ -251,7 +263,9 @@ begin
     try
       if Status <> 200 then
       begin
-        if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
+        if (Status = 409) and (Doc is TJSONObject) and IsModelLockedJson(TJSONObject(Doc)) then
+          FLastError := ModelLockMessage
+        else if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
           FLastError := ReviewLockMessage
         else
           FLastError := FClient.LastError;
@@ -303,7 +317,9 @@ begin
     try
       if Status <> 200 then
       begin
-        if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
+        if (Status = 409) and (Doc is TJSONObject) and IsModelLockedJson(TJSONObject(Doc)) then
+          FLastError := ModelLockMessage
+        else if (Status = 409) and (Doc is TJSONObject) and IsReviewLockedJson(TJSONObject(Doc)) then
           FLastError := ReviewLockMessage
         else
           FLastError := FClient.LastError;

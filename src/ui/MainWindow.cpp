@@ -247,13 +247,13 @@ void MainWindow::buildUi()
     enableResizableColumns(m_requirementTable);
     m_requirementTable->setAlternatingRowColors(true);
     m_requirementTable->setColumnWidth(RequirementTableModel::ExternalIdColumn, 90);
-    m_requirementTable->setColumnWidth(RequirementTableModel::TitleColumn, 200);
     m_requirementTable->setColumnWidth(RequirementTableModel::LevelColumn, 70);
     m_requirementTable->setColumnWidth(RequirementTableModel::RoleColumn, 90);
     m_requirementTable->setColumnWidth(RequirementTableModel::StatusColumn, 80);
     m_requirementTable->setColumnWidth(RequirementTableModel::ResponsibleColumn, 120);
     m_requirementTable->setColumnWidth(RequirementTableModel::DueDateColumn, 80);
     m_requirementTable->setColumnWidth(RequirementTableModel::MeasureCountColumn, 80);
+    m_requirementTable->setColumnWidth(RequirementTableModel::TitleColumn, 200);
     connect(m_requirementTable->selectionModel(), &QItemSelectionModel::currentChanged, this,
             [this](const QModelIndex &current, const QModelIndex &) {
                 if (m_blockRequirementSelectionHandler)
@@ -479,6 +479,8 @@ void MainWindow::buildUi()
     connect(m_moveTargetAction, &QAction::triggered, this, &MainWindow::moveTargetObject);
     m_deleteTargetAction = projectMenu->addAction(tr("Zielobjekt löschen"));
     connect(m_deleteTargetAction, &QAction::triggered, this, &MainWindow::deleteTargetObject);
+    m_lockTargetAction = projectMenu->addAction(tr("Modell festziehen"));
+    connect(m_lockTargetAction, &QAction::triggered, this, &MainWindow::toggleTargetModelLock);
     projectMenu->addSeparator();
     m_applyRecommendationsAction =
         projectMenu->addAction(tr("Baustein-Empfehlungen übernehmen..."));
@@ -545,6 +547,8 @@ void MainWindow::updateProjectUiEnabled()
     const bool canEdit = canEditActiveProject();
     const bool canDelete = canDeleteActiveProject();
     const bool canManageMembers = canManageProjectMembers();
+    const bool canModel = canEditActiveModel();
+    const bool canOwn = canOwnActiveProject();
 
     m_closeProjectAction->setEnabled(hasProject);
     m_editProjectAction->setEnabled(hasProject && canEdit);
@@ -552,18 +556,21 @@ void MainWindow::updateProjectUiEnabled()
     m_manageMembersAction->setEnabled(canManageMembers);
     m_switchUserAction->setEnabled(true);
     m_reloginAction->setEnabled(m_context.isRemote());
-    m_addTargetAction->setEnabled(hasProject && canEdit);
-    m_editTargetAction->setEnabled(hasProject && canEdit && hasTargetObject);
-    m_moveTargetAction->setEnabled(canDeleteActiveTarget());
-    m_deleteTargetAction->setEnabled(canDeleteActiveTarget());
+    m_addTargetAction->setEnabled(hasProject && canModel);
+    m_editTargetAction->setEnabled(hasProject && canModel && hasTargetObject);
+    m_moveTargetAction->setEnabled(canDeleteActiveTarget() && canModel);
+    m_deleteTargetAction->setEnabled(canDeleteActiveTarget() && canModel);
+    m_lockTargetAction->setEnabled(hasTargetObject && canOwn);
+    m_lockTargetAction->setText(m_activeTargetObject.modelLocked ? tr("Modell lösen")
+                                                                : tr("Modell festziehen"));
     m_refreshProjectAction->setEnabled(hasProject);
-    m_applyRecommendationsAction->setEnabled(hasTargetObject && canEdit);
+    m_applyRecommendationsAction->setEnabled(hasTargetObject && canModel);
     m_sollIstAction->setEnabled(hasProject);
     m_cockpitAction->setEnabled(hasProject);
 
     m_targetObjectTree->setEnabled(hasProject);
-    m_targetObjectTree->setDragEnabled(hasProject && canEdit);
-    m_targetObjectTree->setAcceptDrops(hasProject && canEdit);
+    m_targetObjectTree->setDragEnabled(hasProject && canModel);
+    m_targetObjectTree->setAcceptDrops(hasProject && canModel);
     m_filterRequiredBox->setEnabled(hasTargetObject);
     m_filterPossibleBox->setEnabled(hasTargetObject);
     m_filterNotApplicableBox->setEnabled(hasTargetObject);
@@ -573,7 +580,7 @@ void MainWindow::updateProjectUiEnabled()
     m_reqFilterPartialBox->setEnabled(hasTargetObject);
     m_reqFilterFulfilledBox->setEnabled(hasTargetObject);
     m_reqFilterNotApplicableBox->setEnabled(hasTargetObject);
-    m_assignedBausteinBox->setEnabled(hasTargetObject && canEdit
+    m_assignedBausteinBox->setEnabled(hasTargetObject && canModel
                                       && m_assignedBausteinBox->count() > 0
                                       && m_assignedBausteinBox->currentData().toInt() != 0);
     applyInheritedUiState();
@@ -594,6 +601,8 @@ void MainWindow::updateProjectUiEnabled()
                                        protectionNeedSummary(m_activeTargetObject));
         if (m_context.isRemote() && m_activeProject.role == QStringLiteral("viewer"))
             contextText += tr(" — Nur Lesen");
+        if (m_activeTargetObject.modelLocked)
+            contextText += tr(" — Modell festgezogen");
         m_contextLabel->setText(contextText);
     }
 }
@@ -605,6 +614,24 @@ bool MainWindow::canEditActiveProject() const
 
     const QString &role = m_activeProject.role;
     return role == QStringLiteral("owner") || role == QStringLiteral("editor");
+}
+
+QString MainWindow::activeProjectRole() const
+{
+    if (!m_context.isRemote())
+        return QStringLiteral("owner");
+    return m_activeProject.role;
+}
+
+bool MainWindow::canOwnActiveProject() const
+{
+    return m_activeProject.id != 0 && canToggleModelLock(activeProjectRole(), m_context.isRemote());
+}
+
+bool MainWindow::canEditActiveModel() const
+{
+    return canEditActiveProject()
+           && modelAllowsEdit(m_activeTargetObject.modelLocked, activeProjectRole(), m_context.isRemote());
 }
 
 bool MainWindow::canDeleteActiveProject() const
@@ -630,6 +657,8 @@ void MainWindow::notifySaveFailure(const QString &repositoryError, bool useDialo
         message = tr("Keine Berechtigung zum Speichern. Ihre Rolle erlaubt nur Lesen.");
     else if (message == QStringLiteral("review_locked"))
         message = reviewLockMessage();
+    else if (message == QStringLiteral("model_locked"))
+        message = modelLockMessage();
     else if (message.isEmpty())
         message = tr("Speichern fehlgeschlagen.");
 
@@ -1251,6 +1280,8 @@ bool MainWindow::saveDeviationNote()
     if (!hasActiveProjectContext() || m_activeBausteinId == 0)
         return true;
     if (!canEditActiveProject() || activeBausteinLocked())
+        return true;
+    if (!canEditActiveModel())
         return true;
     if (!m_context.targetObjectRepository().saveDeviation(
             m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId,
@@ -2588,6 +2619,10 @@ void MainWindow::addTargetObject()
                                  tr("Unter diesem Zielobjekt können keine Unterobjekte angelegt werden."));
         return;
     }
+    if (!modelAllowsEdit(parent.modelLocked, activeProjectRole(), m_context.isRemote())) {
+        QMessageBox::information(this, tr("Modell"), modelLockMessage());
+        return;
+    }
 
     TargetObject draft;
     draft.projectId = m_activeProject.id;
@@ -2616,8 +2651,11 @@ void MainWindow::addTargetObject()
 
 void MainWindow::editTargetObject()
 {
-    if (!canEditActiveProject())
+    if (!canEditActiveModel()) {
+        if (m_activeTargetObject.modelLocked)
+            QMessageBox::information(this, tr("Modell"), modelLockMessage());
         return;
+    }
 
     const QModelIndex index = m_targetObjectTree->currentIndex();
     if (!index.isValid() || m_activeProject.id == 0)
@@ -2669,6 +2707,13 @@ bool MainWindow::applyTargetObjectMove(int objectId, int newParentId, bool showE
     QList<TargetObject> objects =
         m_context.targetObjectRepository().loadTargetObjects(m_activeProject.id);
     TargetObject object = findTargetById(objects, objectId);
+    const TargetObject parent = findTargetById(objects, newParentId);
+    if (!modelAllowsEdit(object.modelLocked, activeProjectRole(), m_context.isRemote())
+        || !modelAllowsEdit(parent.modelLocked, activeProjectRole(), m_context.isRemote())) {
+        if (showErrors)
+            QMessageBox::information(this, tr("Modell"), modelLockMessage());
+        return false;
+    }
     QString error;
     if (!canMoveTargetObject(objects, object, newParentId, &error)) {
         if (showErrors && !error.isEmpty())
@@ -2679,7 +2724,6 @@ bool MainWindow::applyTargetObjectMove(int objectId, int newParentId, bool showE
         return true;
 
     object.parentId = newParentId;
-    const TargetObject parent = findTargetById(objects, newParentId);
     finalizeTargetObjectProtectionNeed(object, parent);
     if (!m_context.targetObjectRepository().updateTargetObject(object)) {
         if (showErrors)
@@ -2739,8 +2783,11 @@ void MainWindow::moveTargetObject()
 
 void MainWindow::deleteTargetObject()
 {
-    if (!canEditActiveProject())
+    if (!canEditActiveModel()) {
+        if (m_activeTargetObject.modelLocked)
+            QMessageBox::information(this, tr("Modell"), modelLockMessage());
         return;
+    }
 
     const QModelIndex index = m_targetObjectTree->currentIndex();
     if (!index.isValid() || m_activeProject.id == 0)
@@ -2791,6 +2838,24 @@ void MainWindow::deleteTargetObject()
     reloadTargetObjects();
 }
 
+void MainWindow::toggleTargetModelLock()
+{
+    if (!canOwnActiveProject() || m_activeTargetObject.id == 0)
+        return;
+
+    TargetObject object = m_activeTargetObject;
+    object.modelLocked = !object.modelLocked;
+    if (!m_context.targetObjectRepository().updateTargetObject(object)) {
+        QMessageBox::critical(this, tr("Modell"), m_context.targetObjectRepository().lastError());
+        return;
+    }
+    m_activeTargetObject = object;
+    reloadTargetObjects();
+    reloadActiveTargetContent();
+    showTemporaryStatusMessage(object.modelLocked ? tr("Modell festgezogen")
+                                                  : tr("Modell wieder geöffnet"));
+}
+
 void MainWindow::showTargetObjectContextMenu(const QPoint &pos)
 {
     if (m_activeProject.id == 0)
@@ -2805,21 +2870,32 @@ void MainWindow::showTargetObjectContextMenu(const QPoint &pos)
         const bool onLayer = m_targetObjectModel->isLayerGroup(index);
         const TargetObject current = index.isValid() ? m_targetObjectModel->targetObjectForIndex(index)
                                                      : m_activeTargetObject;
+        const bool canModel = modelAllowsEdit(current.modelLocked, activeProjectRole(), m_context.isRemote());
         QString addCaption = tr("Zielobjekt hinzufügen...");
         if (onLayer)
             addCaption = tr("%1 hinzufügen...").arg(targetObjectTypeToString(current.type));
         else if (canHaveChildTargetObjects(current.type))
             addCaption = tr("Unterobjekt hinzufügen...");
-        menu.addAction(addCaption, this, &MainWindow::addTargetObject);
+        QAction *addAction = menu.addAction(addCaption, this, &MainWindow::addTargetObject);
+        addAction->setEnabled(onLayer || canModel);
         if (!onLayer && current.id != 0) {
-            menu.addAction(tr("Bearbeiten..."), this, &MainWindow::editTargetObject);
+            QAction *editAction = menu.addAction(tr("Bearbeiten..."), this, &MainWindow::editTargetObject);
+            editAction->setEnabled(canModel);
             if (!isRootScopeTarget(current)) {
-                menu.addAction(tr("Verschieben..."), this, &MainWindow::moveTargetObject);
-                menu.addAction(tr("Löschen"), this, &MainWindow::deleteTargetObject);
+                QAction *moveAction =
+                    menu.addAction(tr("Verschieben..."), this, &MainWindow::moveTargetObject);
+                QAction *deleteAction = menu.addAction(tr("Löschen"), this, &MainWindow::deleteTargetObject);
+                moveAction->setEnabled(canModel);
+                deleteAction->setEnabled(canModel);
+            }
+            if (canOwnActiveProject()) {
+                menu.addAction(current.modelLocked ? tr("Modell lösen") : tr("Modell festziehen"), this,
+                               &MainWindow::toggleTargetModelLock);
             }
             menu.addSeparator();
-            menu.addAction(tr("Baustein-Empfehlungen übernehmen..."), this,
-                           &MainWindow::applyBausteinRecommendations);
+            QAction *recAction = menu.addAction(tr("Baustein-Empfehlungen übernehmen..."), this,
+                                                &MainWindow::applyBausteinRecommendations);
+            recAction->setEnabled(canModel);
         }
     }
     menu.exec(m_targetObjectTree->viewport()->mapToGlobal(pos));
@@ -2838,7 +2914,7 @@ void MainWindow::showBausteinContextMenu(const QPoint &pos)
     const Baustein menuBaustein = m_bausteinModel->bausteinForIndex(index);
     QMenu menu(this);
     menu.addAction(tr("Baustein anzeigen..."), this, &MainWindow::viewSelectedBaustein);
-    if (hasActiveProjectContext() && canEditActiveProject()) {
+    if (hasActiveProjectContext() && canEditActiveModel()) {
         menu.addSeparator();
         menu.addAction(tr("Benötigt"), this, [this]() {
             setBausteinApplicability(ApplicabilityStatus::Required);
@@ -2872,6 +2948,12 @@ void MainWindow::setBausteinApplicability(ApplicabilityStatus status)
     const Baustein baustein = m_bausteinModel->bausteinForIndex(index);
     if (baustein.id == 0)
         return;
+
+    if (!canEditActiveModel()) {
+        QMessageBox::information(this, tr("Modell"), modelLockMessage());
+        revertBausteinTreeSelection(m_activeBausteinId);
+        return;
+    }
 
     if (bausteinReviewLocked(baustein.id)) {
         QMessageBox::information(this, tr("Laufzettel"), reviewLockMessage());
@@ -2984,6 +3066,10 @@ void MainWindow::applyBausteinRecommendations()
     }
     if (!canEditActiveProject())
         return;
+    if (!canEditActiveModel()) {
+        QMessageBox::information(this, tr("Modell"), modelLockMessage());
+        return;
+    }
 
     const QList<Baustein> allBausteine = m_context.catalogRepository().loadBausteine(
         StandardType::ITGrundschutz, m_context.catalogVersion());

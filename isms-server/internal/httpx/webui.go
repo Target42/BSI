@@ -51,6 +51,7 @@ type webPage struct {
 	DisplayName           string
 	Email                 string
 	CanEdit               bool
+	CanEditModel          bool
 	CanOwn                bool
 	LoggedIn              bool
 	IsMember              bool
@@ -155,6 +156,7 @@ type webTargetRow struct {
 	Type           string
 	Depth          int
 	ProtectionNeed string
+	ModelLocked    bool
 	IsRoot         bool
 	ChildTypes     []string
 	Summary        domain.ReportSummary
@@ -285,6 +287,7 @@ func (u *webUI) mount(r chi.Router) {
 		g.Get("/projects/{projectID}/targets/{targetObjectID}/edit", u.targetEditGet)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/edit", u.targetEditSave)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/delete", u.targetDelete)
+		g.Post("/projects/{projectID}/targets/{targetObjectID}/model-lock", u.targetModelLock)
 		g.Get("/projects/{projectID}/targets/{targetObjectID}/applicability", u.applicabilityGet)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/applicability", u.applicabilitySave)
 		g.Post("/projects/{projectID}/targets/{targetObjectID}/applicability/bulk", u.applicabilityBulk)
@@ -532,9 +535,13 @@ func (u *webUI) projectHome(w http.ResponseWriter, r *http.Request) {
 	if addUnder > 0 {
 		parent, found := domain.FindTargetByID(objects, addUnder)
 		if found && parent.ProjectID == project.ID {
-			page.AddUnder = parent.ID
-			page.AddUnderName = parent.Name
-			page.AddTypes = domain.AllowedChildTargetTypes(parent.Type)
+			if domain.ModelAllowsEdit(parent.ModelLocked, role) {
+				page.AddUnder = parent.ID
+				page.AddUnderName = parent.Name
+				page.AddTypes = domain.AllowedChildTargetTypes(parent.Type)
+			} else {
+				page.Error = domain.ModelLockMessage()
+			}
 		}
 	}
 	u.render(w, r, "project", page)
@@ -954,7 +961,7 @@ func (u *webUI) blocksLastOwner(r *http.Request, projectID int64) (bool, error) 
 }
 
 func (u *webUI) measureCreate(w http.ResponseWriter, r *http.Request) {
-	user, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -963,20 +970,20 @@ func (u *webUI) measureCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ctx.Inherited {
-		u.renderAssessment(w, r, user, project, true, ctx, "Maßnahmen zu geerbten Bausteinen gehören zum übergeordneten Zielobjekt.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Maßnahmen zu geerbten Bausteinen gehören zum übergeordneten Zielobjekt.", "")
 		return
 	}
 	if err := u.store.RequireRequirementWritable(r.Context(), project.ID, ctx.Target.ID, ctx.Requirement.ID); err != nil {
-		u.renderAssessment(w, r, user, project, true, ctx, reviewWebError(err), "")
+		u.renderAssessment(w, r, user, project, role, ctx, reviewWebError(err), "")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		u.renderAssessment(w, r, user, project, true, ctx, "Ungültige Anfrage.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Ungültige Anfrage.", "")
 		return
 	}
 	title := strings.TrimSpace(r.FormValue("title"))
 	if title == "" {
-		u.renderAssessment(w, r, user, project, true, ctx, "Titel der Maßnahme ist erforderlich.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Titel der Maßnahme ist erforderlich.", "")
 		return
 	}
 	status := strings.TrimSpace(r.FormValue("status"))
@@ -984,12 +991,12 @@ func (u *webUI) measureCreate(w http.ResponseWriter, r *http.Request) {
 		status = "Offen"
 	}
 	if !validMeasureStatus(status) {
-		u.renderAssessment(w, r, user, project, true, ctx, "Ungültiger Maßnahmenstatus.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Ungültiger Maßnahmenstatus.", "")
 		return
 	}
 	responsibleUserID, responsible, err := u.formResponsible(r, project.ID, 0, "")
 	if err != nil {
-		u.renderAssessment(w, r, user, project, true, ctx, "Ungültige Zuweisung.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Ungültige Zuweisung.", "")
 		return
 	}
 	if _, err := u.store.CreateMeasure(r.Context(), domain.Measure{
@@ -1003,7 +1010,7 @@ func (u *webUI) measureCreate(w http.ResponseWriter, r *http.Request) {
 		DueDate:           parseDueDate(r.FormValue("dueDate")),
 		Status:            status,
 	}); err != nil {
-		u.renderAssessment(w, r, user, project, true, ctx, "Maßnahme konnte nicht angelegt werden.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Maßnahme konnte nicht angelegt werden.", "")
 		return
 	}
 	http.Redirect(w, r, u.assessmentURL(project.ID, ctx.Target.ID, ctx.Requirement.ID, "created"), http.StatusSeeOther)
@@ -1181,11 +1188,11 @@ func (u *webUI) assessmentGet(w http.ResponseWriter, r *http.Request) {
 	case "deviation":
 		notice = "Abweichungstext gespeichert."
 	}
-	u.renderAssessment(w, r, user, project, roleCanEdit(role), ctx, "", notice)
+	u.renderAssessment(w, r, user, project, role, ctx, "", notice)
 }
 
 func (u *webUI) assessmentSave(w http.ResponseWriter, r *http.Request) {
-	user, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -1194,25 +1201,25 @@ func (u *webUI) assessmentSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ctx.Inherited {
-		u.renderAssessment(w, r, user, project, true, ctx, "Geerbte Bewertungen werden am übergeordneten Zielobjekt geändert.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Geerbte Bewertungen werden am übergeordneten Zielobjekt geändert.", "")
 		return
 	}
 	if err := u.store.RequireRequirementWritable(r.Context(), project.ID, ctx.Target.ID, ctx.Requirement.ID); err != nil {
-		u.renderAssessment(w, r, user, project, true, ctx, reviewWebError(err), "")
+		u.renderAssessment(w, r, user, project, role, ctx, reviewWebError(err), "")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		u.renderAssessment(w, r, user, project, true, ctx, "Ungültige Anfrage.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Ungültige Anfrage.", "")
 		return
 	}
 	status := strings.TrimSpace(r.FormValue("status"))
 	if !validAssessmentStatus(status) {
-		u.renderAssessment(w, r, user, project, true, ctx, "Ungültiger Bewertungsstatus.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Ungültiger Bewertungsstatus.", "")
 		return
 	}
 	responsibleUserID, responsible, err := u.formResponsible(r, project.ID, ctx.Assessment.ResponsibleUserID, ctx.Assessment.Responsible)
 	if err != nil {
-		u.renderAssessment(w, r, user, project, true, ctx, "Ungültige Zuweisung.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Ungültige Zuweisung.", "")
 		return
 	}
 	version, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("version")))
@@ -1230,11 +1237,11 @@ func (u *webUI) assessmentSave(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, repository.ErrVersionConflict) {
 			ctx.Assessment = saved
-			u.renderAssessment(w, r, user, project, true, ctx,
+			u.renderAssessment(w, r, user, project, role, ctx,
 				"Ein anderer Benutzer hat die Bewertung geändert. Das Formular zeigt die aktuelle Server-Version.", "")
 			return
 		}
-		u.renderAssessment(w, r, user, project, true, ctx, "Bewertung konnte nicht gespeichert werden.", "")
+		u.renderAssessment(w, r, user, project, role, ctx, "Bewertung konnte nicht gespeichert werden.", "")
 		return
 	}
 	http.Redirect(w, r, u.href(fmt.Sprintf(
@@ -1333,7 +1340,8 @@ func (u *webUI) loadAssessmentPage(w http.ResponseWriter, r *http.Request, proje
 	}, true
 }
 
-func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, canEdit bool, ctx webAssessmentContext, errMsg, notice string) {
+func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, role string, ctx webAssessmentContext, errMsg, notice string) {
+	canEdit := roleCanEdit(role)
 	members, err := u.editMembers(r, project.ID, canEdit && !ctx.Inherited)
 	if err != nil {
 		http.Error(w, "Mitglieder konnten nicht geladen werden.", http.StatusInternalServerError)
@@ -1343,6 +1351,7 @@ func (u *webUI) renderAssessment(w http.ResponseWriter, r *http.Request, user *a
 	u.render(w, r, "assessment", webPage{
 		DisplayName:        user.DisplayName,
 		CanEdit:            canEdit,
+		CanEditModel:       domain.ModelAllowsEdit(ctx.Target.ModelLocked, role),
 		Project:            project,
 		Error:              errMsg,
 		Notice:             notice,

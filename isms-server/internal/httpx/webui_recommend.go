@@ -19,10 +19,10 @@ func (u *webUI) recommendationsGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	u.renderRecommendations(w, r, user, project, roleCanEdit(role), target, "")
+	u.renderRecommendations(w, r, user, project, role, target, "")
 }
 
-func (u *webUI) renderRecommendations(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, canEdit bool, target domain.TargetObject, errMsg string) {
+func (u *webUI) renderRecommendations(w http.ResponseWriter, r *http.Request, user *auth.Claims, project domain.Project, role string, target domain.TargetObject, errMsg string) {
 	bausteine, err := u.store.ListBausteine(r.Context(), webCatalogStandard, project.CatalogVersion)
 	if err != nil {
 		http.Error(w, "Katalog konnte nicht geladen werden.", http.StatusInternalServerError)
@@ -57,7 +57,9 @@ func (u *webUI) renderRecommendations(w http.ResponseWriter, r *http.Request, us
 	}
 	u.render(w, r, "recommendations", webPage{
 		DisplayName:     user.DisplayName,
-		CanEdit:         canEdit,
+		CanEdit:         domain.ModelAllowsEdit(target.ModelLocked, role),
+		CanEditModel:    domain.ModelAllowsEdit(target.ModelLocked, role),
+		CanOwn:          roleCanOwn(role),
 		Project:         project,
 		Target:          target,
 		Hint:            service.RecommendationHint(target),
@@ -68,7 +70,7 @@ func (u *webUI) renderRecommendations(w http.ResponseWriter, r *http.Request, us
 }
 
 func (u *webUI) recommendationsApply(w http.ResponseWriter, r *http.Request) {
-	user, project, _, ok := u.projectAccess(w, r, "editor")
+	user, project, role, ok := u.projectAccess(w, r, "editor")
 	if !ok {
 		return
 	}
@@ -77,17 +79,21 @@ func (u *webUI) recommendationsApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		u.renderRecommendations(w, r, user, project, true, target, "Ungültige Anfrage.")
+		u.renderRecommendations(w, r, user, project, role, target, "Ungültige Anfrage.")
+		return
+	}
+	if !domain.ModelAllowsEdit(target.ModelLocked, role) {
+		u.renderRecommendations(w, r, user, project, role, target, domain.ModelLockMessage())
 		return
 	}
 	bausteine, err := u.store.ListBausteine(r.Context(), webCatalogStandard, project.CatalogVersion)
 	if err != nil {
-		u.renderRecommendations(w, r, user, project, true, target, "Katalog konnte nicht geladen werden.")
+		u.renderRecommendations(w, r, user, project, role, target, "Katalog konnte nicht geladen werden.")
 		return
 	}
 	applied, err := u.store.ApplicabilityMap(r.Context(), project.ID, target.ID)
 	if err != nil {
-		u.renderRecommendations(w, r, user, project, true, target, "Anwendbarkeit konnte nicht geladen werden.")
+		u.renderRecommendations(w, r, user, project, role, target, "Anwendbarkeit konnte nicht geladen werden.")
 		return
 	}
 	suggested := map[int64]string{}
@@ -113,7 +119,7 @@ func (u *webUI) recommendationsApply(w http.ResponseWriter, r *http.Request) {
 			BausteinID:     bausteinID,
 			Status:         status,
 		}); err != nil {
-			u.renderRecommendations(w, r, user, project, true, target, "Empfehlungen konnten nicht gespeichert werden.")
+			u.renderRecommendations(w, r, user, project, role, target, "Empfehlungen konnten nicht gespeichert werden.")
 			return
 		}
 		count++

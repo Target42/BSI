@@ -99,6 +99,7 @@
                 <td>
                   <span style="padding-left: {{padLeft .Depth}}">
                     <a href="{{href (printf "/projects/%d/targets/%d" $.Project.ID .ID)}}">{{.Name}}</a>
+                    {{if .ModelLocked}}<span class="badge">festgezogen</span>{{end}}
                   </span>
                 </td>
                 <td>{{.Type}}</td>
@@ -114,7 +115,7 @@
                   <a href="{{href (printf "/projects/%d/targets/%d/recommendations" $.Project.ID .ID)}}">Empfehlungen</a>
                   ·
                   <a href="{{href (printf "/projects/%d/targets/%d/edit" $.Project.ID .ID)}}">Bearbeiten</a>
-                  {{if .ChildTypes}}
+                  {{if and .ChildTypes (or (not .ModelLocked) $.CanOwn)}}
                     ·
                     <a href="{{href (printf "/projects/%d?addUnder=%d" $.Project.ID .ID)}}">Unterobjekt</a>
                   {{end}}

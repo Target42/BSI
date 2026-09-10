@@ -20,6 +20,7 @@ type
     function MigrateAssessmentDueDateColumn: Boolean;
     function MigrateTargetObjectProtectionNeedColumn: Boolean;
     function MigrateTargetObjectCiaColumns: Boolean;
+    function MigrateTargetObjectModelLockColumn: Boolean;
     function MigrateBausteinDeviationsTable: Boolean;
   public
     constructor Create(const AFilePath: string);
@@ -156,7 +157,7 @@ const
       'confidentiality TEXT NOT NULL DEFAULT ''normal'', integrity TEXT NOT NULL DEFAULT ''normal'', ' +
       'availability TEXT NOT NULL DEFAULT ''normal'', inherit_protection_need INTEGER NOT NULL DEFAULT 0, ' +
       'protection_need_note TEXT NOT NULL DEFAULT '''', ' +
-      'name TEXT NOT NULL, description TEXT, ' +
+      'name TEXT NOT NULL, description TEXT, model_locked INTEGER NOT NULL DEFAULT 0, ' +
       'FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE)',
     'CREATE TABLE IF NOT EXISTS baustein_applicability (' +
       'id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, target_object_id INTEGER NOT NULL, ' +
@@ -302,6 +303,25 @@ begin
   end;
 end;
 
+function TIsmsDatabase.MigrateTargetObjectModelLockColumn: Boolean;
+begin
+  Result := True;
+  if not TableExists('target_objects') then
+    Exit;
+  if TableHasColumn('target_objects', 'model_locked') then
+    Exit;
+  try
+    FConnection.ExecSQL(
+      'ALTER TABLE target_objects ADD COLUMN model_locked INTEGER NOT NULL DEFAULT 0');
+  except
+    on E: Exception do
+    begin
+      FLastError := 'Migration (Modellschloss): ' + E.Message;
+      Result := False;
+    end;
+  end;
+end;
+
 function TIsmsDatabase.MigrateBausteinDeviationsTable: Boolean;
 begin
   Result := True;
@@ -331,6 +351,7 @@ begin
             MigrateAssessmentDueDateColumn and
             MigrateTargetObjectProtectionNeedColumn and
             MigrateTargetObjectCiaColumns and
+            MigrateTargetObjectModelLockColumn and
             MigrateBausteinDeviationsTable;
 end;
 

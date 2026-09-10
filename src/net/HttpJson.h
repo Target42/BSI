@@ -65,6 +65,7 @@ inline TargetObject targetObjectFromJson(const QJsonObject &obj)
     }
     target.name = obj.value(QStringLiteral("name")).toString();
     target.description = obj.value(QStringLiteral("description")).toString();
+    target.modelLocked = obj.value(QStringLiteral("modelLocked")).toBool();
     return target;
 }
 
@@ -127,6 +128,11 @@ inline QString jsonErrorCode(const QJsonObject &obj)
 inline bool isReviewLockedJson(const QJsonObject &obj)
 {
     return jsonErrorCode(obj) == QStringLiteral("review_locked");
+}
+
+inline bool isModelLockedJson(const QJsonObject &obj)
+{
+    return jsonErrorCode(obj) == QStringLiteral("model_locked");
 }
 
 inline BausteinReview bausteinReviewFromJson(const QJsonObject &obj)

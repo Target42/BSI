@@ -612,6 +612,10 @@ object MainForm: TMainForm
         Caption = 'Zielobjekt l'#246'schen'#8230
         OnClick = DoDeleteTarget
       end
+      object mnuLockTarget: TMenuItem
+        Caption = 'Modell festziehen'
+        OnClick = DoToggleModelLock
+      end
       object mnuSep3: TMenuItem
         Caption = '-'
       end
@@ -698,6 +702,10 @@ object MainForm: TMainForm
     object mniTargetDelete: TMenuItem
       Caption = 'Zielobjekt l'#246'schen'#8230
       OnClick = DoDeleteTarget
+    end
+    object mniTargetLock: TMenuItem
+      Caption = 'Modell festziehen'
+      OnClick = DoToggleModelLock
     end
     object mniTargetSep: TMenuItem
       Caption = '-'

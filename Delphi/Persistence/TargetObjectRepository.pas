@@ -59,6 +59,7 @@ begin
   Result.ProtectionNeedNote := Q.FieldByName('protection_need_note').AsString;
   Result.Name := Q.FieldByName('name').AsString;
   Result.Description := Q.FieldByName('description').AsString;
+  Result.ModelLocked := Q.FieldByName('model_locked').AsInteger <> 0;
   if (Result.Confidentiality = clNormal) and (Result.Integrity = clNormal) and
      (Result.Availability = clNormal) and (Result.ProtectionNeed = pnElevated) then
   begin
@@ -90,7 +91,7 @@ begin
     Q.Connection := FConnection;
     Q.SQL.Text :=
       'SELECT id, project_id, parent_id, type, protection_need, confidentiality, integrity, ' +
-      'availability, inherit_protection_need, protection_need_note, name, description ' +
+      'availability, inherit_protection_need, protection_need_note, name, description, model_locked ' +
       'FROM target_objects WHERE project_id = :pid ORDER BY parent_id, name';
     Q.ParamByName('pid').AsInteger := AProjectId;
     Q.Open;
@@ -154,13 +155,14 @@ begin
     Q.SQL.Text :=
       'INSERT INTO target_objects (project_id, parent_id, type, protection_need, ' +
       'confidentiality, integrity, availability, inherit_protection_need, protection_need_note, ' +
-      'name, description) VALUES (:pid, :parent, :typ, :pn, :conf, :integ, :avail, :inherit, :pnnote, :name, :desc)';
+      'name, description, model_locked) VALUES (:pid, :parent, :typ, :pn, :conf, :integ, :avail, :inherit, :pnnote, :name, :desc, :locked)';
     Q.ParamByName('pid').AsInteger := Result.ProjectId;
     Q.ParamByName('parent').AsInteger := Result.ParentId;
     Q.ParamByName('typ').AsString := TargetObjectTypeToString(Result.ObjType);
     BindProtectionNeedParams(Q, Result);
     Q.ParamByName('name').AsString := Result.Name;
     Q.ParamByName('desc').AsString := Result.Description;
+    Q.ParamByName('locked').AsInteger := Ord(Result.ModelLocked);
     Q.ExecSQL;
     Result.Id := Integer(FConnection.ExecSQLScalar('SELECT last_insert_rowid()'));
   except
@@ -188,12 +190,13 @@ begin
       'UPDATE target_objects SET parent_id = :parent, type = :typ, protection_need = :pn, ' +
       'confidentiality = :conf, integrity = :integ, availability = :avail, ' +
       'inherit_protection_need = :inherit, protection_need_note = :pnnote, ' +
-      'name = :name, description = :desc WHERE id = :id';
+      'name = :name, description = :desc, model_locked = :locked WHERE id = :id';
     Q.ParamByName('parent').AsInteger := Target.ParentId;
     Q.ParamByName('typ').AsString := TargetObjectTypeToString(Target.ObjType);
     BindProtectionNeedParams(Q, Target);
     Q.ParamByName('name').AsString := Target.Name;
     Q.ParamByName('desc').AsString := Target.Description;
+    Q.ParamByName('locked').AsInteger := Ord(Target.ModelLocked);
     Q.ParamByName('id').AsInteger := Target.Id;
     Q.ExecSQL;
     PersistInheritedProtectionNeeds(Target.ProjectId);

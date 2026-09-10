@@ -21,6 +21,7 @@ struct TargetObject {
     QString protectionNeedNote;
     QString name;
     QString description;
+    bool modelLocked = false;
 };
 
 inline void applyCiaToProtectionNeed(TargetObject &target)
@@ -87,8 +88,33 @@ inline void resolveInheritedProtectionNeeds(QList<TargetObject> &objects)
 
 inline QString targetObjectCaption(const TargetObject &object)
 {
-    return QStringLiteral("%1 – %2 [%3]")
-        .arg(targetObjectTypeToString(object.type), object.name, protectionNeedSummary(object));
+    QString caption = QStringLiteral("%1 – %2 [%3]")
+                          .arg(targetObjectTypeToString(object.type), object.name, protectionNeedSummary(object));
+    if (object.modelLocked)
+        caption += QStringLiteral(" [festgezogen]");
+    return caption;
+}
+
+inline QString modelLockMessage()
+{
+    return QStringLiteral(
+        "Das Modell dieses Zielobjekts ist festgezogen. Nur der Besitzer kann Struktur und Bausteinauswahl ändern.");
+}
+
+inline bool canToggleModelLock(const QString &role, bool remote)
+{
+    if (!remote)
+        return true;
+    return role == QStringLiteral("owner");
+}
+
+inline bool modelAllowsEdit(bool locked, const QString &role, bool remote)
+{
+    if (remote && role != QStringLiteral("owner") && role != QStringLiteral("editor"))
+        return false;
+    if (!locked)
+        return true;
+    return canToggleModelLock(role, remote);
 }
 
 inline bool isRootScopeTarget(const TargetObject &object)

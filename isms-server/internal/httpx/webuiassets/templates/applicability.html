@@ -22,6 +22,9 @@
       <p class="lede">{{.Target.Name}} · Katalog {{.Project.CatalogVersion}}. „Benötigt“ und „Möglicherweise“ erscheinen im Soll-Ist.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+      {{if and .Target.ModelLocked (not .CanEditModel)}}
+      <p class="muted">Das Modell ist festgezogen. Die Bausteinauswahl kann nur der Besitzer ändern.</p>
+      {{end}}
 
       <p class="row-actions">
         <a class="btn" href="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">Arbeitsplatz</a>

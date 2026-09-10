@@ -143,6 +143,45 @@ func TestCockpitReviewQueueTemplate(t *testing.T) {
 	}
 }
 
+func TestWorkplaceModelLockActions(t *testing.T) {
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
+	page := webPage{
+		CanEdit:      true,
+		CanEditModel: false,
+		CanOwn:       false,
+		Project:      domain.Project{ID: 1},
+		Target:       domain.TargetObject{ID: 2, Name: "Cluster", Type: "IT-System", ModelLocked: true},
+		CanSubmit:    true,
+		StatusFilters: []string{"Anwendbar"},
+		StatusFilter:  "Anwendbar",
+	}
+	var buf bytes.Buffer
+	if err := ui.tmpl.ExecuteTemplate(&buf, "workplace", page); err != nil {
+		t.Fatal(err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, "Modell festgezogen") {
+		t.Fatalf("locked badge missing: %s", body)
+	}
+	if strings.Contains(body, "Modell festziehen") || strings.Contains(body, "Modell lösen") {
+		t.Fatalf("editor must not toggle lock: %s", body)
+	}
+	if !strings.Contains(body, "Anzeigen") {
+		t.Fatalf("editor should see read-only target link: %s", body)
+	}
+
+	page.CanOwn = true
+	page.CanEditModel = true
+	buf.Reset()
+	if err := ui.tmpl.ExecuteTemplate(&buf, "workplace", page); err != nil {
+		t.Fatal(err)
+	}
+	owner := buf.String()
+	if !strings.Contains(owner, "Modell lösen") || !strings.Contains(owner, `name="locked"`) {
+		t.Fatalf("owner unlock missing: %s", owner)
+	}
+}
+
 func TestFilterMeasureRowsByReview(t *testing.T) {
 	items := []webMeasureRow{
 		{Measure: domain.Measure{Title: "Patch", Status: "Offen"}, ReviewState: domain.ReviewSubmitted, ReviewLabel: "Zur Prüfung"},
