@@ -12,6 +12,7 @@ function RequirementFromJson(AObj: TJSONObject): TRequirement;
 function AssessmentFromJson(AObj: TJSONObject): TRequirementAssessment;
 function MeasureFromJson(AObj: TJSONObject): TMeasure;
 function BausteinReviewFromJson(AObj: TJSONObject): TBausteinReview;
+function BausteinReviewEventFromJson(AObj: TJSONObject): TBausteinReviewEvent;
 function ServerUserFromJson(AObj: TJSONObject): TServerUser;
 function ProjectMemberFromJson(AObj: TJSONObject): TProjectMember;
 function RepairUtf8Mojibake(const S: string): string;
@@ -259,6 +260,38 @@ begin
   end;
   Result.AssignedReviewerId := AObj.GetValue<Integer>('assignedReviewerId', 0);
   Result.AssignedReviewerName := JsonStringValue(AObj, 'assignedReviewerName');
+end;
+
+function BausteinReviewEventFromJson(AObj: TJSONObject): TBausteinReviewEvent;
+var
+  Arr: TJSONArray;
+  I: Integer;
+  Value: TJSONValue;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Id := AObj.GetValue<Integer>('id', 0);
+  Result.ProjectId := AObj.GetValue<Integer>('projectId', 0);
+  Result.TargetObjectId := AObj.GetValue<Integer>('targetObjectId', 0);
+  Result.BausteinId := AObj.GetValue<Integer>('bausteinId', 0);
+  Result.Action := JsonStringValue(AObj, 'action');
+  Result.FromState := JsonStringValue(AObj, 'fromState');
+  Result.ToState := JsonStringValue(AObj, 'toState');
+  Result.Note := JsonStringValue(AObj, 'note');
+  if AObj.TryGetValue<TJSONArray>('returnedRequirementIds', Arr) and (Arr <> nil) then
+  begin
+    SetLength(Result.ReturnedRequirementIds, Arr.Count);
+    for I := 0 to Arr.Count - 1 do
+    begin
+      Value := Arr.Items[I];
+      if Value is TJSONNumber then
+        Result.ReturnedRequirementIds[I] := TJSONNumber(Value).AsInt
+      else
+        Result.ReturnedRequirementIds[I] := StrToIntDef(Value.Value, 0);
+    end;
+  end;
+  Result.ActorId := AObj.GetValue<Integer>('actorId', 0);
+  Result.ActorName := JsonStringValue(AObj, 'actorName');
+  Result.CreatedAt := ParseDateTimeValue(AObj.GetValue('createdAt'));
 end;
 
 function ServerUserFromJson(AObj: TJSONObject): TServerUser;

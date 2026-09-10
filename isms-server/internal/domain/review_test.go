@@ -136,6 +136,18 @@ func TestReviewActionFlags(t *testing.T) {
 	}
 }
 
+func TestReviewActionLabel(t *testing.T) {
+	if ReviewActionLabel(ReviewActionSubmit) != "Eingereicht" {
+		t.Fatal("submit label")
+	}
+	if ReviewActionLabel(ReviewActionReturn) != "Zurückgegeben" {
+		t.Fatal("return label")
+	}
+	if ReviewActionLabel(ReviewActionAccept) != "Abgenommen" {
+		t.Fatal("accept label")
+	}
+}
+
 func TestCountReviewQueue(t *testing.T) {
 	submitted, returned := CountReviewQueue([]BausteinReview{
 		{State: ReviewSubmitted},

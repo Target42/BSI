@@ -195,6 +195,31 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 	reviewLocked := selected.ID != 0 && !selected.Inherited &&
 		!domain.ReviewAllowsBausteinEdit(project.WorkflowEnabled, selectedReview.State, selectedReview.ReturnedRequirementIDs)
 
+	var history []webReviewEvent
+	if selected.ID != 0 && !selected.Inherited && project.WorkflowEnabled && u.store != nil {
+		events, err := u.store.ListBausteinReviewEvents(r.Context(), project.ID, target.ID, selected.ID)
+		if err != nil {
+			http.Error(w, "Review-Historie konnte nicht geladen werden.", http.StatusInternalServerError)
+			return
+		}
+		reqByID := map[int64]string{}
+		for _, req := range reqsByBaustein[selected.ID] {
+			reqByID[req.ID] = req.ExternalID
+		}
+		history = make([]webReviewEvent, 0, len(events))
+		for _, event := range events {
+			item := webReviewEvent{BausteinReviewEvent: event}
+			for _, id := range event.ReturnedRequirementIDs {
+				if label := reqByID[id]; label != "" {
+					item.RequirementLabels = append(item.RequirementLabels, label)
+				} else {
+					item.RequirementLabels = append(item.RequirementLabels, fmt.Sprintf("#%d", id))
+				}
+			}
+			history = append(history, item)
+		}
+	}
+
 	if errMsg == "" && notice == "" && r.URL.Query().Get("saved") == "lock" {
 		if target.ModelLocked {
 			notice = "Modell festgezogen. Bearbeiter können Struktur und Bausteinauswahl nicht mehr ändern."
@@ -221,6 +246,7 @@ func (u *webUI) renderWorkplace(w http.ResponseWriter, r *http.Request, user *au
 		Inherited:          selected.Inherited,
 		AssessmentStatuses: webAssessmentStatuses,
 		Review:             selectedReview,
+		ReviewHistory:      history,
 		CanSubmit:          domain.CanSubmitReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role),
 		CanReview: domain.CanReturnReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role, selectedReview.AssignedReviewerID, user.UserID) ||
 			domain.CanAcceptReview(project.WorkflowEnabled, selected.Inherited, selectedReview.State, role, selectedReview.AssignedReviewerID, user.UserID),

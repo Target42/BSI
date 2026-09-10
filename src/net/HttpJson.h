@@ -153,6 +153,28 @@ inline BausteinReview bausteinReviewFromJson(const QJsonObject &obj)
     return review;
 }
 
+inline BausteinReviewEvent bausteinReviewEventFromJson(const QJsonObject &obj)
+{
+    BausteinReviewEvent event;
+    event.id = obj.value(QStringLiteral("id")).toInt();
+    event.projectId = obj.value(QStringLiteral("projectId")).toInt();
+    event.targetObjectId = obj.value(QStringLiteral("targetObjectId")).toInt();
+    event.bausteinId = obj.value(QStringLiteral("bausteinId")).toInt();
+    event.action = obj.value(QStringLiteral("action")).toString();
+    event.fromState = obj.value(QStringLiteral("fromState")).toString();
+    event.toState = obj.value(QStringLiteral("toState")).toString();
+    event.note = obj.value(QStringLiteral("note")).toString();
+    const QJsonValue returned = obj.value(QStringLiteral("returnedRequirementIds"));
+    if (returned.isArray()) {
+        for (const QJsonValue &value : returned.toArray())
+            event.returnedRequirementIds.append(value.toInt());
+    }
+    event.actorId = obj.value(QStringLiteral("actorId")).toInt();
+    event.actorName = obj.value(QStringLiteral("actorName")).toString();
+    event.createdAt = parseDateTime(obj.value(QStringLiteral("createdAt")));
+    return event;
+}
+
 inline Measure measureFromJson(const QJsonObject &obj)
 {
     Measure measure;

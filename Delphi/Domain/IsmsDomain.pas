@@ -241,6 +241,21 @@ type
     AssignedReviewerName: string;
   end;
 
+  TBausteinReviewEvent = record
+    Id: Integer;
+    ProjectId: Integer;
+    TargetObjectId: Integer;
+    BausteinId: Integer;
+    Action: string;
+    FromState: string;
+    ToState: string;
+    Note: string;
+    ReturnedRequirementIds: TArray<Integer>;
+    ActorId: Integer;
+    ActorName: string;
+    CreatedAt: TDateTime;
+  end;
+
   TReviewSaveStatus = (rssOk, rssForbidden, rssNoteRequired, rssInvalid, rssFailed);
   TReviewSaveResult = record
     Status: TReviewSaveStatus;
@@ -358,6 +373,7 @@ function CanAcceptReview(AWorkflowEnabled, AInherited: Boolean; const AState, AR
   AAssignedReviewerId: Integer = 0; AUserId: Integer = 0): Boolean;
 function ReviewLockMessage(const AState: string = ''): string;
 function ReviewActionMessage(const AAction: string): string;
+function ReviewActionLabel(const AAction: string): string;
 function ReviewClientErrorMessage(const ACode: string): string;
 function ContainsReturnedRequirementId(const AIds: TArray<Integer>; ARequirementId: Integer): Boolean;
 function ReviewSaveOk(const AReview: TBausteinReview): TReviewSaveResult;
@@ -1291,6 +1307,17 @@ begin
   if AAction = ReviewActionAccept then
     Exit('Baustein abgenommen.');
   Result := 'Laufzettel gespeichert.';
+end;
+
+function ReviewActionLabel(const AAction: string): string;
+begin
+  if AAction = ReviewActionSubmit then
+    Exit('Eingereicht');
+  if AAction = ReviewActionReturn then
+    Exit('Zur'#$00FC'ckgegeben');
+  if AAction = ReviewActionAccept then
+    Exit('Abgenommen');
+  Result := AAction;
 end;
 
 function ReviewClientErrorMessage(const ACode: string): string;

@@ -35,6 +35,7 @@ type
       const ARequirementIds: TArray<Integer>): TReviewSaveResult; override;
     function AssignReviewer(AProjectId, ATargetObjectId, ABausteinId,
       AAssignedReviewerId: Integer): TReviewSaveResult; override;
+    function LoadReviewHistory(AProjectId, ATargetObjectId, ABausteinId: Integer): TArray<TBausteinReviewEvent>; override;
     function GetLastError: string; override;
   end;
 
@@ -454,6 +455,11 @@ function TTargetObjectRepository.AssignReviewer(AProjectId, ATargetObjectId, ABa
 begin
   FLastError := 'Pr'#$00FC'fkreislauf nur im Server-Modus verf'#$00FC'gbar.';
   Result := ReviewSaveFailed;
+end;
+
+function TTargetObjectRepository.LoadReviewHistory(AProjectId, ATargetObjectId, ABausteinId: Integer): TArray<TBausteinReviewEvent>;
+begin
+  SetLength(Result, 0);
 end;
 
 function TTargetObjectRepository.GetLastError: string;

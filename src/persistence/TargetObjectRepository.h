@@ -33,6 +33,8 @@ public:
                                  const QList<int> &requirementIds = {}) override;
     ReviewSaveResult assignReviewer(int projectId, int targetObjectId, int bausteinId,
                                     int assignedReviewerId) override;
+    QList<BausteinReviewEvent> loadReviewHistory(int projectId, int targetObjectId,
+                                                 int bausteinId) const override;
 
     QString lastError() const override;
 

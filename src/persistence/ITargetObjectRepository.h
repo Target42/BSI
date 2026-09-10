@@ -36,6 +36,8 @@ public:
                                          const QList<int> &requirementIds = {}) = 0;
     virtual ReviewSaveResult assignReviewer(int projectId, int targetObjectId, int bausteinId,
                                             int assignedReviewerId) = 0;
+    virtual QList<BausteinReviewEvent> loadReviewHistory(int projectId, int targetObjectId,
+                                                         int bausteinId) const = 0;
 
     virtual QString lastError() const = 0;
 };

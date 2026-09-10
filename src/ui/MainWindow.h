@@ -100,6 +100,7 @@ private slots:
     void returnActiveBausteinReview();
     void acceptActiveBausteinReview();
     void assignActiveReviewer();
+    void showReviewHistory();
 
 private:
     void buildUi();
@@ -236,6 +237,7 @@ private:
     QLabel *m_reviewLabel = nullptr;
     QLabel *m_reviewNoteLabel = nullptr;
     QComboBox *m_reviewerBox = nullptr;
+    QPushButton *m_reviewHistoryButton = nullptr;
     QPushButton *m_reviewSubmitButton = nullptr;
     QPushButton *m_reviewReturnButton = nullptr;
     QPushButton *m_reviewAcceptButton = nullptr;

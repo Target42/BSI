@@ -372,6 +372,15 @@ ReviewSaveResult TargetObjectRepository::assignReviewer(int projectId, int targe
     return ReviewSaveResult::failed();
 }
 
+QList<BausteinReviewEvent> TargetObjectRepository::loadReviewHistory(int projectId, int targetObjectId,
+                                                                     int bausteinId) const
+{
+    Q_UNUSED(projectId)
+    Q_UNUSED(targetObjectId)
+    Q_UNUSED(bausteinId)
+    return {};
+}
+
 QString TargetObjectRepository::lastError() const
 {
     return m_lastError;

@@ -139,6 +139,35 @@ func (h *ReviewHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (h *ReviewHandler) History(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	projectID, targetObjectID, bausteinID, err := parseProjectTargetBaustein(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, err := h.store.RequireProjectRole(r.Context(), projectID, user, "viewer"); err != nil {
+		if mapRepoError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "access check failed")
+		return
+	}
+	items, err := h.store.ListBausteinReviewEvents(r.Context(), projectID, targetObjectID, bausteinID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list review history failed")
+		return
+	}
+	if items == nil {
+		items = []domain.BausteinReviewEvent{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 type assignReviewerRequest struct {
 	AssignedReviewerID int64 `json:"assignedReviewerId"`
 }

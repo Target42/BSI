@@ -3,11 +3,17 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/Target42/BSI/isms-server/internal/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+type execer interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
 
 const bausteinReviewSelect = `
 	r.project_id, r.target_object_id, r.baustein_id, r.state, r.review_note, r.returned_requirement_ids,
@@ -76,9 +82,41 @@ func (s *Store) ListProjectReviews(ctx context.Context, projectID int64) ([]doma
 }
 
 func (s *Store) SaveBausteinReview(ctx context.Context, review domain.BausteinReview) (domain.BausteinReview, error) {
+	return s.saveBausteinReview(ctx, review, nil)
+}
+
+func (s *Store) SaveBausteinReviewWithEvent(ctx context.Context, review domain.BausteinReview, event domain.BausteinReviewEvent) (domain.BausteinReview, error) {
+	return s.saveBausteinReview(ctx, review, &event)
+}
+
+func (s *Store) saveBausteinReview(ctx context.Context, review domain.BausteinReview, event *domain.BausteinReviewEvent) (domain.BausteinReview, error) {
 	review.State = domain.NormalizeReviewState(review.State)
 	review.ReturnedRequirementIDs = domain.NormalizeReturnedRequirementIDs(review.ReturnedRequirementIDs)
-	_, err := s.pool.Exec(ctx, `
+	if event == nil {
+		if err := execSaveBausteinReview(ctx, s.pool, review); err != nil {
+			return domain.BausteinReview{}, err
+		}
+		return s.GetBausteinReview(ctx, review.ProjectID, review.TargetObjectID, review.BausteinID)
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return domain.BausteinReview{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := execSaveBausteinReview(ctx, tx, review); err != nil {
+		return domain.BausteinReview{}, err
+	}
+	if err := execInsertReviewEvent(ctx, tx, *event); err != nil {
+		return domain.BausteinReview{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.BausteinReview{}, err
+	}
+	return s.GetBausteinReview(ctx, review.ProjectID, review.TargetObjectID, review.BausteinID)
+}
+
+func execSaveBausteinReview(ctx context.Context, exec execer, review domain.BausteinReview) error {
+	_, err := exec.Exec(ctx, `
 		INSERT INTO baustein_reviews (
 			project_id, target_object_id, baustein_id, state, review_note, returned_requirement_ids,
 			submitted_by, submitted_at, reviewed_by, reviewed_at, assigned_reviewer_id
@@ -99,10 +137,61 @@ func (s *Store) SaveBausteinReview(ctx context.Context, review domain.BausteinRe
 		nullableInt64(review.ReviewedBy), review.ReviewedAt,
 		nullableInt64(review.AssignedReviewerID),
 	)
+	return err
+}
+
+func execInsertReviewEvent(ctx context.Context, exec execer, event domain.BausteinReviewEvent) error {
+	event.Action = strings.TrimSpace(event.Action)
+	event.FromState = domain.NormalizeReviewState(event.FromState)
+	event.ToState = domain.NormalizeReviewState(event.ToState)
+	event.Note = strings.TrimSpace(event.Note)
+	event.ReturnedRequirementIDs = domain.NormalizeReturnedRequirementIDs(event.ReturnedRequirementIDs)
+	_, err := exec.Exec(ctx, `
+		INSERT INTO baustein_review_events (
+			project_id, target_object_id, baustein_id, action, from_state, to_state, note,
+			returned_requirement_ids, actor_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		event.ProjectID, event.TargetObjectID, event.BausteinID, event.Action, event.FromState, event.ToState,
+		event.Note, event.ReturnedRequirementIDs, nullableInt64(event.ActorID),
+	)
+	return err
+}
+
+func (s *Store) ListBausteinReviewEvents(ctx context.Context, projectID, targetObjectID, bausteinID int64) ([]domain.BausteinReviewEvent, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT e.id, e.project_id, e.target_object_id, e.baustein_id, e.action, e.from_state, e.to_state,
+			e.note, e.returned_requirement_ids, e.actor_id,
+			COALESCE(NULLIF(u.display_name, ''), u.email, ''), e.created_at
+		FROM baustein_review_events e
+		LEFT JOIN users u ON u.id = e.actor_id
+		WHERE e.project_id = $1 AND e.target_object_id = $2 AND e.baustein_id = $3
+		ORDER BY e.created_at DESC, e.id DESC`,
+		projectID, targetObjectID, bausteinID)
 	if err != nil {
-		return domain.BausteinReview{}, err
+		return nil, err
 	}
-	return s.GetBausteinReview(ctx, review.ProjectID, review.TargetObjectID, review.BausteinID)
+	defer rows.Close()
+
+	out := make([]domain.BausteinReviewEvent, 0)
+	for rows.Next() {
+		var event domain.BausteinReviewEvent
+		var actorID *int64
+		if err := rows.Scan(
+			&event.ID, &event.ProjectID, &event.TargetObjectID, &event.BausteinID, &event.Action,
+			&event.FromState, &event.ToState, &event.Note, &event.ReturnedRequirementIDs, &actorID,
+			&event.ActorName, &event.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		event.FromState = domain.NormalizeReviewState(event.FromState)
+		event.ToState = domain.NormalizeReviewState(event.ToState)
+		event.ReturnedRequirementIDs = domain.NormalizeReturnedRequirementIDs(event.ReturnedRequirementIDs)
+		if actorID != nil {
+			event.ActorID = *actorID
+		}
+		out = append(out, event)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) ResolveAssignedReviewer(ctx context.Context, projectID, reviewerID int64) (int64, string, error) {

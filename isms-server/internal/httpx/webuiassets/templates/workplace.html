@@ -183,7 +183,7 @@
         {{else if and $.CanEdit $.Inherited}}
         <p class="muted">Geerbter Baustein: Bewertungsstatus am übergeordneten Zielobjekt ändern.</p>
         {{end}}
-        {{if or $.CanSubmit $.CanReview $.CanAssign}}
+        {{if and $.Project.WorkflowEnabled $.Baustein.ID (not $.Inherited)}}
         <div class="card">
           <h2>Prüfung</h2>
           {{if $.Review.AssignedReviewerName}}
@@ -259,6 +259,20 @@
             <button class="btn btn-secondary" type="submit" name="action" value="return">Zurückgeben</button>
           </form>
           {{end}}
+          {{end}}
+          <h3>Historie</h3>
+          {{if $.ReviewHistory}}
+          <ol class="review-history">
+            {{range $.ReviewHistory}}
+            <li>
+              <div><strong>{{reviewActionLabel .Action}}</strong> · {{formatDateTime .CreatedAt}}{{if .ActorName}} · {{.ActorName}}{{end}}</div>
+              {{if .Note}}<div class="muted">{{.Note}}</div>{{end}}
+              {{if .RequirementLabels}}<div class="muted">{{range $i, $label := .RequirementLabels}}{{if $i}}, {{end}}{{$label}}{{end}}</div>{{end}}
+            </li>
+            {{end}}
+          </ol>
+          {{else}}
+          <p class="muted">Noch keine Einträge.</p>
           {{end}}
         </div>
         {{end}}

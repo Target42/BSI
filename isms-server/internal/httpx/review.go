@@ -46,6 +46,7 @@ func applyBausteinReview(
 	if err != nil {
 		return domain.BausteinReview{}, err
 	}
+	fromState := domain.NormalizeReviewState(current.State)
 	now := time.Now().UTC()
 	current.State = next
 	switch strings.TrimSpace(action) {
@@ -83,7 +84,18 @@ func applyBausteinReview(
 		current.ReviewNote = ""
 		current.ReturnedRequirementIDs = nil
 	}
-	return store.SaveBausteinReview(r.Context(), current)
+	event := domain.BausteinReviewEvent{
+		ProjectID:              project.ID,
+		TargetObjectID:         targetObjectID,
+		BausteinID:             bausteinID,
+		Action:                 action,
+		FromState:              fromState,
+		ToState:                next,
+		Note:                   current.ReviewNote,
+		ReturnedRequirementIDs: current.ReturnedRequirementIDs,
+		ActorID:                userID,
+	}
+	return store.SaveBausteinReviewWithEvent(r.Context(), current, event)
 }
 
 func assignBausteinReviewer(

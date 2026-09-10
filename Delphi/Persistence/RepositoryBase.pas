@@ -51,6 +51,7 @@ type
       const ARequirementIds: TArray<Integer>): TReviewSaveResult; virtual; abstract;
     function AssignReviewer(AProjectId, ATargetObjectId, ABausteinId,
       AAssignedReviewerId: Integer): TReviewSaveResult; virtual; abstract;
+    function LoadReviewHistory(AProjectId, ATargetObjectId, ABausteinId: Integer): TArray<TBausteinReviewEvent>; virtual; abstract;
     function GetLastError: string; virtual; abstract;
     property LastError: string read GetLastError;
   end;

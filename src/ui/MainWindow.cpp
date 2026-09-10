@@ -9,6 +9,7 @@
 #include "domain/Measure.h"
 #include "domain/SaveResult.h"
 #include "domain/ProtectionNeed.h"
+#include "domain/Requirement.h"
 #include "domain/Standard.h"
 #include "domain/TargetObject.h"
 #include "domain/TargetObjectType.h"
@@ -47,11 +48,13 @@
 #include <QHash>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QKeySequence>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -63,6 +66,8 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTableView>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include <QTimer>
 #include <QTextEdit>
 #include <QToolBar>
@@ -409,6 +414,9 @@ void MainWindow::buildUi()
     m_reviewerBox->setToolTip(tr("Weist den Baustein einem Prüfer oder Besitzer zu. Ohne Zuweisung darf jeder Prüfer abnehmen."));
     connect(m_reviewerBox, QOverload<int>::of(&QComboBox::activated), this,
             &MainWindow::assignActiveReviewer);
+    m_reviewHistoryButton = new QPushButton(tr("Historie"), m_reviewWidget);
+    m_reviewHistoryButton->setToolTip(tr("Zeigt, wer den Baustein wann eingereicht, zurückgegeben oder abgenommen hat."));
+    connect(m_reviewHistoryButton, &QPushButton::clicked, this, &MainWindow::showReviewHistory);
     m_reviewSubmitButton = new QPushButton(tr("Einreichen"), m_reviewWidget);
     m_reviewReturnButton = new QPushButton(tr("Zurückgeben"), m_reviewWidget);
     m_reviewAcceptButton = new QPushButton(tr("Abnehmen"), m_reviewWidget);
@@ -421,6 +429,7 @@ void MainWindow::buildUi()
     reviewRow->addWidget(m_reviewLabel);
     reviewRow->addWidget(m_reviewerBox);
     reviewRow->addStretch();
+    reviewRow->addWidget(m_reviewHistoryButton);
     reviewRow->addWidget(m_reviewSubmitButton);
     reviewRow->addWidget(m_reviewReturnButton);
     reviewRow->addWidget(m_reviewAcceptButton);
@@ -1399,6 +1408,11 @@ void MainWindow::updateReviewUi()
             m_suppressReviewerChange = false;
         }
     }
+    if (m_reviewHistoryButton != nullptr) {
+        const bool canHistory = m_context.isRemote() && !inherited;
+        m_reviewHistoryButton->setVisible(canHistory);
+        m_reviewHistoryButton->setEnabled(canHistory);
+    }
     if (m_reviewNoteLabel != nullptr) {
         const bool showNote = review.state == ReviewStateReturned && !review.reviewNote.trimmed().isEmpty();
         m_reviewNoteLabel->setVisible(showNote);
@@ -1512,6 +1526,71 @@ void MainWindow::assignActiveReviewer()
     m_reviews.insert(m_activeBausteinId, result.review);
     updateReviewUi();
     showTemporaryStatusMessage(tr("Prüfer zugewiesen"));
+}
+
+void MainWindow::showReviewHistory()
+{
+    if (!workflowActive() || !hasActiveProjectContext() || m_activeBausteinId <= 0)
+        return;
+    if (isInheritedBaustein(m_activeBausteinId) || !m_context.isRemote())
+        return;
+
+    const QList<BausteinReviewEvent> events = m_context.targetObjectRepository().loadReviewHistory(
+        m_activeProject.id, m_activeTargetObject.id, m_activeBausteinId);
+    if (events.isEmpty() && !m_context.targetObjectRepository().lastError().isEmpty()) {
+        QMessageBox::warning(this, tr("Prüfhistorie"), m_context.targetObjectRepository().lastError());
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Prüfhistorie"));
+    dialog.resize(720, 360);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *table = new QTableWidget(&dialog);
+    table->setColumnCount(4);
+    table->setHorizontalHeaderLabels({tr("Zeit"), tr("Aktion"), tr("Von"), tr("Begründung")});
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->verticalHeader()->setVisible(false);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setRowCount(events.size());
+    const QLocale locale;
+    for (int row = 0; row < events.size(); ++row) {
+        const BausteinReviewEvent &event = events.at(row);
+        QString when;
+        if (event.createdAt.isValid())
+            when = locale.toString(event.createdAt.toLocalTime(), QLocale::ShortFormat);
+        QString details = event.note.trimmed();
+        QStringList reqLabels;
+        for (int id : event.returnedRequirementIds) {
+            for (const Requirement &req : m_catalogRequirements) {
+                if (req.id == id) {
+                    reqLabels.append(req.externalId);
+                    break;
+                }
+            }
+        }
+        if (!reqLabels.isEmpty()) {
+            const QString reqText = tr("Teilrückgabe: %1").arg(reqLabels.join(QStringLiteral(", ")));
+            details = details.isEmpty() ? reqText : details + QLatin1Char('\n') + reqText;
+        }
+        table->setItem(row, 0, new QTableWidgetItem(when));
+        table->setItem(row, 1, new QTableWidgetItem(reviewActionLabel(event.action)));
+        table->setItem(row, 2, new QTableWidgetItem(event.actorName));
+        table->setItem(row, 3, new QTableWidgetItem(details));
+    }
+    if (events.isEmpty()) {
+        auto *empty = new QLabel(tr("Noch keine Einträge."), &dialog);
+        layout->addWidget(empty);
+        table->setVisible(false);
+    }
+    layout->addWidget(table);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    layout->addWidget(buttons);
+    dialog.exec();
 }
 
 bool MainWindow::hasApplicableBausteineForActiveTarget() const

@@ -191,6 +191,7 @@ type
     btnReviewReturn: TButton;
     btnReviewAccept: TButton;
     cboReviewer: TComboBox;
+    btnReviewHistory: TButton;
     FProjectMembers: TArray<TProjectMember>;
     FSuppressReviewerChange: Boolean;
     FMeasureCounts: TDictionary<Integer, Integer>;
@@ -305,6 +306,8 @@ type
     procedure ReviewSubmitClick(Sender: TObject);
     procedure ReviewReturnClick(Sender: TObject);
     procedure ReviewAcceptClick(Sender: TObject);
+    procedure ReviewHistoryClick(Sender: TObject);
+    procedure ShowReviewHistory;
     function IsAssessmentDueDateOverdue(const AAssessment: TRequirementAssessment): Boolean;
     procedure SetBausteinApplicability(AStatus: TApplicabilityStatus; ABausteinId: Integer = 0);
   public
@@ -536,9 +539,21 @@ begin
     'Weist den Baustein einem Pr'#$00FC'fer oder Besitzer zu. Ohne Zuweisung darf jeder Pr'#$00FC'fer abnehmen.';
   cboReviewer.ShowHint := True;
   cboReviewer.OnChange := AssignReviewerChange;
+  btnReviewHistory := TButton.Create(Self);
+  btnReviewHistory.Parent := FReviewPanel;
+  btnReviewHistory.Caption := 'Historie';
+  btnReviewHistory.Width := 80;
+  btnReviewHistory.Height := 25;
+  btnReviewHistory.Top := 1;
+  btnReviewHistory.Anchors := [akTop, akRight];
+  btnReviewHistory.OnClick := ReviewHistoryClick;
+  btnReviewHistory.Hint :=
+    'Zeigt, wer den Baustein wann eingereicht, zur'#$00FC'ckgegeben oder abgenommen hat.';
+  btnReviewHistory.ShowHint := True;
   btnReviewAccept.Left := FReviewPanel.ClientWidth - btnReviewAccept.Width;
   btnReviewReturn.Left := btnReviewAccept.Left - btnReviewReturn.Width - 8;
   btnReviewSubmit.Left := btnReviewReturn.Left - btnReviewSubmit.Width - 8;
+  btnReviewHistory.Left := btnReviewSubmit.Left - btnReviewHistory.Width - 8;
   lblReviewNote := TLabel.Create(Self);
   lblReviewNote.Parent := grpRequirements;
   lblReviewNote.Left := 8;
@@ -1482,10 +1497,17 @@ begin
         FSuppressReviewerChange := False;
       end;
     end;
+    if btnReviewHistory <> nil then
+    begin
+      btnReviewHistory.Visible := FContext.IsRemote and not InheritedBs;
+      btnReviewHistory.Enabled := btnReviewHistory.Visible;
+    end;
   end;
   btnReviewAccept.Left := FReviewPanel.ClientWidth - btnReviewAccept.Width;
   btnReviewReturn.Left := btnReviewAccept.Left - btnReviewReturn.Width - 8;
   btnReviewSubmit.Left := btnReviewReturn.Left - btnReviewSubmit.Width - 8;
+  if btnReviewHistory <> nil then
+    btnReviewHistory.Left := btnReviewSubmit.Left - btnReviewHistory.Width - 8;
 end;
 
 procedure TMainForm.AssignReviewerChange(Sender: TObject);
@@ -1550,6 +1572,121 @@ end;
 procedure TMainForm.ReviewAcceptClick(Sender: TObject);
 begin
   ApplyReviewAction(ReviewActionAccept, '', nil);
+end;
+
+procedure TMainForm.ReviewHistoryClick(Sender: TObject);
+begin
+  ShowReviewHistory;
+end;
+
+procedure TMainForm.ShowReviewHistory;
+var
+  Dlg: TForm;
+  Grid: TStringGrid;
+  BtnClose: TButton;
+  Events: TArray<TBausteinReviewEvent>;
+  Event: TBausteinReviewEvent;
+  I, J, K, Row: Integer;
+  Details, ReqLabel, When: string;
+begin
+  if not WorkflowActive or (FActiveTarget.Id = 0) or (FActiveBausteinId <= 0) then
+    Exit;
+  if IsInheritedBaustein(FActiveBausteinId) or (not FContext.IsRemote) then
+    Exit;
+  Events := FContext.TargetObjectRepository.LoadReviewHistory(
+    FActiveProject.Id, FActiveTarget.Id, FActiveBausteinId);
+  if (Length(Events) = 0) and (FContext.TargetObjectRepository.LastError <> '') then
+  begin
+    MessageDlg(FContext.TargetObjectRepository.LastError, mtWarning, [mbOK], 0);
+    Exit;
+  end;
+  Dlg := TForm.Create(Self);
+  try
+    Dlg.Caption := 'Pr'#$00FC'fhistorie';
+    Dlg.BorderStyle := bsDialog;
+    Dlg.Position := poOwnerFormCenter;
+    Dlg.ClientWidth := 720;
+    Dlg.ClientHeight := 360;
+    Dlg.Font.Name := 'Segoe UI';
+    Dlg.Font.Height := -12;
+    Grid := TStringGrid.Create(Dlg);
+    Grid.Parent := Dlg;
+    Grid.Left := 12;
+    Grid.Top := 12;
+    Grid.Width := Dlg.ClientWidth - 24;
+    Grid.Height := 300;
+    Grid.Anchors := [akLeft, akTop, akRight, akBottom];
+    Grid.ColCount := 4;
+    Grid.RowCount := 2;
+    Grid.FixedRows := 1;
+    Grid.Options := Grid.Options + [goRowSelect, goColSizing] - [goRangeSelect];
+    Grid.Cells[0, 0] := 'Zeit';
+    Grid.Cells[1, 0] := 'Aktion';
+    Grid.Cells[2, 0] := 'Von';
+    Grid.Cells[3, 0] := 'Begr'#$00FC'ndung';
+    Grid.ColWidths[0] := 120;
+    Grid.ColWidths[1] := 110;
+    Grid.ColWidths[2] := 140;
+    Grid.ColWidths[3] := 300;
+    if Length(Events) = 0 then
+    begin
+      Grid.Cells[0, 1] := 'Noch keine Eintr'#$00E4'ge.';
+      Grid.Cells[1, 1] := '';
+      Grid.Cells[2, 1] := '';
+      Grid.Cells[3, 1] := '';
+    end
+    else
+    begin
+      Grid.RowCount := Length(Events) + 1;
+      for I := 0 to High(Events) do
+      begin
+        Event := Events[I];
+        Row := I + 1;
+        if Event.CreatedAt > 0 then
+          When := FormatDateTime('dd.mm.yyyy hh:nn', Event.CreatedAt)
+        else
+          When := '';
+        Details := Event.Note;
+        for J := 0 to High(Event.ReturnedRequirementIds) do
+        begin
+          ReqLabel := '';
+          for K := 0 to High(FCurrentRequirements) do
+            if FCurrentRequirements[K].Id = Event.ReturnedRequirementIds[J] then
+            begin
+              ReqLabel := FCurrentRequirements[K].ExternalId;
+              Break;
+            end;
+          if ReqLabel = '' then
+            ReqLabel := IntToStr(Event.ReturnedRequirementIds[J]);
+          if Details = '' then
+            Details := 'Teilr'#$00FC'ckgabe: ' + ReqLabel
+          else if Pos('Teilr'#$00FC'ckgabe:', Details) = 0 then
+            Details := Details + sLineBreak + 'Teilr'#$00FC'ckgabe: ' + ReqLabel
+          else
+            Details := Details + ', ' + ReqLabel;
+        end;
+        Grid.Cells[0, Row] := When;
+        Grid.Cells[1, Row] := ReviewActionLabel(Event.Action);
+        Grid.Cells[2, Row] := Event.ActorName;
+        Grid.Cells[3, Row] := Details;
+      end;
+    end;
+    EnableGridColumnSizing(Grid);
+    BtnClose := TButton.Create(Dlg);
+    BtnClose.Parent := Dlg;
+    BtnClose.Caption := 'Schlie'#$00DF'en';
+    BtnClose.ModalResult := mrOk;
+    BtnClose.Default := True;
+    BtnClose.Cancel := True;
+    BtnClose.Width := 90;
+    BtnClose.Height := 25;
+    BtnClose.Left := Dlg.ClientWidth - BtnClose.Width - 12;
+    BtnClose.Top := Dlg.ClientHeight - BtnClose.Height - 12;
+    BtnClose.Anchors := [akRight, akBottom];
+    Dlg.ShowModal;
+  finally
+    Dlg.Free;
+  end;
 end;
 
 function TMainForm.PromptReviewReturn(out ANote: string; out ARequirementIds: TArray<Integer>): Boolean;

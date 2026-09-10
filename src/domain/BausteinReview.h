@@ -1,6 +1,7 @@
 #ifndef DOMAIN_BAUSTEINREVIEW_H
 #define DOMAIN_BAUSTEINREVIEW_H
 
+#include <QDateTime>
 #include <QList>
 #include <QString>
 
@@ -22,6 +23,21 @@ struct BausteinReview {
     QList<int> returnedRequirementIds;
     int assignedReviewerId = 0;
     QString assignedReviewerName;
+};
+
+struct BausteinReviewEvent {
+    int id = 0;
+    int projectId = 0;
+    int targetObjectId = 0;
+    int bausteinId = 0;
+    QString action;
+    QString fromState;
+    QString toState;
+    QString note;
+    QList<int> returnedRequirementIds;
+    int actorId = 0;
+    QString actorName;
+    QDateTime createdAt;
 };
 
 struct ReviewSaveResult {
@@ -64,6 +80,18 @@ inline QString reviewStateLabel(const QString &value)
     if (state == ReviewStateAccepted)
         return QStringLiteral("Abgenommen");
     return QStringLiteral("In Bearbeitung");
+}
+
+inline QString reviewActionLabel(const QString &value)
+{
+    const QString action = value.trimmed();
+    if (action == ReviewActionSubmit)
+        return QStringLiteral("Eingereicht");
+    if (action == ReviewActionReturn)
+        return QStringLiteral("Zurückgegeben");
+    if (action == ReviewActionAccept)
+        return QStringLiteral("Abgenommen");
+    return action;
 }
 
 inline BausteinReview defaultBausteinReview(int projectId, int targetObjectId, int bausteinId)

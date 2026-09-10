@@ -148,11 +148,11 @@ func TestWorkplaceReviewerAssignForm(t *testing.T) {
 	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
 	var buf bytes.Buffer
 	err := ui.tmpl.ExecuteTemplate(&buf, "workplace", webPage{
-		CanAssign:    true,
-		CanSubmit:    true,
-		Project:      domain.Project{ID: 1, WorkflowEnabled: true},
-		Target:       domain.TargetObject{ID: 2},
-		Baustein:     domain.Baustein{ID: 9, ExternalID: "APP.1", Title: "Office"},
+		CanAssign:     true,
+		CanSubmit:     true,
+		Project:       domain.Project{ID: 1, WorkflowEnabled: true},
+		Target:        domain.TargetObject{ID: 2},
+		Baustein:      domain.Baustein{ID: 9, ExternalID: "APP.1", Title: "Office"},
 		StatusFilters: []string{"Anwendbar"},
 		StatusFilter:  "Anwendbar",
 		Reviewers: []repository.ProjectMember{{
@@ -168,15 +168,46 @@ func TestWorkplaceReviewerAssignForm(t *testing.T) {
 	}
 }
 
+func TestWorkplaceReviewHistory(t *testing.T) {
+	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
+	created := time.Date(2026, 9, 10, 16, 5, 0, 0, time.UTC)
+	var buf bytes.Buffer
+	err := ui.tmpl.ExecuteTemplate(&buf, "workplace", webPage{
+		Project:       domain.Project{ID: 1, WorkflowEnabled: true},
+		Target:        domain.TargetObject{ID: 2},
+		Baustein:      domain.Baustein{ID: 9, ExternalID: "APP.1", Title: "Office"},
+		StatusFilters: []string{"Anwendbar"},
+		StatusFilter:  "Anwendbar",
+		ReviewHistory: []webReviewEvent{{
+			BausteinReviewEvent: domain.BausteinReviewEvent{
+				Action:    domain.ReviewActionReturn,
+				Note:      "Logging fehlt",
+				ActorName: "Anna Prüfer",
+				CreatedAt: created,
+			},
+			RequirementLabels: []string{"APP.1.A3"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, "Historie") || !strings.Contains(body, "Zurückgegeben") ||
+		!strings.Contains(body, "Logging fehlt") || !strings.Contains(body, "Anna Prüfer") ||
+		!strings.Contains(body, "APP.1.A3") {
+		t.Fatalf("history missing: %s", body)
+	}
+}
+
 func TestWorkplaceModelLockActions(t *testing.T) {
 	ui := newWebUI(auth.NewService("test-secret", time.Hour), nil, nil, "", nil)
 	page := webPage{
-		CanEdit:      true,
-		CanEditModel: false,
-		CanOwn:       false,
-		Project:      domain.Project{ID: 1},
-		Target:       domain.TargetObject{ID: 2, Name: "Cluster", Type: "IT-System", ModelLocked: true},
-		CanSubmit:    true,
+		CanEdit:       true,
+		CanEditModel:  false,
+		CanOwn:        false,
+		Project:       domain.Project{ID: 1},
+		Target:        domain.TargetObject{ID: 2, Name: "Cluster", Type: "IT-System", ModelLocked: true},
+		CanSubmit:     true,
 		StatusFilters: []string{"Anwendbar"},
 		StatusFilter:  "Anwendbar",
 	}

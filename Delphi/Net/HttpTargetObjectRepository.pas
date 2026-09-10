@@ -31,6 +31,7 @@ type
       const ARequirementIds: TArray<Integer>): TReviewSaveResult; override;
     function AssignReviewer(AProjectId, ATargetObjectId, ABausteinId,
       AAssignedReviewerId: Integer): TReviewSaveResult; override;
+    function LoadReviewHistory(AProjectId, ATargetObjectId, ABausteinId: Integer): TArray<TBausteinReviewEvent>; override;
     function GetLastError: string; override;
   end;
 
@@ -486,6 +487,33 @@ begin
     end;
   finally
     Body.Free;
+  end;
+end;
+
+function THttpTargetObjectRepository.LoadReviewHistory(AProjectId, ATargetObjectId, ABausteinId: Integer): TArray<TBausteinReviewEvent>;
+var
+  Doc: TJSONValue;
+  Arr: TJSONArray;
+  I: Integer;
+  Status: Integer;
+begin
+  SetLength(Result, 0);
+  FLastError := '';
+  Doc := FClient.Get(Format('/api/v1/projects/%d/target-objects/%d/bausteine/%d/review/history',
+    [AProjectId, ATargetObjectId, ABausteinId]), Status);
+  try
+    if (Status <> 200) or not (Doc is TJSONArray) then
+    begin
+      FLastError := FClient.LastError;
+      Exit;
+    end;
+    Arr := TJSONArray(Doc);
+    SetLength(Result, Arr.Count);
+    for I := 0 to Arr.Count - 1 do
+      if Arr.Items[I] is TJSONObject then
+        Result[I] := BausteinReviewEventFromJson(TJSONObject(Arr.Items[I]));
+  finally
+    Doc.Free;
   end;
 end;
 

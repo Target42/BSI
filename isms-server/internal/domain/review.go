@@ -47,6 +47,21 @@ type BausteinReview struct {
 	UpdatedAt              time.Time  `json:"updatedAt,omitempty"`
 }
 
+type BausteinReviewEvent struct {
+	ID                     int64     `json:"id"`
+	ProjectID              int64     `json:"projectId"`
+	TargetObjectID         int64     `json:"targetObjectId"`
+	BausteinID             int64     `json:"bausteinId"`
+	Action                 string    `json:"action"`
+	FromState              string    `json:"fromState"`
+	ToState                string    `json:"toState"`
+	Note                   string    `json:"note"`
+	ReturnedRequirementIDs []int64   `json:"returnedRequirementIds,omitempty"`
+	ActorID                int64     `json:"actorId,omitempty"`
+	ActorName              string    `json:"actorName,omitempty"`
+	CreatedAt              time.Time `json:"createdAt"`
+}
+
 func NormalizeReviewState(value string) string {
 	switch strings.TrimSpace(value) {
 	case ReviewSubmitted, ReviewReturned, ReviewAccepted:
@@ -66,6 +81,19 @@ func ReviewStateLabel(value string) string {
 		return "Abgenommen"
 	default:
 		return "In Bearbeitung"
+	}
+}
+
+func ReviewActionLabel(value string) string {
+	switch strings.TrimSpace(value) {
+	case ReviewActionSubmit:
+		return "Eingereicht"
+	case ReviewActionReturn:
+		return "Zurückgegeben"
+	case ReviewActionAccept:
+		return "Abgenommen"
+	default:
+		return strings.TrimSpace(value)
 	}
 }
 

@@ -118,6 +118,7 @@ func (s *Server) Router() http.Handler {
 			protected.Get("/projects/{projectID}/reviews", s.reviewHandler.ListProject)
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/reviews", s.reviewHandler.List)
 			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/review", s.reviewHandler.Get)
+			protected.Get("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/review/history", s.reviewHandler.History)
 			protected.Post("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/review", s.reviewHandler.Apply)
 			protected.Put("/projects/{projectID}/target-objects/{targetObjectID}/bausteine/{bausteinID}/reviewer", s.reviewHandler.Assign)
 

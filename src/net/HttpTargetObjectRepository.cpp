@@ -337,6 +337,30 @@ ReviewSaveResult HttpTargetObjectRepository::assignReviewer(int projectId, int t
     return ReviewSaveResult::failed();
 }
 
+QList<BausteinReviewEvent> HttpTargetObjectRepository::loadReviewHistory(int projectId, int targetObjectId,
+                                                                         int bausteinId) const
+{
+    m_lastError.clear();
+    int status = 0;
+    const QJsonDocument doc = m_client.get(
+        QStringLiteral("/api/v1/projects/%1/target-objects/%2/bausteine/%3/review/history")
+            .arg(projectId)
+            .arg(targetObjectId)
+            .arg(bausteinId),
+        &status);
+    if (status != 200 || !doc.isArray()) {
+        m_lastError = m_client.lastError();
+        return {};
+    }
+    QList<BausteinReviewEvent> events;
+    for (const QJsonValue &value : doc.array()) {
+        if (!value.isObject())
+            continue;
+        events.append(bausteinReviewEventFromJson(value.toObject()));
+    }
+    return events;
+}
+
 QString HttpTargetObjectRepository::lastError() const
 {
     if (!m_lastError.isEmpty())

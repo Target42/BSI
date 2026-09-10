@@ -113,6 +113,7 @@ type webPage struct {
 	TaskOverdueCount      int
 	Mine                  bool
 	Review                domain.BausteinReview
+	ReviewHistory         []webReviewEvent
 	CanSubmit             bool
 	CanReview             bool
 	CanAssign             bool
@@ -143,6 +144,11 @@ type webWorkReq struct {
 	Status   string
 	Overdue  bool
 	Returned bool
+}
+
+type webReviewEvent struct {
+	domain.BausteinReviewEvent
+	RequirementLabels []string
 }
 
 type webRecommendation struct {
@@ -234,7 +240,9 @@ func newWebUI(authService *auth.Service, store *repository.Store, reports *servi
 		"dueValue":          dueValue,
 		"statusClass":       statusClass,
 		"reviewLabel":       domain.ReviewStateLabel,
+		"reviewActionLabel": domain.ReviewActionLabel,
 		"reviewFilterLabel": reviewFilterLabel,
+		"formatDateTime":    formatWebDateTime,
 		"padLeft":           padLeft,
 		"reqHTML":           reqHTML,
 		"responsibleLegacy": responsibleLegacy,
@@ -1845,6 +1853,13 @@ func formatWebDate(t time.Time) string {
 		return "—"
 	}
 	return t.Local().Format("02.01.2006")
+}
+
+func formatWebDateTime(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	return t.Local().Format("02.01.2006 15:04")
 }
 
 func formatDueDate(raw *string) string {
