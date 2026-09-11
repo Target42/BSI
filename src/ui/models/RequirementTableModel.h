@@ -14,14 +14,13 @@ class RequirementTableModel : public QAbstractTableModel
 public:
     enum Column {
         ExternalIdColumn = 0,
-        TitleColumn,
         LevelColumn,
         RoleColumn,
         StatusColumn,
         ResponsibleColumn,
         DueDateColumn,
         MeasureCountColumn,
-        TextColumn,
+        TitleColumn,
         ColumnCount
     };
 

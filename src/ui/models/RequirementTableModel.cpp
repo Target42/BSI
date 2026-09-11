@@ -82,8 +82,8 @@ QVariant RequirementTableModel::data(const QModelIndex &index, int role) const
         return QBrush(Qt::red);
     }
 
-    if (role == Qt::ToolTipRole && index.column() == TextColumn)
-        return row.requirement.text;
+    if (role == Qt::ToolTipRole && index.column() == TitleColumn)
+        return row.requirement.title;
 
     if (role != Qt::DisplayRole)
         return {};
@@ -91,8 +91,6 @@ QVariant RequirementTableModel::data(const QModelIndex &index, int role) const
     switch (index.column()) {
     case ExternalIdColumn:
         return row.requirement.externalId;
-    case TitleColumn:
-        return row.requirement.title;
     case LevelColumn:
         return requirementLevelToString(row.requirement.level);
     case RoleColumn:
@@ -111,8 +109,8 @@ QVariant RequirementTableModel::data(const QModelIndex &index, int role) const
         if (!row.hasAssessment || row.assessment.measureCount == 0)
             return {};
         return row.assessment.measureCount;
-    case TextColumn:
-        return row.requirement.text;
+    case TitleColumn:
+        return row.requirement.title;
     default:
         return {};
     }
@@ -126,8 +124,6 @@ QVariant RequirementTableModel::headerData(int section, Qt::Orientation orientat
     switch (section) {
     case ExternalIdColumn:
         return QStringLiteral("ID");
-    case TitleColumn:
-        return QStringLiteral("Anforderung");
     case LevelColumn:
         return QStringLiteral("Stufe");
     case RoleColumn:
@@ -140,8 +136,8 @@ QVariant RequirementTableModel::headerData(int section, Qt::Orientation orientat
         return QStringLiteral("Frist");
     case MeasureCountColumn:
         return QStringLiteral("Maßnahmen");
-    case TextColumn:
-        return QStringLiteral("Anforderungstext");
+    case TitleColumn:
+        return QStringLiteral("Anforderung");
     default:
         return {};
     }
