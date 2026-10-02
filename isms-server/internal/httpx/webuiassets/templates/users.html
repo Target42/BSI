@@ -17,6 +17,9 @@
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
+      <div class="split" data-split="cols" data-split-id="users" data-split-default="64">
+      <section class="group split-pane" aria-label="Konten">
+      <h2>Konten</h2>
       {{if not .Users}}
         <p class="muted">Keine Benutzer.</p>
       {{else}}
@@ -43,9 +46,10 @@
           </table>
         </div>
       {{end}}
-
-      <h2>Benutzer anlegen</h2>
-      <form class="card" method="post" action="{{href "/users"}}">
+      </section>
+      <div class="split-handle" role="separator" aria-orientation="vertical" aria-label="Liste und Formular trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
+      <form class="group split-pane" method="post" action="{{href "/users"}}">
+        <h2>Benutzer anlegen</h2>
         {{template "csrf" .}}
         <div class="form-grid">
           <div class="field">
@@ -67,6 +71,7 @@
         </label>
         <button class="btn" type="submit">Anlegen</button>
       </form>
+      </div>
     </main>
   </div>
 </body>

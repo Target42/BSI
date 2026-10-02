@@ -11,7 +11,7 @@
 <body>
   <div class="app">
     {{template "header" .}}
-    <main class="main">
+    <main class="main main-wide">
       <p>
         <a href="{{href (printf "/catalog?version=%s" .SelectedVersion)}}">Katalog</a>
         {{if .SelectedVersion}} · Version {{.SelectedVersion}}{{end}}
@@ -20,6 +20,9 @@
       {{if .Baustein.GroupName}}<p class="lede">{{.Baustein.GroupName}}</p>{{end}}
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 
+      <div class="split" data-split="cols" data-split-id="baustein" data-split-default="56">
+      <section class="group split-pane" aria-label="Anforderungen">
+      <h2>Anforderungen</h2>
       <form class="toolbar" method="get" action="{{href (printf "/catalog/bausteine/%d" .Baustein.ID)}}">
         {{if .HighlightID}}<input type="hidden" name="req" value="{{.HighlightID}}">{{end}}
         <div class="field">
@@ -57,7 +60,9 @@
           </table>
         </div>
       {{end}}
-
+      </section>
+      <div class="split-handle" role="separator" aria-orientation="vertical" aria-label="Liste und Anforderungstext trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
+      <section class="group split-pane" aria-label="Anforderungstext">
       {{if .Requirement.ID}}
         <h2>{{.Requirement.ExternalID}} {{.Requirement.Title}}</h2>
         {{if .Requirement.Text}}
@@ -65,7 +70,12 @@
         {{else}}
           <p class="muted">Kein Anforderungstext hinterlegt.</p>
         {{end}}
+      {{else}}
+        <h2>Anforderungstext</h2>
+        <p class="muted">Links eine Anforderung auswählen.</p>
       {{end}}
+      </section>
+      </div>
     </main>
   </div>
 </body>

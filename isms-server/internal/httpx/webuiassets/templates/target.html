@@ -40,8 +40,11 @@
       {{end}}
 
       {{if .CanEditModel}}
-      <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">
+      <form method="post" action="{{href (printf "/projects/%d/targets/%d/edit" .Project.ID .Target.ID)}}">
         {{template "csrf" .}}
+        <div class="split" data-split="cols" data-split-id="target-edit" data-split-default="46">
+        <section class="group split-pane" aria-label="Zielobjekt">
+        <h2>Zielobjekt</h2>
         <div class="field">
           <label for="name">Name</label>
           <input id="name" name="name" required value="{{.Target.Name}}">
@@ -73,6 +76,9 @@
         {{else}}
         <p class="muted">Informationsverbund — Wurzel des Projekts, nicht verschiebbar.</p>
         {{end}}
+        </section>
+        <div class="split-handle" role="separator" aria-orientation="vertical" aria-label="Stammdaten und Schutzbedarf trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
+        <section class="group split-pane" aria-label="Schutzbedarf">
         <h2>Schutzbedarf (C/I/A)</h2>
         <div class="form-grid">
           <div class="field">
@@ -110,6 +116,8 @@
           <textarea id="description" name="description" rows="4">{{.Target.Description}}</textarea>
         </div>
         <button class="btn" type="submit">Speichern</button>
+        </section>
+        </div>
       </form>
       {{if gt .Target.ParentID 0}}
       <form class="card danger-card" method="post" action="{{href (printf "/projects/%d/targets/%d/delete" .Project.ID .Target.ID)}}">

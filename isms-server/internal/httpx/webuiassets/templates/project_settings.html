@@ -22,8 +22,11 @@
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 
       {{if .CanEdit}}
-      <form class="card" method="post" action="{{href (printf "/projects/%d/edit" .Project.ID)}}">
+      <form method="post" action="{{href (printf "/projects/%d/edit" .Project.ID)}}">
         {{template "csrf" .}}
+        <div class="split" data-split="cols" data-split-id="project-edit" data-split-default="50">
+        <section class="group split-pane" aria-label="Projektdaten">
+        <h2>Projektdaten</h2>
         <div class="field">
           <label for="name">Name</label>
           <input id="name" name="name" required value="{{.Project.Name}}">
@@ -32,6 +35,11 @@
           <label for="description">Beschreibung</label>
           <textarea id="description" name="description" rows="4">{{.Project.Description}}</textarea>
         </div>
+        <p class="muted">Katalogversion {{.Project.CatalogVersion}} (beim Anlegen festgelegt).</p>
+        </section>
+        <div class="split-handle" role="separator" aria-orientation="vertical" aria-label="Projektdaten und Einstellungen trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
+        <section class="group split-pane" aria-label="Einstellungen">
+        <h2>Einstellungen</h2>
         {{if .CanOwn}}
         <fieldset class="field">
           <legend>Sichtbarkeit</legend>
@@ -61,10 +69,11 @@
         {{else}}
         <p class="muted">Prüfkreislauf: {{if .Project.WorkflowEnabled}}aktiv{{else}}aus{{end}}. Nur der Besitzer kann das ändern.</p>
         {{end}}
-        <p class="muted">Katalogversion {{.Project.CatalogVersion}} (beim Anlegen festgelegt).</p>
         <div class="form-actions">
           <button class="btn" type="submit">Speichern</button>
           <a class="btn btn-secondary" href="{{href (printf "/projects/%d" .Project.ID)}}">Abbrechen</a>
+        </div>
+        </section>
         </div>
       </form>
       {{else}}

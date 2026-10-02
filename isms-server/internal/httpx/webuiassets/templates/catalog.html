@@ -38,7 +38,7 @@
         {{if not .CatalogGroups}}
           <p class="muted">Keine Treffer für diese Suche.</p>
         {{else}}
-          <div class="tree">
+          <div class="tree" data-layout="board">
             {{range .CatalogGroups}}
             <details>
               <summary>{{.Name}} <span class="tree-count">{{len .Hits}}</span></summary>
@@ -64,7 +64,7 @@
           <p class="muted">Kein Katalog für Version {{.SelectedVersion}}. Administratoren können unten XML einspielen.</p>
         {{else}}
           <p class="muted">{{.BausteinCount}} Bausteine in {{len .CatalogGroups}} Kapiteln, wie im Desktop-Client. Kapitel auf- und zuklappen.</p>
-          <div class="tree">
+          <div class="tree" data-layout="board">
             {{range .CatalogGroups}}
             <details>
               <summary>{{.Name}} <span class="tree-count">{{len .Bausteine}}</span></summary>

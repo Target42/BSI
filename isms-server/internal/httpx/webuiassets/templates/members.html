@@ -21,6 +21,9 @@
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
+      <div class="split" data-split="cols" data-split-id="members" data-split-default="64">
+      <section class="group split-pane" aria-label="Mitglieder">
+      <h2>Mitglieder</h2>
       {{if not .Members}}
         <p class="muted">Keine Mitglieder.</p>
       {{else}}
@@ -78,10 +81,12 @@
           </table>
         </div>
       {{end}}
-
+      </section>
+      <div class="split-handle" role="separator" aria-orientation="vertical" aria-label="Liste und Formular trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
+      <section class="group split-pane" aria-label="Mitglied hinzufügen">
       {{if .CanOwn}}
       <h2>Mitglied hinzufügen</h2>
-      <form class="card" method="post" action="{{href (printf "/projects/%d/members" .Project.ID)}}">
+      <form method="post" action="{{href (printf "/projects/%d/members" .Project.ID)}}">
         {{template "csrf" .}}
         <div class="form-grid">
           <div class="field">
@@ -100,8 +105,11 @@
         <button class="btn" type="submit">Hinzufügen</button>
       </form>
       {{else}}
+        <h2>Mitglied hinzufügen</h2>
         <p class="muted">Rollen ändern kann nur ein Besitzer.</p>
       {{end}}
+      </section>
+      </div>
     </main>
   </div>
 </body>

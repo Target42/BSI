@@ -11,7 +11,7 @@
 <body>
   <div class="app">
     {{template "header" .}}
-    <main class="main">
+    <main class="main main-wide">
       <p>
         <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
         /
@@ -53,27 +53,9 @@
       </form>
 
       {{if and .CanEdit .ApplicabilityRows}}
-      <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/applicability/bulk" .Project.ID .Target.ID)}}">
-        {{template "csrf" .}}
-        <input type="hidden" name="q" value="{{.Query}}">
-        <input type="hidden" name="filter" value="{{.StatusFilter}}">
-        <input type="hidden" name="highlight" value="{{if .HighlightRecs}}1{{else}}0{{end}}">
-        <h2>Massenstatus</h2>
-        <p class="muted">Wirkt auf alle {{len .ApplicabilityRows}} gerade sichtbaren Zeilen (nach Suche und Filter). Einzelne Zeilen weiter unten einzeln speichern.</p>
-        <div class="form-grid">
-          <div class="field">
-            <label for="bulkStatus">Status</label>
-            <select id="bulkStatus" name="status" required>
-              <option value="">Status wählen…</option>
-              {{range .ApplicabilityStatuses}}
-              <option value="{{.}}">{{.}}</option>
-              {{end}}
-              <option value="Ungesetzt">Ungesetzt</option>
-            </select>
-          </div>
-        </div>
-        <button class="btn" type="submit">Sichtbare setzen</button>
-      </form>
+      <div class="split" data-split="cols" data-split-id="applicability" data-split-default="72">
+      <section class="group split-pane" aria-label="Bausteine">
+      <h2>Bausteine</h2>
       {{end}}
 
       {{if not .ApplicabilityRows}}
@@ -127,6 +109,31 @@
             </tbody>
           </table>
         </div>
+      {{end}}
+
+      {{if and .CanEdit .ApplicabilityRows}}
+      </section>
+      <div class="split-handle" role="separator" aria-orientation="vertical" aria-label="Liste und Massenstatus trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
+      <form class="group split-pane" method="post" action="{{href (printf "/projects/%d/targets/%d/applicability/bulk" .Project.ID .Target.ID)}}">
+        {{template "csrf" .}}
+        <input type="hidden" name="q" value="{{.Query}}">
+        <input type="hidden" name="filter" value="{{.StatusFilter}}">
+        <input type="hidden" name="highlight" value="{{if .HighlightRecs}}1{{else}}0{{end}}">
+        <h2>Massenstatus</h2>
+        <p class="muted">Wirkt auf alle {{len .ApplicabilityRows}} gerade sichtbaren Zeilen (nach Suche und Filter). Einzelne Zeilen links einzeln speichern.</p>
+        <div class="field">
+          <label for="bulkStatus">Status</label>
+          <select id="bulkStatus" name="status" required>
+            <option value="">Status wählen…</option>
+            {{range .ApplicabilityStatuses}}
+            <option value="{{.}}">{{.}}</option>
+            {{end}}
+            <option value="Ungesetzt">Ungesetzt</option>
+          </select>
+        </div>
+        <button class="btn" type="submit">Sichtbare setzen</button>
+      </form>
+      </div>
       {{end}}
     </main>
   </div>

@@ -11,7 +11,8 @@
 <body>
   <div class="app">
     {{template "header" .}}
-    <main class="main">
+    <main class="main main-screen">
+      <div class="page-head">
       <p>
         <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
         / {{.Target.Name}}
@@ -42,7 +43,11 @@
         </form>
         {{end}}
       </p>
+      </div>
 
+      <div class="split split-screen" data-split="cols" data-split-id="workplace" data-split-default="34">
+      <section class="group split-pane" aria-label="Bausteine">
+      <h2>Bausteine</h2>
       <form class="toolbar" method="get" action="{{href (printf "/projects/%d/targets/%d" .Project.ID .Target.ID)}}">
         {{if .HighlightID}}<input type="hidden" name="baustein" value="{{.HighlightID}}">{{end}}
         <div class="field">
@@ -103,8 +108,12 @@
           </table>
         </div>
       {{end}}
+      </section>
+      <div class="split-handle" role="separator" aria-orientation="vertical" aria-label="Bausteine und Anforderungen trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
 
       {{if .Baustein.ID}}
+      <div class="split split-screen" data-split="rows" data-split-id="workplace-detail" data-split-default="58">
+      <section class="group split-pane" aria-label="Anforderungen">
         <h2>{{.Baustein.ExternalID}} {{.Baustein.Title}}</h2>
         <p class="muted"><a href="{{href (printf "/catalog/bausteine/%d" .Baustein.ID)}}">Im Katalog anzeigen</a></p>
         {{if $.Project.WorkflowEnabled}}
@@ -152,6 +161,9 @@
             </table>
           </div>
         {{end}}
+      </section>
+      <div class="split-handle" role="separator" aria-orientation="horizontal" aria-label="Anforderungen und Bearbeitung trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
+      <section class="group split-pane" aria-label="Bearbeitung">
         {{if and $.CanEdit (not $.Inherited) (not $.ReviewLocked) $.WorkReqs}}
         <form class="card" method="post" action="{{href (printf "/projects/%d/targets/%d/assessments/bulk" $.Project.ID $.Target.ID)}}">
           {{template "csrf" $}}
@@ -276,7 +288,15 @@
           {{end}}
         </div>
         {{end}}
+      </section>
+      </div>
+      {{else}}
+      <section class="group split-pane" aria-label="Anforderungen">
+        <h2>Anforderungen</h2>
+        <p class="muted">Links einen Baustein auswählen.</p>
+      </section>
       {{end}}
+      </div>
     </main>
   </div>
 </body>

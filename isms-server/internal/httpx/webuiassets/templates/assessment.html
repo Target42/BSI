@@ -11,7 +11,7 @@
 <body>
   <div class="app">
     {{template "header" .}}
-    <main class="main">
+    <main class="main main-wide">
       <p>
         <a href="{{href (printf "/projects/%d" .Project.ID)}}">{{.Project.Name}}</a>
         /
@@ -27,6 +27,9 @@
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
+      <div class="split" data-split="cols" data-split-id="assessment" data-split-default="48">
+      <section class="group split-pane" aria-label="Bewertung">
+      <h2>Bewertung</h2>
       {{if .Requirement.Text}}
         <div class="req-text">{{reqHTML .Requirement.Text}}</div>
       {{end}}
@@ -116,6 +119,9 @@
         <div class="req-text">{{.Deviation}}</div>
       {{end}}
       {{end}}
+      </section>
+      <div class="split-handle" role="separator" aria-orientation="vertical" aria-label="Bewertung und Maßnahmen trennen" title="Ziehen zum Anpassen, Doppelklick setzt zurück" tabindex="0"></div>
+      <section class="group split-pane" aria-label="Maßnahmen">
 
       <h2>Maßnahmen zu dieser Anforderung</h2>
       {{if not .RelatedMeasures}}
@@ -188,6 +194,8 @@
         <button class="btn" type="submit">Maßnahme anlegen</button>
       </form>
       {{end}}
+      </section>
+      </div>
     </main>
   </div>
 </body>
