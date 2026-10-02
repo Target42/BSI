@@ -15,14 +15,17 @@ description: |
 contents:
   - src: ${ISMS_CLIENT_BIN}
     dst: /usr/bin/isms-werkzeug
+    expand: true
     file_info:
       mode: 0755
   - src: ${ISMS_ROOT}/packaging/isms-client/isms-werkzeug.desktop
     dst: /usr/share/applications/isms-werkzeug.desktop
+    expand: true
     file_info:
       mode: 0644
   - src: ${ISMS_ROOT}/packaging/isms-client/isms-werkzeug.svg
     dst: /usr/share/icons/hicolor/scalable/apps/isms-werkzeug.svg
+    expand: true
     file_info:
       mode: 0644
 scripts:
@@ -40,8 +43,8 @@ overrides:
       - libqt6sql6 | libqt6sql6t64
       - libqt6xml6 | libqt6xml6t64
       - libqt6printsupport6 | libqt6printsupport6t64
-    recommends:
       - libqt6sql6-sqlite
+    recommends:
       - libhunspell-1.7-0 | libhunspell-1.7-0t64
       - hunspell-de-de
   rpm:
