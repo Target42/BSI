@@ -4,7 +4,7 @@
 # Voraussetzungen:
 #   - nfpm im PATH  (https://nfpm.goreleaser.com/install/)
 #   - Server: Go 1.22+  oder bereits gebaute Binary
-#   - Client: fertige Qt-Binary (qmake/make), z. B. build/ISMS
+#   - Client: qmake6 (wird gebaut) oder fertige Binary, z. B. build/ISMS
 #
 # Beispiele:
 #   ./scripts/build-linux-packages.sh
@@ -61,7 +61,34 @@ find_client_bin() {
       return 0
     fi
   done
+  local found
+  found="$(find "$ROOT_DIR" -maxdepth 3 -type f -name ISMS \
+    ! -path '*/isms-server/*' ! -path '*/Delphi/*' 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$found" && -x "$found" ]]; then
+    printf '%s' "$found"
+    return 0
+  fi
   return 1
+}
+
+build_client_bin() {
+  local qmake=""
+  local candidate
+  for candidate in qmake6 qmake-qt6 qmake; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      qmake=$candidate
+      break
+    fi
+  done
+  if [[ -z "$qmake" ]]; then
+    return 1
+  fi
+  local jobs
+  jobs="$(nproc 2>/dev/null || echo 2)"
+  echo "Qt-Client fehlt — baue mit $qmake …"
+  mkdir -p "$ROOT_DIR/build"
+  (cd "$ROOT_DIR/build" && "$qmake" "$ROOT_DIR/BSI.pro" "CONFIG+=release")
+  make -C "$ROOT_DIR/build" -j"$jobs"
 }
 
 ensure_server_bin() {
@@ -120,13 +147,18 @@ if [[ "$PACK_WHAT" == "all" || "$PACK_WHAT" == "server" ]]; then
 fi
 
 if [[ "$PACK_WHAT" == "all" || "$PACK_WHAT" == "client" ]]; then
-  if client_bin="$(find_client_bin)"; then
+  if ! client_bin="$(find_client_bin)"; then
+    build_client_bin || true
+    client_bin="$(find_client_bin || true)"
+  fi
+  if [[ -n "${client_bin:-}" ]]; then
     export ISMS_CLIENT_BIN="$client_bin"
     package_one "isms-werkzeug" "$ROOT_DIR/packaging/isms-client/nfpm.yaml" || failed=1
     did_any=1
   else
     echo "Client-Binary fehlt (erwartet z. B. build/ISMS)." >&2
-    echo "Unter Linux:  qmake BSI.pro && make   danach dieses Skript erneut." >&2
+    echo "Unter Linux:  sudo apt install qt6-base-dev qt6-base-dev-tools libhunspell-dev" >&2
+    echo "              qmake6 ../BSI.pro && make    (im Ordner build/)" >&2
     echo "Oder:  ISMS_CLIENT_BIN=/pfad/zur/ISMS $0 client" >&2
     if [[ "$PACK_WHAT" == "client" ]]; then
       failed=1

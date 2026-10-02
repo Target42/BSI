@@ -66,6 +66,12 @@ func NewServer(
 	}
 }
 
+func (s *Server) SetDownloadsDir(dir string) {
+	if s.webUI != nil {
+		s.webUI.downloadsDir = strings.TrimSpace(dir)
+	}
+}
+
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -161,6 +167,10 @@ func requestTimeout(next http.Handler) http.Handler {
 	long := middleware.Timeout(15 * time.Minute)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/admin/catalog/import") {
+			long(next).ServeHTTP(w, r)
+			return
+		}
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/downloads/") {
 			long(next).ServeHTTP(w, r)
 			return
 		}

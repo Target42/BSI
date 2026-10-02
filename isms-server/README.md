@@ -41,7 +41,9 @@ go run ./cmd/isms-server
 
 Beim ersten Start wird ein Admin-Benutzer angelegt (`admin@example.com` / `changeme`).
 
-**Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Öffentliche Projekte sind ohne Anmeldung sichtbar (nur Lesen). Private Projekte und Schreiben brauchen ein Konto und Mitgliedschaft. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen und pflegen, Zielobjekte, Arbeitsplatz (Bausteine/Anforderungen, Vererbung, Empfehlungen, Massenstatus), Katalog, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV und Druck. Administratoren legen Benutzer an und spielen den Katalog ein. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
+**Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Öffentliche Projekte sind ohne Anmeldung sichtbar (nur Lesen). Private Projekte und Schreiben brauchen ein Konto und Mitgliedschaft. Neue Benutzer registrieren sich selbst. Ein Besitzer nimmt sie per E-Mail auf oder erzeugt einen Einladungslink, der weitergegeben werden kann. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen und pflegen, Zielobjekte, Arbeitsplatz (Bausteine/Anforderungen, Vererbung, Empfehlungen, Massenstatus), Katalog, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV und Druck. Administratoren legen Benutzer an und spielen den Katalog ein. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
+
+Installer für die Qt-GUI und den Delphi-Client stecken **nicht** in der Binary. Liegen Dateien im Ordner `downloads`, bietet die Startseite den Download an. Siehe [Desktop-Clients zum Download](#desktop-clients-zum-download).
 
 **Katalog:** Ist die Datenbank noch leer, importiert der Server automatisch die IT-Grundschutz-XML, wenn er sie findet. Suchreihenfolge:
 
@@ -98,6 +100,7 @@ Umgebungsvariablen (optional `.env` im Verzeichnis `isms-server/`):
 | `ADMIN_EMAIL` | `admin@example.com` | Erster Admin (nur wenn DB leer) |
 | `ADMIN_PASSWORD` | `changeme` | Passwort für ersten Admin |
 | `ADMIN_DISPLAY_NAME` | `Administrator` | Anzeigename |
+| `DOWNLOADS_DIR` | `downloads` | Ordner für optionale Client-Installer. Ist er leer, bietet die Web-UI keinen Download |
 
 ### JWT-Secret erzeugen (Produktion)
 
@@ -126,6 +129,62 @@ HTTP_ADDR=:8443
 ```
 
 Im Qt-Client: `https://localhost:8443` und **„Self-signed TLS-Zertifikat akzeptieren“** aktivieren.
+
+## Desktop-Clients zum Download
+
+Die Installer für die **Qt-GUI** (Paket `isms-werkzeug`) und den **Delphi-Client** werden nicht mitübersetzt und nicht in die Server-Binary gepackt. Sie liegen in einem eigenen Verzeichnis auf dem Server. Der Administrator entscheidet, ob der Download angeboten wird: Dateien in den Ordner legen, oder den Ordner leer lassen, wenn die Software anders verteilt wird (Softwareverteilung, Paketquelle, USB).
+
+Die Web-Oberfläche liest den Ordner bei jedem Seitenaufruf. Ein Neustart des Dienstes ist zum Austauschen nicht nötig. Fehlt der Ordner oder enthält er keine Installer, erscheinen weder der Menüpunkt **Download** noch Links auf der Startseite.
+
+| Betrieb | Ordner |
+|---------|--------|
+| Entwicklung (`go run` im Ordner `isms-server`) | `isms-server/downloads/` |
+| Ubuntu, systemd oder Paket | `/opt/isms/downloads/` |
+| Windows-Dienst | `%ProgramData%\ISMS\downloads\` |
+
+Anderer Pfad über `DOWNLOADS_DIR` in `.env` bzw. `/etc/isms/isms.env`, danach den Dienst einmal neu starten, damit die Variable gilt. Die Dateien selbst lassen sich danach ohne Neustart ersetzen.
+
+Nur diese Endungen werden ausgeliefert: `.deb`, `.rpm`, `.AppImage`, `.exe`, `.msi`, `.msix`, `.zip`, `.dmg`, `.tgz`, `.tar.gz`. Andere Dateien (Notizen, `.env`) ignoriert der Server.
+
+Damit die Oberfläche die Programme benennt, muss der **Dateiname** einen dieser Bestandteile enthalten (Groß/Klein egal):
+
+| Dateiname enthält | Anzeige |
+|-------------------|---------|
+| `werkzeug` oder `qt-gui` | Qt-GUI |
+| `delphi` oder `bsiclient` | Delphi-Client |
+
+Beispiele:
+
+```text
+/opt/isms/downloads/isms-werkzeug_1.2.0_amd64.deb
+/opt/isms/downloads/isms-werkzeug-1.2.0-1.x86_64.rpm
+/opt/isms/downloads/BSIClient-Setup.exe
+```
+
+Die Linux-Pakete der Qt-GUI erzeugt `./scripts/build-linux-packages.sh client` unter `dist/packages/`. Den Delphi-Client als Setup-Datei ablegen, im Namen `BSIClient` oder `delphi`. Es reicht, nur die Varianten hinzulegen, die angeboten werden sollen — nur das `.deb`, oder nur die Windows-Datei des Delphi-Clients.
+
+### Dateien austauschen
+
+Neue Fassung anbieten: Datei hinzukopieren oder die bestehende **unter gleichem Namen überschreiben**. Alte Fassung entfernen: Datei löschen. Beides ist sofort in der Web-UI sichtbar, der Dienst bleibt laufen.
+
+Ubuntu, User `isms` muss die Dateien lesen können:
+
+```bash
+sudo install -o isms -g isms -m 0644 dist/packages/isms-werkzeug_*_amd64.deb /opt/isms/downloads/
+sudo install -o isms -g isms -m 0644 BSIClient-Setup.exe /opt/isms/downloads/
+# nicht mehr anbieten:
+sudo rm -f /opt/isms/downloads/isms-werkzeug_1.1.0_amd64.deb
+```
+
+Windows (PowerShell, Eingabeaufforderung als Administrator ist nicht nötig, wenn der Ordner beschreibbar ist):
+
+```powershell
+Copy-Item .\isms-werkzeug_1.2.0_amd64.deb "$env:ProgramData\ISMS\downloads\" -Force
+Copy-Item .\BSIClient-Setup.exe "$env:ProgramData\ISMS\downloads\" -Force
+Remove-Item "$env:ProgramData\ISMS\downloads\BSIClient-Setup.exe"
+```
+
+Download-Adresse: `https://<host>/downloads/<dateiname>`. Hinter einem Pfad-Prefix: `https://<host>/isms/downloads/<dateiname>`.
 
 Login liefert `accessToken` und `expiresAt` (RFC3339). Abgelaufene Tokens antworten mit `401` und `{"error":"token_expired"}`.
 
@@ -215,5 +274,5 @@ Kurzanleitung und Install-Skripte: **[INSTALL.md](INSTALL.md)**
 
 ## Nächste Schritte
 
-- Reverse Proxy / Let's Encrypt vor dem Server (optional, statt App-TLS)
+- Reverse Proxy: `deploy/nginx-isms.conf` (Subdomain) oder `deploy/nginx-prefix.conf` (Pfad `/isms`)
 - Refresh-Tokens (optional, längere Sessions ohne erneutes Passwort)

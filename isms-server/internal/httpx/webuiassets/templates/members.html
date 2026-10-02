@@ -17,7 +17,7 @@
         / Mitglieder
       </p>
       <h1>Mitglieder</h1>
-      <p class="lede">Rollen: Besitzer, Prüfer, Bearbeiter, Leser. Neue Benutzer legt ein Administrator an.</p>
+      <p class="lede">Rollen: Besitzer, Prüfer, Bearbeiter, Leser. Neue Personen registrieren sich selbst. Ein Einladungslink nimmt sie direkt ins Projekt auf und kann weitergegeben werden.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
 
@@ -104,6 +104,37 @@
         </div>
         <button class="btn" type="submit">Hinzufügen</button>
       </form>
+      <h2 class="section-gap">Einladungslink</h2>
+      <p class="muted">Wer den Link öffnet, legt ein Konto an oder meldet sich an und wird Mitglied. Die Rolle ist Bearbeiter, Prüfer oder Leser.</p>
+      <form method="post" action="{{href (printf "/projects/%d/invites" .Project.ID)}}">
+        {{template "csrf" .}}
+        <div class="field">
+          <label for="inviteRole">Rolle für neue Mitglieder</label>
+          <select id="inviteRole" name="role">
+            {{range .InviteRoles}}
+            <option value="{{.}}" {{if eq . "editor"}}selected{{end}}>{{roleLabel .}}</option>
+            {{end}}
+          </select>
+        </div>
+        <button class="btn" type="submit">Link erzeugen</button>
+      </form>
+      {{if .Invites}}
+        {{range .Invites}}
+        <div class="invite-item">
+          <p>{{roleLabel .Role}} · {{formatDate .CreatedAt}}</p>
+          <div class="field">
+            <label for="invite-{{.ID}}">Link zum Kopieren</label>
+            <input id="invite-{{.ID}}" class="invite-url" readonly value="{{.URL}}">
+          </div>
+          <form method="post" action="{{href (printf "/projects/%d/invites/%d/revoke" $.Project.ID .ID)}}">
+            {{template "csrf" $}}
+            <button class="btn btn-small btn-danger" type="submit">Widerrufen</button>
+          </form>
+        </div>
+        {{end}}
+      {{else}}
+        <p class="muted">Noch kein aktiver Link.</p>
+      {{end}}
       {{else}}
         <h2>Mitglied hinzufügen</h2>
         <p class="muted">Rollen ändern kann nur ein Besitzer.</p>

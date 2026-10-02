@@ -6,5 +6,5 @@ Exec=isms-werkzeug
 Icon=isms-werkzeug
 Terminal=false
 Categories=Office;Security;
-StartupWMClass=ISMS
+StartupWMClass=isms-werkzeug
 Keywords=ISMS;Grundschutz;BSI;

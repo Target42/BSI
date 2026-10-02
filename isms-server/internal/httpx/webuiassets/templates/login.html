@@ -26,6 +26,8 @@
         <input id="password" name="password" type="password" autocomplete="current-password" required>
       </div>
       <button class="btn" type="submit">Anmelden</button>
+      <p class="auth-switch"><a href="{{href "/register"}}{{if .NextPath}}?next={{urlquery .NextPath}}{{end}}">Noch kein Konto? Registrieren</a></p>
+      {{template "download-block" .}}
     </form>
   </div>
 </body>

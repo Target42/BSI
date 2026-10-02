@@ -28,6 +28,7 @@ type Config struct {
 	CatalogXMLPath   string
 	WebPublicBase    string
 	TrustedProxies   string
+	DownloadsDir     string
 }
 
 func Load() (Config, error) {
@@ -47,6 +48,7 @@ func Load() (Config, error) {
 		TLSKeyFile:       os.Getenv("TLS_KEY_FILE"),
 		WebPublicBase:    strings.TrimRight(os.Getenv("WEB_PUBLIC_BASE"), "/"),
 		TrustedProxies:   os.Getenv("TRUSTED_PROXIES"),
+		DownloadsDir:     envOrDefault("DOWNLOADS_DIR", "downloads"),
 	}
 
 	ttl, err := parseDuration(envOrDefault("JWT_TTL", "8h"), 8*time.Hour)

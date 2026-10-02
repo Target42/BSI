@@ -1,0 +1,38 @@
+{{define "register"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registrieren · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="card login-card" method="post" action="{{href "/register"}}">
+      {{template "csrf" .}}
+      {{template "brand-mark"}}
+      <h1>Konto anlegen</h1>
+      <p class="lede">Damit können Sie sich anmelden. Ein privates Projekt erreichen Sie über einen Einladungslink oder indem ein Besitzer Ihre E-Mail einträgt.</p>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .NextPath}}<input type="hidden" name="next" value="{{.NextPath}}">{{end}}
+      <div class="field">
+        <label for="email">E-Mail</label>
+        <input id="email" name="email" type="email" autocomplete="username" required value="{{.Email}}">
+      </div>
+      <div class="field">
+        <label for="displayName">Anzeigename</label>
+        <input id="displayName" name="displayName" autocomplete="name" required maxlength="200" value="{{.DisplayName}}">
+      </div>
+      <div class="field">
+        <label for="password">Passwort (mindestens 8 Zeichen)</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="72">
+      </div>
+      <button class="btn" type="submit">Registrieren</button>
+      <p class="auth-switch"><a href="{{href "/login"}}{{if .NextPath}}?next={{urlquery .NextPath}}{{end}}">Bereits ein Konto? Anmelden</a></p>
+    </form>
+  </div>
+</body>
+</html>
+{{end}}

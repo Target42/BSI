@@ -42,6 +42,7 @@ if (-not (Test-Path $sourceExe)) {
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir "logs") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir "migrations") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir "downloads") | Out-Null
 
 Copy-Item -Force $sourceExe (Join-Path $InstallDir $exeName)
 Copy-Item -Force (Join-Path $repoServerDir "migrations\*.sql") (Join-Path $InstallDir "migrations")
@@ -123,3 +124,4 @@ Write-Host ""
 Write-Host "Healthcheck:  curl http://localhost:8080/health"
 Write-Host "Konfiguration: $envTarget"
 Write-Host "Installationsordner: $InstallDir"
+Write-Host "Client-Download: $(Join-Path $InstallDir 'downloads')  (Qt-GUI und Delphi-Client, optional)"

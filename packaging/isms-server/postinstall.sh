@@ -14,6 +14,7 @@ fi
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0755 "$INSTALL_DIR"
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0755 "$INSTALL_DIR/migrations"
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0755 "$INSTALL_DIR/catalog"
+install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0755 "$INSTALL_DIR/downloads"
 install -d -o root -g "$SERVICE_USER" -m 0750 "$ENV_DIR"
 
 if [ -f "$ENV_FILE" ]; then
@@ -25,13 +26,28 @@ fi
 
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" 2>/dev/null || true
 
+if [ -x /usr/lib/isms/ensure-db.sh ]; then
+  /usr/lib/isms/ensure-db.sh || echo "Hinweis: Datenbank noch nicht angelegt. Nach dem Start von PostgreSQL: systemctl restart isms-server" >&2
+fi
+
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
   systemctl enable isms-server >/dev/null 2>&1 || true
   systemctl restart isms-server >/dev/null 2>&1 || true
 fi
 
+HTTP_ADDR=$(grep -E '^[[:space:]]*HTTP_ADDR=' "$ENV_FILE" 2>/dev/null | tail -n 1 || true)
+HTTP_ADDR=${HTTP_ADDR#*=}
+HTTP_ADDR=$(printf '%s' "$HTTP_ADDR" | tr -d '\r"'"'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+case "$HTTP_ADDR" in
+  :*) HTTP_ADDR="127.0.0.1${HTTP_ADDR}" ;;
+  "") HTTP_ADDR="127.0.0.1:8080" ;;
+esac
+
 echo "ISMS-Server: $INSTALL_DIR"
+echo "Downloads:   $INSTALL_DIR/downloads  (Qt-GUI und Delphi-Client, optional)"
 echo "Umgebung:    $ENV_FILE  (JWT_SECRET und ADMIN_PASSWORD prüfen)"
 echo "Status:      systemctl status isms-server"
-echo "Health:      curl -s http://127.0.0.1:8080/health"
+echo "Health:      curl -s http://${HTTP_ADDR}/health"
+echo "nginx:       isms-setup-nginx subdomain isms.example.com"
+echo "             isms-setup-nginx prefix /isms"

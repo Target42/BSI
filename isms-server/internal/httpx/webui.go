@@ -28,22 +28,24 @@ var webMeasureStatusFilters = []string{"Alle", "Offen", "In Bearbeitung", "Erled
 var webMeasureStatuses = []string{"Offen", "In Bearbeitung", "Erledigt"}
 var webAssessmentStatuses = []string{"Offen", "Teilweise", "Erfüllt", "Entfällt"}
 var webMemberRoles = []string{"owner", "editor", "reviewer", "viewer"}
+var webInviteRoles = []string{"editor", "reviewer", "viewer"}
 var webReviewFilters = []string{"Alle", domain.ReviewSubmitted, domain.ReviewReturned, "assigned", "unassigned"}
 var webCiaLevels = []string{domain.CiaNormal, domain.CiaHigh, domain.CiaVeryHigh}
 var webApplicabilityStatuses = []string{"Benötigt", "Möglicherweise", "Nicht relevant"}
 var webCatalogStandard = "IT-Grundschutz"
 
 type webUI struct {
-	auth    *auth.Service
-	store   *repository.Store
-	reports *service.ReportService
-	notify  *notify.Service
-	base    string
-	tmpl    *template.Template
-	css     []byte
-	js      []byte
-	favicon []byte
-	limiter *loginLimiter
+	auth         *auth.Service
+	store        *repository.Store
+	reports      *service.ReportService
+	notify       *notify.Service
+	base         string
+	tmpl         *template.Template
+	css          []byte
+	js           []byte
+	favicon      []byte
+	limiter      *loginLimiter
+	downloadsDir string
 }
 
 type webPage struct {
@@ -110,6 +112,10 @@ type webPage struct {
 	Deviation             string
 	PrintDate             string
 	NextPath              string
+	InviteToken           string
+	InviteRole            string
+	Invites               []webInvite
+	InviteRoles           []string
 	CSRFToken             string
 	Tasks                 []webTaskRow
 	TaskOverdueCount      int
@@ -127,6 +133,7 @@ type webPage struct {
 	ReviewSummary         string
 	Notifications         []domain.Notification
 	UnreadCount           int
+	Downloads             []webDownload
 }
 
 type webWorkBaustein struct {
@@ -211,6 +218,11 @@ type webTaskRow struct {
 	Path    string
 }
 
+type webInvite struct {
+	repository.ProjectInvite
+	URL string
+}
+
 func newWebUI(authService *auth.Service, store *repository.Store, reports *service.ReportService, publicBase string, limiter *loginLimiter) *webUI {
 	u := &webUI{
 		auth:    authService,
@@ -277,6 +289,7 @@ func (u *webUI) cookiePath() string {
 }
 
 func (u *webUI) mount(r chi.Router) {
+	r.Get("/downloads/{name}", u.serveDownload)
 	r.Get("/ui/app.css", u.serveCSS)
 	r.Get("/ui/app.js", u.serveJS)
 	r.Get("/ui/favicon.svg", u.serveFavicon)
@@ -287,6 +300,7 @@ func (u *webUI) mount(r chi.Router) {
 	r.Group(func(g chi.Router) {
 		g.Use(u.cookieAuth)
 		g.Get("/", u.home)
+		g.Get("/downloads", u.downloadsPage)
 		g.Get("/projects", u.projects)
 		g.Get("/projects/new", u.projectNewGet)
 		g.Post("/projects/new", u.projectCreate)
@@ -294,8 +308,14 @@ func (u *webUI) mount(r chi.Router) {
 		g.Get("/projects/{projectID}/report", u.report)
 		g.Get("/projects/{projectID}/report.csv", u.reportCSV)
 		g.Get("/projects/{projectID}/cockpit", u.cockpit)
+		g.Get("/register", u.registerGet)
+		g.With(u.limitLogin).Post("/register", u.registerPost)
+		g.Get("/join/{token}", u.joinGet)
+		g.Post("/join/{token}", u.joinPost)
 		g.Get("/projects/{projectID}/members", u.members)
 		g.Post("/projects/{projectID}/members", u.memberAdd)
+		g.Post("/projects/{projectID}/invites", u.inviteCreate)
+		g.Post("/projects/{projectID}/invites/{inviteID}/revoke", u.inviteRevoke)
 		g.Post("/projects/{projectID}/members/{userID}", u.memberUpdate)
 		g.Post("/projects/{projectID}/members/{userID}/remove", u.memberRemove)
 		g.Post("/projects/{projectID}/targets", u.targetCreate)
@@ -429,11 +449,7 @@ func (u *webUI) loginPost(w http.ResponseWriter, r *http.Request) {
 		u.render(w, r, "login", webPage{Email: email, NextPath: next, Error: "Anmeldung fehlgeschlagen."})
 		return
 	}
-	u.auth.SetSessionCookie(w, r, token.AccessToken, token.ExpiresAt, u.cookiePath())
-	if next == "" {
-		next = "/"
-	}
-	http.Redirect(w, r, u.href(next), http.StatusSeeOther)
+	u.finishSession(w, r, user.ID, token, next)
 }
 
 func (u *webUI) logout(w http.ResponseWriter, r *http.Request) {
@@ -551,6 +567,12 @@ func (u *webUI) projectHome(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Query().Get("saved") == "settings" {
 		page.Notice = "Projekteigenschaften gespeichert."
+	}
+	switch r.URL.Query().Get("joined") {
+	case "1":
+		page.Notice = "Sie sind dem Projekt beigetreten."
+	case "member":
+		page.Notice = "Sie sind bereits Mitglied dieses Projekts."
 	}
 	if addUnder > 0 {
 		parent, found := domain.FindTargetByID(objects, addUnder)
@@ -843,7 +865,15 @@ func (u *webUI) renderMembers(w http.ResponseWriter, r *http.Request, user *auth
 			notice = "Mitglied hinzugefügt."
 		case "removed":
 			notice = "Mitglied entfernt."
+		case "invite":
+			notice = "Einladungslink erzeugt. Wer ihn öffnet, kann sich registrieren oder anmelden und wird Mitglied."
+		case "revoked":
+			notice = "Einladungslink widerrufen."
 		}
+	}
+	invites, inviteErr := u.projectInvites(r, project.ID, role)
+	if inviteErr != nil && errMsg == "" {
+		errMsg = "Einladungslinks konnten nicht geladen werden."
 	}
 	u.render(w, r, "members", webPage{
 		DisplayName:   user.DisplayName,
@@ -853,6 +883,8 @@ func (u *webUI) renderMembers(w http.ResponseWriter, r *http.Request, user *auth
 		Project:       project,
 		Members:       members,
 		MemberRoles:   webMemberRoles,
+		InviteRoles:   webInviteRoles,
+		Invites:       invites,
 		MemberEmail:   email,
 		Error:         errMsg,
 		Notice:        notice,
@@ -885,7 +917,7 @@ func (u *webUI) memberAdd(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			u.renderMembers(w, r, user, project, role,
-				"Kein Benutzer mit dieser E-Mail. Anlegen über einen Administrator oder den Desktop-Client.", email)
+				"Kein Benutzer mit dieser E-Mail. Die Person kann sich selbst registrieren, oder Sie teilen einen Einladungslink.", email)
 			return
 		}
 		u.renderMembers(w, r, user, project, role, "Benutzer konnte nicht gesucht werden.", email)
@@ -1469,6 +1501,7 @@ func (u *webUI) render(w http.ResponseWriter, r *http.Request, name string, data
 			u.fillUnreadCount(r, &data)
 		}
 	}
+	data.Downloads = u.clientDownloads()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := u.tmpl.ExecuteTemplate(w, name, data); err != nil {

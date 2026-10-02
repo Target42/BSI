@@ -32,6 +32,9 @@ release/
 __history/
 __recovery/
 
+# Paket-Build
+/dist/
+
 # Go
 isms-server/.env
 isms-server/isms-server
@@ -39,6 +42,10 @@ isms-server/isms-server.exe
 isms-server/dist/
 isms-server/**/__debug_bin.exe
 isms-server/certs/
+
+# Client-Installer (Qt-GUI, Delphi) liegen lokal im Download-Ordner, nicht im Repo
+isms-server/downloads/*
+!isms-server/downloads/.gitkeep
 
 # Alte npm-Web-UI (durch eingebettete Go-Templates ersetzt)
 isms-web/

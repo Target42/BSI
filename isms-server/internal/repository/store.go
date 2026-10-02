@@ -35,9 +35,9 @@ func (s *Store) CreateUser(ctx context.Context, email, displayName, passwordHash
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO users (email, display_name, password_hash)
 		VALUES ($1, $2, $3)
-		RETURNING id, email, display_name, created_at`,
+		RETURNING id, email, display_name, token_version, created_at`,
 		email, displayName, passwordHash,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.CreatedAt)
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TokenVersion, &user.CreatedAt)
 	return user, err
 }
 
@@ -46,7 +46,7 @@ func (s *Store) FindUserByEmail(ctx context.Context, email string) (domain.User,
 	var passwordHash string
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, email, display_name, password_hash, token_version, created_at
-		FROM users WHERE email = $1`, email,
+		FROM users WHERE lower(email) = lower($1)`, email,
 	).Scan(&user.ID, &user.Email, &user.DisplayName, &passwordHash, &user.TokenVersion, &user.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, "", ErrNotFound

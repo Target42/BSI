@@ -70,7 +70,7 @@ func (l *loginLimiter) Middleware(next http.Handler) http.Handler {
 				writeError(w, http.StatusTooManyRequests, "too many login attempts")
 				return
 			}
-			http.Error(w, "Zu viele Anmeldeversuche. Bitte später erneut versuchen.", http.StatusTooManyRequests)
+			http.Error(w, "Zu viele Versuche. Bitte später erneut versuchen.", http.StatusTooManyRequests)
 			return
 		}
 		next.ServeHTTP(w, r)

@@ -111,6 +111,16 @@ a:hover { text-decoration: underline; }
 .login-card .lede { text-align: left; }
 .login-card .btn { width: 100%; }
 
+.auth-switch { margin: 16px 0 0; text-align: center; }
+
+.auth-actions { display: flex; flex-direction: column; gap: 8px; }
+
+.section-gap { margin-top: 28px; }
+
+.invite-url { font-size: 0.85rem; }
+
+.invite-item { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+
 .login-card .brand-mark {
   width: 72px;
   height: 82px;

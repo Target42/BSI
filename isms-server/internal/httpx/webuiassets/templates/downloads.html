@@ -1,0 +1,46 @@
+{{define "download-items"}}
+<ul class="download-list">
+  {{range .Downloads}}
+  <li>
+    <a href="{{href .Href}}">{{.Label}}</a>
+    <span class="muted">{{if ne .Label .Name}}{{.Name}} · {{end}}{{.Size}}</span>
+  </li>
+  {{end}}
+</ul>
+{{end}}
+
+{{define "download-block"}}
+{{if .Downloads}}
+<section class="downloads">
+  <h2>Desktop-Clients</h2>
+  {{template "download-items" .}}
+</section>
+{{end}}
+{{end}}
+
+{{define "downloads"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Desktop-Clients · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main">
+      <h1>Desktop-Clients</h1>
+      {{if .Downloads}}
+      <p class="lede">Installer für die Qt-GUI und den Delphi-Client. Die Web-Oberfläche bleibt ohne Installation nutzbar.</p>
+      {{template "download-items" .}}
+      {{else}}
+      <p class="muted">Dieser Server stellt keine Desktop-Installer bereit.</p>
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

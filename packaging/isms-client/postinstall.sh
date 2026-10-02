@@ -7,3 +7,6 @@ fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
 fi
+
+echo "ISMS-Werkzeug: isms-werkzeug"
+echo "Server-URL im Anmeldedialog, z. B. http://<host>:8080 oder https://<host>/isms"

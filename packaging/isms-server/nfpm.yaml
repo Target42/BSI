@@ -15,32 +15,71 @@ description: |
 contents:
   - src: ${ISMS_SERVER_BIN}
     dst: /opt/isms/isms-server
+    expand: true
     file_info:
       mode: 0755
   - src: ${ISMS_SERVER_DIR}/migrations
     dst: /opt/isms/migrations
+    expand: true
     file_info:
       mode: 0644
   - dst: /opt/isms/catalog
     type: dir
     file_info:
       mode: 0755
+  - dst: /opt/isms/downloads
+    type: dir
+    file_info:
+      mode: 0755
   - src: ${ISMS_SERVER_DIR}/.env.example
     dst: /etc/isms/isms.env.example
+    expand: true
     file_info:
       mode: 0640
   - src: ${ISMS_SERVER_DIR}/.env.example
     dst: /etc/isms/isms.env
     type: config|noreplace
+    expand: true
     file_info:
       mode: 0640
   - src: ${ISMS_SERVER_DIR}/scripts/isms-server.service
     dst: /lib/systemd/system/isms-server.service
+    expand: true
+    file_info:
+      mode: 0644
+  - src: ${ISMS_SERVER_DIR}/scripts/ensure-db.sh
+    dst: /usr/lib/isms/ensure-db.sh
+    expand: true
+    file_info:
+      mode: 0755
+  - src: ${ISMS_SERVER_DIR}/scripts/setup-nginx.sh
+    dst: /usr/sbin/isms-setup-nginx
+    expand: true
+    file_info:
+      mode: 0755
+  - src: ${ISMS_SERVER_DIR}/deploy/nginx-isms.conf
+    dst: /usr/share/isms/nginx/nginx-isms.conf
+    expand: true
+    file_info:
+      mode: 0644
+  - src: ${ISMS_SERVER_DIR}/deploy/nginx-prefix.conf
+    dst: /usr/share/isms/nginx/nginx-prefix.conf
+    expand: true
+    file_info:
+      mode: 0644
+  - src: ${ISMS_SERVER_DIR}/deploy/isms.env.nginx.example
+    dst: /usr/share/isms/isms.env.nginx-subdomain.example
+    expand: true
+    file_info:
+      mode: 0644
+  - src: ${ISMS_SERVER_DIR}/deploy/isms.env.nginx-prefix.example
+    dst: /usr/share/isms/isms.env.nginx-prefix.example
+    expand: true
     file_info:
       mode: 0644
 scripts:
-  postinstall: ${ISMS_ROOT}/packaging/isms-server/postinstall.sh
-  preremove: ${ISMS_ROOT}/packaging/isms-server/preremove.sh
+  postinstall: packaging/isms-server/postinstall.sh
+  preremove: packaging/isms-server/preremove.sh
 recommends:
   - postgresql
 overrides:

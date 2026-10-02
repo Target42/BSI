@@ -1,0 +1,37 @@
+{{define "join"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Einladung · ISMS</title>
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="card login-card">
+      {{template "brand-mark"}}
+      <h1>Einladung</h1>
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      {{if .Project.Name}}
+      <p class="lede">Sie werden Mitglied im Projekt <strong>{{.Project.Name}}</strong> als {{roleLabel .InviteRole}}.</p>
+      {{if .LoggedIn}}
+      <form method="post" action="{{href (printf "/join/%s" .InviteToken)}}">
+        {{template "csrf" .}}
+        <button class="btn" type="submit">Projekt beitreten</button>
+      </form>
+      {{else}}
+      <div class="auth-actions">
+        <a class="btn" href="{{href "/register"}}?next={{urlquery .NextPath}}">Konto anlegen</a>
+        <a class="btn btn-secondary" href="{{href "/login"}}?next={{urlquery .NextPath}}">Anmelden</a>
+      </div>
+      {{end}}
+      {{else if not .Error}}
+      <p class="lede">Dieser Einladungslink ist ungültig oder wurde widerrufen.</p>
+      {{end}}
+    </div>
+  </div>
+</body>
+</html>
+{{end}}

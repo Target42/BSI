@@ -56,13 +56,14 @@ func main() {
 
 	authService := auth.NewService(cfg.JWTSecret, cfg.JWTTTL)
 	server := httpx.NewServer(authService, store, cfg.WebPublicBase)
+	server.SetDownloadsDir(cfg.DownloadsDir)
 	proxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
 	if err != nil {
 		slog.Error("TRUSTED_PROXIES", "error", err)
 		os.Exit(1)
 	}
 	server.SetRuntime(cfg.Environment == "production", proxies)
-	slog.Info("serving embedded web UI", "public_base", cfg.WebPublicBase)
+	slog.Info("serving embedded web UI", "public_base", cfg.WebPublicBase, "downloads_dir", cfg.DownloadsDir)
 
 	router := server.Router()
 	if cfg.TLSEnabled() {

@@ -77,8 +77,10 @@
       <p class="lede">IT-Grundschutz im Browser — Verbund, Bewertung und Maßnahmen ohne Desktop-Client.</p>
       <p class="row-actions">
         <a class="btn" href="{{href "/projects"}}">Zu den Projekten</a>
+        <a class="btn btn-secondary" href="{{href "/register"}}">Registrieren</a>
         <a class="btn btn-secondary" href="{{href "/login"}}">Anmelden</a>
       </p>
+      {{template "download-block" .}}
       {{if .Projects}}
       <h2>Öffentliche Projekte</h2>
       <div class="table-wrap">
