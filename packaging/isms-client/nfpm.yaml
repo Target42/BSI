@@ -29,7 +29,7 @@ contents:
     file_info:
       mode: 0644
 scripts:
-  postinstall: ${ISMS_ROOT}/packaging/isms-client/postinstall.sh
+  postinstall: packaging/isms-client/postinstall.sh
 recommends:
   - hunspell-de-de
 overrides:
