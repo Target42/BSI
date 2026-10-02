@@ -37,6 +37,7 @@ GrundschutzImportResult GrundschutzImporter::importFromFile(const QString &fileP
     }
 
     QDomDocument doc;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     const QDomDocument::ParseResult parseResult = doc.setContent(&file);
     if (!parseResult) {
         result.errorMessage = QStringLiteral("XML-Fehler in %1:%2 (%3)")
@@ -45,6 +46,18 @@ GrundschutzImportResult GrundschutzImporter::importFromFile(const QString &fileP
                                   .arg(parseResult.errorMessage);
         return result;
     }
+#else
+    QString errorMessage;
+    int errorLine = 0;
+    int errorColumn = 0;
+    if (!doc.setContent(&file, &errorMessage, &errorLine, &errorColumn)) {
+        result.errorMessage = QStringLiteral("XML-Fehler in %1:%2 (%3)")
+                                  .arg(errorLine)
+                                  .arg(errorColumn)
+                                  .arg(errorMessage);
+        return result;
+    }
+#endif
 
     if (doc.documentElement().nodeName() != QStringLiteral("book")) {
         result.errorMessage = QStringLiteral("Unerwartete Wurzel: %1").arg(doc.documentElement().nodeName());
