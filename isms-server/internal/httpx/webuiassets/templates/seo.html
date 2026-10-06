@@ -1,0 +1,18 @@
+{{define "seo"}}
+{{if .Description}}
+  <meta name="description" content="{{.Description}}">
+{{end}}
+{{if .Indexable}}
+  {{if .Canonical}}
+  <link rel="canonical" href="{{.Canonical}}">
+  <meta property="og:url" content="{{.Canonical}}">
+  {{end}}
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="de_DE">
+  <meta property="og:site_name" content="ISMS">
+  <meta property="og:title" content="{{if .Title}}{{.Title}}{{else}}ISMS{{end}}">
+  {{if .Description}}<meta property="og:description" content="{{.Description}}">{{end}}
+{{else}}
+  <meta name="robots" content="noindex, nofollow">
+{{end}}
+{{end}}

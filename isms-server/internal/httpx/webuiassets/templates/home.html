@@ -4,7 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{if .LoggedIn}}Meine Aufgaben · {{end}}ISMS</title>
+  <title>{{if .Title}}{{.Title}}{{else}}{{if .LoggedIn}}Meine Aufgaben · {{end}}ISMS{{end}}</title>
+  {{template "seo" .}}
   <link rel="stylesheet" href="{{href "/ui/app.css"}}">
   <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
 </head>
@@ -75,6 +76,10 @@
       <div class="home-logo">{{template "brand-mark"}}</div>
       <h1 class="home-title">ISMS</h1>
       <p class="lede">IT-Grundschutz im Browser — Verbund, Bewertung und Maßnahmen ohne Desktop-Client.</p>
+      <section class="home-copy">
+        <h2>Grundschutz-Verbund gemeinsam bearbeiten</h2>
+        <p>Zielobjekte, Baustein-Anwendbarkeit, Anforderungen und Maßnahmen liegen in einem Projekt. Mehrere Personen arbeiten parallel. Öffentliche Projekte sind ohne Konto lesbar, Änderungen bleiben den Mitgliedern vorbehalten.</p>
+      </section>
       <p class="row-actions">
         <a class="btn" href="{{href "/projects"}}">Zu den Projekten</a>
         <a class="btn btn-secondary" href="{{href "/register"}}">Registrieren</a>

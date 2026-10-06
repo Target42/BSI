@@ -60,7 +60,7 @@ func (u *webUI) clientDownloads() []webDownload {
 }
 
 func (u *webUI) downloadsPage(w http.ResponseWriter, r *http.Request) {
-	u.render(w, r, "downloads", webPage{Title: "Desktop-Clients"})
+	u.render(w, r, "downloads", webPage{})
 }
 
 func (u *webUI) serveDownload(w http.ResponseWriter, r *http.Request) {

@@ -50,6 +50,9 @@ type webUI struct {
 
 type webPage struct {
 	Title                 string
+	Description           string
+	Canonical             string
+	Indexable             bool
 	Error                 string
 	Notice                string
 	DisplayName           string
@@ -289,6 +292,8 @@ func (u *webUI) cookiePath() string {
 }
 
 func (u *webUI) mount(r chi.Router) {
+	r.Get("/robots.txt", u.robotsTxt)
+	r.Get("/sitemap.xml", u.sitemapXML)
 	r.Get("/downloads/{name}", u.serveDownload)
 	r.Get("/ui/app.css", u.serveCSS)
 	r.Get("/ui/app.js", u.serveJS)
@@ -1502,8 +1507,14 @@ func (u *webUI) render(w http.ResponseWriter, r *http.Request, name string, data
 		}
 	}
 	data.Downloads = u.clientDownloads()
+	if r != nil {
+		u.applySEO(r, name, &data)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	if !data.Indexable {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	}
 	if err := u.tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}

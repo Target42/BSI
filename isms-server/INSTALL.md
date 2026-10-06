@@ -196,6 +196,25 @@ sudo systemctl stop isms-server
 sudo systemctl disable --now isms-server   # stoppen und Autostart aus
 ```
 
+### Serverprogramm austauschen
+
+Nur die Binary ersetzen, ohne Neuinstallation. `/etc/isms/isms.env`, Datenbank und `downloads/` bleiben. Auf dem Linux-Rechner, im Verzeichnis mit der neuen Datei `isms-server-linux-amd64`:
+
+```bash
+sudo systemctl stop isms-server
+sudo install -o isms -g isms -m 0755 isms-server-linux-amd64 /opt/isms/isms-server
+sudo systemctl start isms-server
+sudo systemctl status isms-server
+```
+
+`install` kopiert die Datei und setzt Besitzer `isms` sowie das Ausführungsrecht. Liegen zum gleichen Stand neue SQL-Dateien vor, dieselben Rechte wie bei der Erstinstallation, danach starten:
+
+```bash
+sudo install -o isms -g isms -m 0644 migrations/*.sql /opt/isms/migrations/
+```
+
+Der Dienst liest `migrations/` aus `/opt/isms` beim Start. Die Umgebung in `/etc/isms/isms.env` nicht überschreiben.
+
 ### 8. Client
 
 Im Login: **Mit Server verbinden**, URL `http://<ubuntu-host>:8080`.  
@@ -230,6 +249,8 @@ sudo certbot --nginx -d isms.example.com
 ```
 
 Ohne das Skript: Hostname `isms.example.com` in `deploy/nginx-isms.conf` ersetzen, nach `/etc/nginx/sites-available/isms.conf` kopieren, Site aktivieren, `nginx -t`, reload, dann Certbot. DNS-A-Record auf die öffentliche IP; Router **80** und **443** zum nginx-Host.
+
+`MAIL_PUBLIC_URL=https://isms.example.com` setzen. Die Startseite liefert dann `/robots.txt` und `/sitemap.xml` unter dieser Adresse. Property in der Google Search Console anmelden. Bei Pfad-Prefix steht die Sitemap unter `https://<host>/isms/sitemap.xml`; die `robots.txt` muss am Host-Wurzelverzeichnis liegen, nicht unter `/isms/`.
 
 #### Pfad-Prefix
 
@@ -298,4 +319,4 @@ psql -U postgres -f scripts/setup-local-db.sql
 - Logs Ubuntu: `journalctl -u isms-server`. Windows/NSSM: `%ProgramData%\ISMS\logs\`.
 - Katalog-Import nur beim **ersten** Start, wenn die DB noch leer ist. Später: Client **Datei → IT-Grundschutz XML importieren**.
 - HTTPS: Reverse Proxy (nginx), Backend `127.0.0.1:8098`. Subdomain: `deploy/nginx-isms.conf` bzw. `isms-setup-nginx subdomain <host>`, Client-URL `https://<host>`. Pfad-Prefix: `deploy/nginx-prefix.conf` bzw. `isms-setup-nginx prefix /isms`, Client-URL `https://<host>/isms`, `WEB_PUBLIC_BASE=/isms`. Dev-Zertifikat ohne Proxy: `scripts/generate-dev-cert.ps1` (siehe README).
-- Binary-Update Ubuntu: neu bauen, `sudo cp isms-server /opt/isms/isms-server && sudo systemctl restart isms-server`.
+- Serverprogramm austauschen, ohne Neuinstallation: Abschnitt **Serverprogramm austauschen**.

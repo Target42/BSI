@@ -24,7 +24,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Desktop-Clients · ISMS</title>
+  <title>{{if .Title}}{{.Title}}{{else}}Desktop-Clients · ISMS{{end}}</title>
+  {{template "seo" .}}
   <link rel="stylesheet" href="{{href "/ui/app.css"}}">
   <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
 </head>

@@ -43,6 +43,8 @@ Beim ersten Start wird ein Admin-Benutzer angelegt (`admin@example.com` / `chang
 
 **Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Öffentliche Projekte sind ohne Anmeldung sichtbar (nur Lesen). Private Projekte und Schreiben brauchen ein Konto und Mitgliedschaft. Neue Benutzer registrieren sich selbst. Ein Besitzer nimmt sie per E-Mail auf oder erzeugt einen Einladungslink, der weitergegeben werden kann. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen und pflegen, Zielobjekte, Arbeitsplatz (Bausteine/Anforderungen, Vererbung, Empfehlungen, Massenstatus), Katalog, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV und Druck. Administratoren legen Benutzer an und spielen den Katalog ein. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
 
+**Suchmaschinen:** Indexierbar sind die Startseite ohne Anmeldung und, sobald Installer im Ordner `downloads` liegen, `/downloads`. Projekte, Katalog und Konten bleiben mit `noindex` und in `robots.txt` gesperrt, damit Bewertungen nicht in der Suche landen. `MAIL_PUBLIC_URL` auf die öffentliche HTTPS-Adresse setzen; daraus kommen kanonische URL und `/sitemap.xml`. Google findet den Server nur, wenn diese Adresse aus dem Internet erreichbar ist, und die Property muss in der Search Console angemeldet werden. Bei einem Pfad-Prefix liest Google ausschließlich `https://<host>/robots.txt`, nicht `/isms/robots.txt`.
+
 Installer für die Qt-GUI und den Delphi-Client stecken **nicht** in der Binary. Liegen Dateien im Ordner `downloads`, bietet die Startseite den Download an. Siehe [Desktop-Clients zum Download](#desktop-clients-zum-download).
 
 **Katalog:** Ist die Datenbank noch leer, importiert der Server automatisch die IT-Grundschutz-XML, wenn er sie findet. Suchreihenfolge:
@@ -264,6 +266,8 @@ Voraussetzungen: PostgreSQL läuft, Server gestartet (`go run ./cmd/isms-server`
 ```
 
 Erzeugt in `dist/`: `isms-server-linux-amd64` und `isms-server-windows-amd64.exe`.
+
+Die Linux-Binary auf einem laufenden Server austauschen, ohne neu zu installieren: Dienst stoppen, Datei nach `/opt/isms/isms-server` kopieren, Besitzer `isms` und Modus `0755` setzen, Dienst starten. Befehle: [INSTALL.md](INSTALL.md), Abschnitt **Serverprogramm austauschen**.
 
 ## Nativer Betrieb (Dienst)
 

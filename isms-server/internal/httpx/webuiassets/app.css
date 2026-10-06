@@ -169,6 +169,26 @@ a:hover { text-decoration: underline; }
 
 .home .row-actions { justify-content: center; }
 
+.home-copy,
+.home .table-wrap,
+.home > h2 {
+  width: min(40rem, 100%);
+}
+
+.home-copy {
+  margin-top: 8px;
+  text-align: left;
+}
+
+.home-copy h2,
+.home > h2 {
+  margin: 28px 0 8px;
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+.home-copy p { margin: 0; }
+
 .downloads {
   width: min(560px, 100%);
   margin: 28px auto 0;
