@@ -46,13 +46,37 @@ func TestEmbeddedWebUIServesPagesAndLeavesAPI(t *testing.T) {
 		"/notifications",
 		"/users",
 		"/projects/new",
-		"/catalog",
-		"/catalog/bausteine/1",
 	} {
 		rec := assert(http.MethodGet, path, http.StatusSeeOther, "")
 		if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/login") {
 			t.Fatalf("GET %s Location %q", path, loc)
 		}
+	}
+
+	rec = assert(http.MethodGet, "/catalog", http.StatusOK, "IT-Grundschutz-Katalog")
+	if !strings.Contains(rec.Body.String(), "Anmelden") {
+		t.Fatalf("anonymous catalog must offer login, body %q", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "Katalog einspielen") {
+		t.Fatal("anonymous catalog must not offer import")
+	}
+	assert(http.MethodGet, "/catalog/bausteine/1", http.StatusNotFound, "")
+	var csrfCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == csrfCookieName {
+			csrfCookie = c
+		}
+	}
+	if csrfCookie == nil {
+		t.Fatal("catalog response missing csrf cookie")
+	}
+	importReq := httptest.NewRequest(http.MethodPost, "/catalog/import", strings.NewReader("csrf_token="+csrfCookie.Value))
+	importReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	importReq.AddCookie(csrfCookie)
+	importRec := httptest.NewRecorder()
+	handler.ServeHTTP(importRec, importReq)
+	if importRec.Code != http.StatusSeeOther || !strings.HasPrefix(importRec.Header().Get("Location"), "/login") {
+		t.Fatalf("POST /catalog/import: status %d location %q", importRec.Code, importRec.Header().Get("Location"))
 	}
 
 	for _, path := range []string{
@@ -151,6 +175,9 @@ func TestHomeAndProjectPages(t *testing.T) {
 	}
 	if !strings.Contains(head, "Anmelden") {
 		t.Fatalf("anonymous header must offer login: %s", head)
+	}
+	if !strings.Contains(head, `href="/catalog"`) {
+		t.Fatalf("anonymous header must offer the catalog: %s", head)
 	}
 	if strings.Contains(head, "Abmelden") {
 		t.Fatalf("anonymous header must not offer logout: %s", head)

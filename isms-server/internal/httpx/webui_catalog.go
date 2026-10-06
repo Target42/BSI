@@ -9,7 +9,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/catalog"
 	"github.com/Target42/BSI/isms-server/internal/domain"
 	"github.com/Target42/BSI/isms-server/internal/service"
@@ -17,15 +16,14 @@ import (
 )
 
 func (u *webUI) catalogGet(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
+	if u.store == nil {
+		u.render(w, r, "catalog", webPage{SelectedVersion: "2023"})
 		return
 	}
-	u.renderCatalog(w, r, user, "")
+	u.renderCatalog(w, r, "")
 }
 
-func (u *webUI) renderCatalog(w http.ResponseWriter, r *http.Request, user *auth.Claims, errMsg string) {
+func (u *webUI) renderCatalog(w http.ResponseWriter, r *http.Request, errMsg string) {
 	versions, err := u.store.ListCatalogVersions(r.Context())
 	if err != nil {
 		http.Error(w, "Katalogversionen konnten nicht geladen werden.", http.StatusInternalServerError)
@@ -48,7 +46,6 @@ func (u *webUI) renderCatalog(w http.ResponseWriter, r *http.Request, user *auth
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	page := webPage{
-		DisplayName:     user.DisplayName,
 		CatalogVersions: versions,
 		SelectedVersion: version,
 		Query:           query,
@@ -122,14 +119,13 @@ func groupCatalogHits(hits []service.CatalogHit) []webCatalogGroup {
 }
 
 func (u *webUI) catalogBausteinGet(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, u.href("/login"), http.StatusSeeOther)
-		return
-	}
 	bausteinID, err := strconv.ParseInt(chi.URLParam(r, "bausteinID"), 10, 64)
 	if err != nil || bausteinID <= 0 {
 		http.Error(w, "Ungültiger Baustein.", http.StatusBadRequest)
+		return
+	}
+	if u.store == nil {
+		http.Error(w, "Baustein nicht gefunden.", http.StatusNotFound)
 		return
 	}
 	baustein, err := u.store.GetBaustein(r.Context(), bausteinID)
@@ -174,7 +170,6 @@ func (u *webUI) catalogBausteinGet(w http.ResponseWriter, r *http.Request) {
 		highlight = selected.ID
 	}
 	u.render(w, r, "baustein", webPage{
-		DisplayName:     user.DisplayName,
 		Baustein:        baustein,
 		SelectedVersion: baustein.CatalogVersion,
 		Query:           query,
@@ -185,14 +180,13 @@ func (u *webUI) catalogBausteinGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *webUI) catalogImport(w http.ResponseWriter, r *http.Request) {
-	user, ok := u.requireAdmin(w, r)
-	if !ok {
+	if _, ok := u.requireAdmin(w, r); !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxCatalogUploadBytes)
 	tmpPath, _, err := saveCatalogUpload(r)
 	if err != nil {
-		u.renderCatalog(w, r, user, "XML-Datei konnte nicht gelesen werden.")
+		u.renderCatalog(w, r, "XML-Datei konnte nicht gelesen werden.")
 		return
 	}
 	defer os.Remove(tmpPath)
@@ -203,11 +197,11 @@ func (u *webUI) catalogImport(w http.ResponseWriter, r *http.Request) {
 		if result.ErrorMessage != "" {
 			msg = result.ErrorMessage
 		}
-		u.renderCatalog(w, r, user, msg)
+		u.renderCatalog(w, r, msg)
 		return
 	}
 	if err := u.store.ReplaceGrundschutzCatalog(r.Context(), result); err != nil {
-		u.renderCatalog(w, r, user, "Katalog konnte nicht gespeichert werden.")
+		u.renderCatalog(w, r, "Katalog konnte nicht gespeichert werden.")
 		return
 	}
 	http.Redirect(w, r, u.href(fmt.Sprintf(
