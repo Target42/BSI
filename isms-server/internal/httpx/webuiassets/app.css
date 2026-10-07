@@ -88,6 +88,26 @@ a:hover { text-decoration: underline; }
   min-width: 0;
 }
 
+.legal-links {
+  order: 2;
+  margin: auto 0 0;
+  padding: 12px 28px 20px;
+  font-size: 0.85rem;
+}
+
+.login-wrap .legal-links {
+  order: 0;
+  margin: 8px 0 0;
+  padding: 0;
+  text-align: center;
+}
+
+.legal-page { max-width: 40rem; }
+
+.legal-page code {
+  font-size: 0.9em;
+}
+
 .login-wrap {
   min-height: 100vh;
   display: grid;

@@ -64,6 +64,9 @@ func main() {
 	}
 	server.SetRuntime(cfg.Environment == "production", proxies)
 	slog.Info("serving embedded web UI", "public_base", cfg.WebPublicBase, "downloads_dir", cfg.DownloadsDir)
+	if !server.LegalNoticeComplete() {
+		slog.Warn("Impressum unvollständig", "hint", "IMPRESSUM_NAME, IMPRESSUM_STREET, IMPRESSUM_POSTAL_CODE, IMPRESSUM_CITY und IMPRESSUM_EMAIL setzen")
+	}
 
 	router := server.Router()
 	if cfg.TLSEnabled() {

@@ -77,6 +77,14 @@ func (u *webUI) applySEO(r *http.Request, name string, data *webPage) {
 		data.Title = seoDownloadsTitle
 		data.Description = seoDownloadsDescription
 		data.Canonical = u.absoluteURL(r, "/downloads")
+	case "impressum":
+		if !data.Legal.Complete {
+			return
+		}
+		data.Indexable = true
+		data.Title = "Impressum · ISMS"
+		data.Description = "Impressum des Betreibers dieser ISMS-Website."
+		data.Canonical = u.absoluteURL(r, "/impressum")
 	}
 }
 
@@ -86,6 +94,7 @@ func (u *webUI) robotsTxt(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("User-agent: *\n")
 	b.WriteString("Allow: " + prefix + "/$\n")
 	b.WriteString("Allow: " + prefix + "/downloads$\n")
+	b.WriteString("Allow: " + prefix + "/impressum$\n")
 	b.WriteString("Allow: " + prefix + "/ui/\n")
 	b.WriteString("Allow: " + prefix + "/sitemap.xml$\n")
 	for _, path := range []string{
@@ -113,6 +122,11 @@ func (u *webUI) robotsTxt(w http.ResponseWriter, r *http.Request) {
 
 func (u *webUI) sitemapXML(w http.ResponseWriter, r *http.Request) {
 	locs := []string{u.absoluteURL(r, "/")}
+	if legalNoticeFromEnv().Complete {
+		if loc := u.absoluteURL(r, "/impressum"); loc != "" {
+			locs = append(locs, loc)
+		}
+	}
 	if len(u.clientDownloads()) > 0 {
 		if loc := u.absoluteURL(r, "/downloads"); loc != "" {
 			locs = append(locs, loc)

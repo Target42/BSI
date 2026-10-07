@@ -66,6 +66,10 @@ func NewServer(
 	}
 }
 
+func (s *Server) LegalNoticeComplete() bool {
+	return legalNoticeFromEnv().Complete
+}
+
 func (s *Server) SetDownloadsDir(dir string) {
 	if s.webUI != nil {
 		s.webUI.downloadsDir = strings.TrimSpace(dir)

@@ -43,7 +43,7 @@ Beim ersten Start wird ein Admin-Benutzer angelegt (`admin@example.com` / `chang
 
 **Web-UI:** Im Browser dieselbe Adresse wie die API öffnen, z. B. `http://localhost:8080`. Eingebettet in der Go-Binary, kein npm. Öffentliche Projekte sind ohne Anmeldung sichtbar (nur Lesen). Private Projekte und Schreiben brauchen ein Konto und Mitgliedschaft. Neue Benutzer registrieren sich selbst. Ein Besitzer nimmt sie per E-Mail auf oder erzeugt einen Einladungslink, der weitergegeben werden kann. Sachbearbeitung kann ohne Desktop-Client arbeiten: Projekte anlegen und pflegen, Zielobjekte, Arbeitsplatz (Bausteine/Anforderungen, Vererbung, Empfehlungen, Massenstatus), Katalog, Bewertungen, Maßnahmen, Mitglieder, Soll-Ist inkl. CSV und Druck. Administratoren legen Benutzer an und spielen den Katalog ein. Hinter nginx-Prefix: `WEB_PUBLIC_BASE=/isms`.
 
-**Suchmaschinen:** Indexierbar sind die Startseite ohne Anmeldung und, sobald Installer im Ordner `downloads` liegen, `/downloads`. Projekte, Katalog und Konten bleiben mit `noindex` und in `robots.txt` gesperrt, damit Bewertungen nicht in der Suche landen. `MAIL_PUBLIC_URL` auf die öffentliche HTTPS-Adresse setzen; daraus kommen kanonische URL und `/sitemap.xml`. Google findet den Server nur, wenn diese Adresse aus dem Internet erreichbar ist, und die Property muss in der Search Console angemeldet werden. Bei einem Pfad-Prefix liest Google ausschließlich `https://<host>/robots.txt`, nicht `/isms/robots.txt`.
+**Suchmaschinen:** Indexierbar sind die Startseite ohne Anmeldung, das Impressum, sobald die Betreiberangaben vollständig sind, und, sobald Installer im Ordner `downloads` liegen, `/downloads`. Der Quellcode ist unter https://github.com/Target42/BSI verlinkt. Projekte, Katalog und Konten bleiben mit `noindex` und in `robots.txt` gesperrt, damit Bewertungen nicht in der Suche landen. `MAIL_PUBLIC_URL` auf die öffentliche HTTPS-Adresse setzen; daraus kommen kanonische URL und `/sitemap.xml`. Google findet den Server nur, wenn diese Adresse aus dem Internet erreichbar ist, und die Property muss in der Search Console angemeldet werden. Bei einem Pfad-Prefix liest Google ausschließlich `https://<host>/robots.txt`, nicht `/isms/robots.txt`.
 
 Installer für die Qt-GUI und den Delphi-Client stecken **nicht** in der Binary. Liegen Dateien im Ordner `downloads`, bietet die Startseite den Download an. Siehe [Desktop-Clients zum Download](#desktop-clients-zum-download).
 
@@ -103,6 +103,17 @@ Umgebungsvariablen (optional `.env` im Verzeichnis `isms-server/`):
 | `ADMIN_PASSWORD` | `changeme` | Passwort für ersten Admin |
 | `ADMIN_DISPLAY_NAME` | `Administrator` | Anzeigename |
 | `DOWNLOADS_DIR` | `downloads` | Ordner für optionale Client-Installer. Ist er leer, bietet die Web-UI keinen Download |
+| `IMPRESSUM_NAME` | — | Betreibername für `/impressum` (§ 5 DDG) |
+| `IMPRESSUM_STREET` | — | Straße und Hausnummer |
+| `IMPRESSUM_POSTAL_CODE` | — | Postleitzahl |
+| `IMPRESSUM_CITY` | — | Ort |
+| `IMPRESSUM_EMAIL` | — | E-Mail des Betreibers. Mit Name und Anschrift Pflicht, sonst bleibt das Impressum unvollständig |
+| `IMPRESSUM_COUNTRY` | — | Land, optional |
+| `IMPRESSUM_PHONE` | — | Telefon, optional |
+| `IMPRESSUM_REPRESENTATIVE` | — | Vertretungsberechtigte, optional |
+| `IMPRESSUM_REGISTER` | — | Registergericht und Nummer, optional |
+| `IMPRESSUM_VAT_ID` | — | Umsatzsteuer-ID, optional |
+| `IMPRESSUM_RESPONSIBLE` | — | Verantwortlich nach § 18 Abs. 2 MStV, optional |
 
 ### JWT-Secret erzeugen (Produktion)
 

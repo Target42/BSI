@@ -1,0 +1,57 @@
+{{define "legal-links"}}
+<p class="legal-links"><a href="{{href "/impressum"}}">Impressum</a> · <a href="https://github.com/Target42/BSI" rel="noopener noreferrer">GitHub</a></p>
+{{end}}
+
+{{define "impressum"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{if .Title}}{{.Title}}{{else}}Impressum · ISMS{{end}}</title>
+  {{template "seo" .}}
+  <link rel="stylesheet" href="{{href "/ui/app.css"}}">
+  <link rel="icon" type="image/svg+xml" href="{{href "/ui/favicon.svg"}}">
+</head>
+<body>
+  <div class="app">
+    {{template "header" .}}
+    <main class="main legal-page">
+      <h1>Impressum</h1>
+      {{if not .Legal.Complete}}
+      <div class="error">Die Betreiberangaben sind auf diesem Server noch nicht hinterlegt.</div>
+      <p class="lede">Für eine öffentlich erreichbare Website gehören Name, ladungsfähige Anschrift und E-Mail in die Server-Konfiguration (<code>IMPRESSUM_NAME</code>, <code>IMPRESSUM_STREET</code>, <code>IMPRESSUM_POSTAL_CODE</code>, <code>IMPRESSUM_CITY</code>, <code>IMPRESSUM_EMAIL</code>).</p>
+      {{else}}
+      <h2>Angaben gemäß § 5 DDG</h2>
+      <p>
+        {{.Legal.Name}}<br>
+        {{.Legal.Street}}<br>
+        {{.Legal.PostalCode}} {{.Legal.City}}{{if .Legal.Country}}<br>{{.Legal.Country}}{{end}}
+      </p>
+      <h2>Kontakt</h2>
+      <p>
+        E-Mail: <a href="mailto:{{.Legal.Email}}">{{.Legal.Email}}</a>
+        {{if .Legal.Phone}}{{if .Legal.PhoneHref}}<br>Telefon: <a href="tel:{{.Legal.PhoneHref}}">{{.Legal.Phone}}</a>{{else}}<br>Telefon: {{.Legal.Phone}}{{end}}{{end}}
+      </p>
+      {{if .Legal.Representative}}
+      <h2>Vertreten durch</h2>
+      <p>{{.Legal.Representative}}</p>
+      {{end}}
+      {{if .Legal.Register}}
+      <h2>Registereintrag</h2>
+      <p>{{.Legal.Register}}</p>
+      {{end}}
+      {{if .Legal.VATID}}
+      <h2>Umsatzsteuer-ID</h2>
+      <p>Umsatzsteuer-Identifikationsnummer gemäß § 27a Umsatzsteuergesetz: {{.Legal.VATID}}</p>
+      {{end}}
+      {{if .Legal.Responsible}}
+      <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
+      <p>{{.Legal.Responsible}}</p>
+      {{end}}
+      {{end}}
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

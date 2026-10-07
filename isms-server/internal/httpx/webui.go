@@ -137,6 +137,7 @@ type webPage struct {
 	Notifications         []domain.Notification
 	UnreadCount           int
 	Downloads             []webDownload
+	Legal                 legalNotice
 }
 
 type webWorkBaustein struct {
@@ -305,6 +306,7 @@ func (u *webUI) mount(r chi.Router) {
 	r.Group(func(g chi.Router) {
 		g.Use(u.cookieAuth)
 		g.Get("/", u.home)
+		g.Get("/impressum", u.impressumGet)
 		g.Get("/downloads", u.downloadsPage)
 		g.Get("/projects", u.projects)
 		g.Get("/projects/new", u.projectNewGet)
@@ -1507,6 +1509,7 @@ func (u *webUI) render(w http.ResponseWriter, r *http.Request, name string, data
 		}
 	}
 	data.Downloads = u.clientDownloads()
+	data.Legal = legalNoticeFromEnv()
 	if r != nil {
 		u.applySEO(r, name, &data)
 	}

@@ -29,6 +29,7 @@
       <p class="auth-switch"><a href="{{href "/register"}}{{if .NextPath}}?next={{urlquery .NextPath}}{{end}}">Noch kein Konto? Registrieren</a></p>
       {{template "download-block" .}}
     </form>
+    {{template "legal-links" .}}
   </div>
 </body>
 </html>

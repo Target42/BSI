@@ -32,6 +32,7 @@
       <button class="btn" type="submit">Registrieren</button>
       <p class="auth-switch"><a href="{{href "/login"}}{{if .NextPath}}?next={{urlquery .NextPath}}{{end}}">Bereits ein Konto? Anmelden</a></p>
     </form>
+    {{template "legal-links" .}}
   </div>
 </body>
 </html>

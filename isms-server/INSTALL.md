@@ -55,7 +55,7 @@ Ausgaben landen in `dist/` (`isms-server-linux-amd64`, `isms-server-windows-amd6
 ### 2. Quellcode
 
 ```bash
-git clone <dein-repo-url> BSI
+git clone https://github.com/Target42/BSI.git BSI
 cd BSI/isms-server
 ```
 
@@ -103,6 +103,8 @@ openssl rand -base64 48
 ```
 
 `ENV=production` erzwingt ein gesetztes `JWT_SECRET` und entweder TLS am Go-Prozess (`TLS_CERT_FILE` / `TLS_KEY_FILE`) oder TLS am nginx mit `TRUSTED_PROXIES`. nginx: Subdomain `deploy/nginx-isms.conf` oder Pfad-Prefix `deploy/nginx-prefix.conf`.
+
+Öffentliche Website: `IMPRESSUM_NAME`, `IMPRESSUM_STREET`, `IMPRESSUM_POSTAL_CODE`, `IMPRESSUM_CITY` und `IMPRESSUM_EMAIL` setzen. Daraus wird `/impressum`.
 
 Katalog-XML nach `/opt/isms/catalog/` legen (das Skript im nächsten Schritt legt den Ordner an) oder `CATALOG_XML_PATH` auf den tatsächlichen Pfad setzen.
 
