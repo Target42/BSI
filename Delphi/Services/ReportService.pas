@@ -50,10 +50,10 @@ begin
     begin
       if (ARows[J].TargetObjectName < ARows[I].TargetObjectName) or
          ((ARows[J].TargetObjectName = ARows[I].TargetObjectName) and
-          (ARows[J].BausteinExternalId < ARows[I].BausteinExternalId)) or
+          (CompareExternalId(ARows[J].BausteinExternalId, ARows[I].BausteinExternalId) < 0)) or
          ((ARows[J].TargetObjectName = ARows[I].TargetObjectName) and
-          (ARows[J].BausteinExternalId = ARows[I].BausteinExternalId) and
-          (ARows[J].RequirementExternalId < ARows[I].RequirementExternalId)) then
+          (CompareExternalId(ARows[J].BausteinExternalId, ARows[I].BausteinExternalId) = 0) and
+          (CompareExternalId(ARows[J].RequirementExternalId, ARows[I].RequirementExternalId) < 0)) then
       begin
         Temp := ARows[I];
         ARows[I] := ARows[J];

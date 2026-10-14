@@ -127,10 +127,10 @@ func (s *ReportService) BuildSollIstReport(ctx context.Context, projectID int64,
 		if rows[i].TargetObjectName != rows[j].TargetObjectName {
 			return rows[i].TargetObjectName < rows[j].TargetObjectName
 		}
-		if rows[i].BausteinExternalID != rows[j].BausteinExternalID {
-			return rows[i].BausteinExternalID < rows[j].BausteinExternalID
+		if c := domain.CompareExternalID(rows[i].BausteinExternalID, rows[j].BausteinExternalID); c != 0 {
+			return c < 0
 		}
-		return rows[i].RequirementExternalID < rows[j].RequirementExternalID
+		return domain.CompareExternalID(rows[i].RequirementExternalID, rows[j].RequirementExternalID) < 0
 	})
 
 	return rows, nil

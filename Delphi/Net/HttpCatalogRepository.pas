@@ -106,6 +106,7 @@ begin
   finally
     Doc.Free;
   end;
+  SortBausteineNaturally(List);
   Result := List;
 end;
 
@@ -133,6 +134,7 @@ begin
   finally
     Doc.Free;
   end;
+  SortRequirementsNaturally(List);
   Result := List;
 end;
 
@@ -156,6 +158,7 @@ begin
     for I := 0 to High(ReqList) do
       AllList[Offset + I] := ReqList[I];
   end;
+  SortRequirementsNaturally(AllList);
   Result := AllList;
 end;
 

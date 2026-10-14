@@ -78,7 +78,7 @@ func BuildRecommendations(bausteine []domain.Baustein, target domain.TargetObjec
 		if out[i].Tier != out[j].Tier {
 			return out[i].Tier == TierCore
 		}
-		return out[i].ExternalID < out[j].ExternalID
+		return domain.CompareExternalID(out[i].ExternalID, out[j].ExternalID) < 0
 	})
 	return out
 }

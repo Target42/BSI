@@ -201,7 +201,8 @@ begin
       for J := I + 1 to High(Result) do
       begin
         if (Integer(Result[I].Tier) > Integer(Result[J].Tier)) or
-           ((Result[I].Tier = Result[J].Tier) and (Result[I].ExternalId > Result[J].ExternalId)) then
+           ((Result[I].Tier = Result[J].Tier) and
+            (CompareExternalId(Result[I].ExternalId, Result[J].ExternalId) > 0)) then
         begin
           Rec := Result[I];
           Result[I] := Result[J];

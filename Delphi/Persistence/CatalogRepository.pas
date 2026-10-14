@@ -157,6 +157,7 @@ begin
   finally
     Q.Free;
   end;
+  SortBausteineNaturally(List);
   Result := List;
 end;
 
@@ -195,6 +196,7 @@ begin
   finally
     Q.Free;
   end;
+  SortRequirementsNaturally(List);
   Result := List;
 end;
 
@@ -237,6 +239,7 @@ begin
   finally
     Q.Free;
   end;
+  SortRequirementsNaturally(List);
   Result := List;
 end;
 

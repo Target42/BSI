@@ -62,13 +62,13 @@ begin
   Result := CompareText(L.TargetObjectName, R.TargetObjectName);
   if Result <> 0 then
     Exit;
-  Result := CompareText(L.BausteinExternalId, R.BausteinExternalId);
+  Result := CompareExternalId(L.BausteinExternalId, R.BausteinExternalId);
   if Result <> 0 then
     Exit;
   Result := Ord(L.Kind) - Ord(R.Kind);
   if Result <> 0 then
     Exit;
-  Result := CompareText(L.RequirementExternalId, R.RequirementExternalId);
+  Result := CompareExternalId(L.RequirementExternalId, R.RequirementExternalId);
   if Result <> 0 then
     Exit;
   Result := CompareText(L.Title, R.Title);

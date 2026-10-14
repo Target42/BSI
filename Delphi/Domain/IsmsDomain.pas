@@ -342,6 +342,9 @@ function IsoToDate(const AValue: string): TDateTime;
 function DateTimeToIso(const AValue: TDateTime): string;
 function IsoToDateTime(const AValue: string): TDateTime;
 function IsValidDate(const ADate: TDateTime): Boolean;
+function CompareExternalId(const ALeft, ARight: string): Integer;
+procedure SortBausteineNaturally(var AItems: TArray<TBaustein>);
+procedure SortRequirementsNaturally(var AItems: TArray<TRequirement>);
 function ReportProgressPercent(const ASummary: TReportSummary): Integer;
 function BausteinRecommendationTierToString(AValue: TBausteinRecommendationTier): string;
 function CockpitKindToString(AKind: TCockpitKind): string;
@@ -406,6 +409,9 @@ const
   ReviewActionAccept = 'accept';
 
 implementation
+
+uses
+  System.Generics.Defaults;
 
 const
   S_Erfuellt = 'Erf'#$00FC'llt';
@@ -983,6 +989,98 @@ end;
 function IsValidDate(const ADate: TDateTime): Boolean;
 begin
   Result := (ADate > 0) and (ADate < EncodeDate(9999, 12, 31));
+end;
+
+function IsAsciiDigit(AChar: Char): Boolean;
+begin
+  Result := (AChar >= '0') and (AChar <= '9');
+end;
+
+function CompareExternalId(const ALeft, ARight: string): Integer;
+var
+  I, J, StartI, StartJ, LenI, LenJ, K: Integer;
+  C1, C2: Char;
+begin
+  I := 1;
+  J := 1;
+  while (I <= Length(ALeft)) and (J <= Length(ARight)) do
+  begin
+    if IsAsciiDigit(ALeft[I]) and IsAsciiDigit(ARight[J]) then
+    begin
+      while (I <= Length(ALeft)) and (ALeft[I] = '0') do
+        Inc(I);
+      while (J <= Length(ARight)) and (ARight[J] = '0') do
+        Inc(J);
+      StartI := I;
+      StartJ := J;
+      while (I <= Length(ALeft)) and IsAsciiDigit(ALeft[I]) do
+        Inc(I);
+      while (J <= Length(ARight)) and IsAsciiDigit(ARight[J]) do
+        Inc(J);
+      LenI := I - StartI;
+      LenJ := J - StartJ;
+      if LenI <> LenJ then
+        Exit(LenI - LenJ);
+      for K := 0 to LenI - 1 do
+        if ALeft[StartI + K] <> ARight[StartJ + K] then
+          Exit(Ord(ALeft[StartI + K]) - Ord(ARight[StartJ + K]));
+      Continue;
+    end;
+    C1 := UpCase(ALeft[I]);
+    C2 := UpCase(ARight[J]);
+    if C1 <> C2 then
+      Exit(Ord(C1) - Ord(C2));
+    Inc(I);
+    Inc(J);
+  end;
+  if I > Length(ALeft) then
+  begin
+    if J > Length(ARight) then
+      Result := 0
+    else
+      Result := -1;
+  end
+  else
+    Result := 1;
+end;
+
+procedure SortBausteineNaturally(var AItems: TArray<TBaustein>);
+var
+  GroupRank: TDictionary<string, Integer>;
+  NextRank, I: Integer;
+begin
+  if Length(AItems) < 2 then
+    Exit;
+  GroupRank := TDictionary<string, Integer>.Create;
+  try
+    NextRank := 0;
+    for I := 0 to High(AItems) do
+      if not GroupRank.ContainsKey(AItems[I].GroupName) then
+      begin
+        GroupRank.Add(AItems[I].GroupName, NextRank);
+        Inc(NextRank);
+      end;
+    TArray.Sort<TBaustein>(AItems, TComparer<TBaustein>.Construct(
+      function(const L, R: TBaustein): Integer
+      begin
+        Result := GroupRank[L.GroupName] - GroupRank[R.GroupName];
+        if Result = 0 then
+          Result := CompareExternalId(L.ExternalId, R.ExternalId);
+      end));
+  finally
+    GroupRank.Free;
+  end;
+end;
+
+procedure SortRequirementsNaturally(var AItems: TArray<TRequirement>);
+begin
+  if Length(AItems) < 2 then
+    Exit;
+  TArray.Sort<TRequirement>(AItems, TComparer<TRequirement>.Construct(
+    function(const L, R: TRequirement): Integer
+    begin
+      Result := CompareExternalId(L.ExternalId, R.ExternalId);
+    end));
 end;
 
 function ReportProgressPercent(const ASummary: TReportSummary): Integer;

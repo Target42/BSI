@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"sort"
 
 	"github.com/Target42/BSI/isms-server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -55,7 +56,13 @@ func (s *Store) ListBausteine(ctx context.Context, standard, catalogVersion stri
 		}
 		items = append(items, b)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return domain.CompareExternalID(items[i].ExternalID, items[j].ExternalID) < 0
+	})
+	return items, nil
 }
 
 func (s *Store) ListRequirements(ctx context.Context, bausteinID int64) ([]domain.Requirement, error) {
@@ -81,7 +88,13 @@ func (s *Store) ListRequirements(ctx context.Context, bausteinID int64) ([]domai
 		}
 		items = append(items, r)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return domain.CompareExternalID(items[i].ExternalID, items[j].ExternalID) < 0
+	})
+	return items, nil
 }
 
 func (s *Store) ListRequirementsByCatalog(ctx context.Context, standard, catalogVersion string) ([]domain.Requirement, error) {
@@ -108,7 +121,13 @@ func (s *Store) ListRequirementsByCatalog(ctx context.Context, standard, catalog
 		}
 		items = append(items, r)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return domain.CompareExternalID(items[i].ExternalID, items[j].ExternalID) < 0
+	})
+	return items, nil
 }
 
 func (s *Store) GetRequirement(ctx context.Context, id int64) (domain.Requirement, error) {
