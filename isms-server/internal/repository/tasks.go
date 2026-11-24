@@ -17,9 +17,43 @@ func (s *Store) ListAssignedTasks(ctx context.Context, userID int64) ([]domain.A
 	if err != nil {
 		return nil, err
 	}
+	targets, err := s.listAssignedTargets(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	items := append(measures, assessments...)
+	items = append(items, targets...)
 	sortAssignedTasks(items)
 	return items, nil
+}
+
+func (s *Store) listAssignedTargets(ctx context.Context, userID int64) ([]domain.AssignedTask, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT t.project_id, p.name, t.id, t.name, t.type
+		FROM target_objects t
+		JOIN projects p ON p.id = t.project_id
+		JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = $1
+		WHERE t.editor_user_id = $1
+		ORDER BY p.name, t.name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []domain.AssignedTask
+	for rows.Next() {
+		var item domain.AssignedTask
+		if err := rows.Scan(
+			&item.ProjectID, &item.ProjectName, &item.TargetObjectID, &item.TargetName, &item.RequirementLabel,
+		); err != nil {
+			return nil, err
+		}
+		item.Kind = "Zielobjekt"
+		item.Title = item.TargetName
+		item.Status = "Zugewiesen"
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (s *Store) listAssignedMeasures(ctx context.Context, userID int64) ([]domain.AssignedTask, error) {

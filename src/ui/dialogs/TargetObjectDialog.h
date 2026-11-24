@@ -1,9 +1,11 @@
 #ifndef UI_TARGETOBJECTDIALOG_H
 #define UI_TARGETOBJECTDIALOG_H
 
+#include "domain/ServerUser.h"
 #include "domain/TargetObject.h"
 
 #include <QDialog>
+#include <QList>
 
 class QCheckBox;
 class QComboBox;
@@ -19,6 +21,7 @@ public:
     explicit TargetObjectDialog(QWidget *parent = nullptr);
 
     void setTargetObject(const TargetObject &object, const TargetObject &parent = {});
+    void setEditors(const QList<ProjectMember> &members);
     TargetObject targetObject() const;
 
 protected:
@@ -32,6 +35,7 @@ private:
     void updateParentLabel();
     void updateCiaEnabled();
     void syncOverallLabel();
+    void fillEditorBox();
 
     QLabel *m_parentLabel = nullptr;
     QLineEdit *m_nameEdit = nullptr;
@@ -43,6 +47,9 @@ private:
     QLabel *m_overallLabel = nullptr;
     QTextEdit *m_protectionNoteEdit = nullptr;
     QTextEdit *m_descriptionEdit = nullptr;
+    QComboBox *m_editorBox = nullptr;
+    QLabel *m_editorLabel = nullptr;
+    QList<ProjectMember> m_editors;
     TargetObject m_object;
     TargetObject m_parent;
 };

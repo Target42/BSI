@@ -25,6 +25,8 @@ type
     memProtectionNote: TMemo;
     lblDescription: TLabel;
     memDescription: TMemo;
+    lblEditor: TLabel;
+    cboEditor: TComboBox;
     btnOk: TButton;
     btnCancel: TButton;
     procedure FormCreate(Sender: TObject);
@@ -45,11 +47,13 @@ type
     procedure InheritClick(Sender: TObject);
     procedure CiaChange(Sender: TObject);
     procedure OkClick(Sender: TObject);
+    procedure FillEditorItems(const AMembers: TArray<TProjectMember>);
+    function SelectedEditorId: Integer;
   public
     class function ExecuteCreate(var ATargetObject: TTargetObject;
-      const AParent: TTargetObject): Boolean;
+      const AParent: TTargetObject; const AMembers: TArray<TProjectMember>): Boolean;
     class function ExecuteEdit(var ATargetObject: TTargetObject;
-      const AParent: TTargetObject): Boolean;
+      const AParent: TTargetObject; const AMembers: TArray<TProjectMember>): Boolean;
   end;
 
 implementation
@@ -229,8 +233,51 @@ begin
   SyncOverallLabel;
 end;
 
+procedure TTargetObjectForm.FillEditorItems(const AMembers: TArray<TProjectMember>);
+var
+  Member: TProjectMember;
+  Found: Boolean;
+  Caption: string;
+begin
+  cboEditor.Items.BeginUpdate;
+  try
+    cboEditor.Items.Clear;
+    cboEditor.Items.AddObject('Offen, jeder Bearbeiter', nil);
+    Found := FTargetObject.EditorUserId <= 0;
+    for Member in AMembers do
+    begin
+      if not CanEditContentRole(Member.Role) then
+        Continue;
+      cboEditor.Items.AddObject(Member.DisplayName, TObject(NativeInt(Member.UserId)));
+      if Member.UserId = FTargetObject.EditorUserId then
+        Found := True;
+    end;
+    if not Found then
+    begin
+      Caption := FTargetObject.EditorName;
+      if Caption = '' then
+        Caption := 'Zugewiesene Person';
+      cboEditor.Items.AddObject(Caption, TObject(NativeInt(FTargetObject.EditorUserId)));
+    end;
+  finally
+    cboEditor.Items.EndUpdate;
+  end;
+  cboEditor.ItemIndex := cboEditor.Items.IndexOfObject(TObject(NativeInt(FTargetObject.EditorUserId)));
+  if cboEditor.ItemIndex < 0 then
+    cboEditor.ItemIndex := 0;
+  cboEditor.Visible := cboEditor.Items.Count > 1;
+  lblEditor.Visible := cboEditor.Visible;
+end;
+
+function TTargetObjectForm.SelectedEditorId: Integer;
+begin
+  if (cboEditor.ItemIndex < 0) then
+    Exit(0);
+  Result := Integer(NativeInt(cboEditor.Items.Objects[cboEditor.ItemIndex]));
+end;
+
 class function TTargetObjectForm.ExecuteCreate(var ATargetObject: TTargetObject;
-  const AParent: TTargetObject): Boolean;
+  const AParent: TTargetObject; const AMembers: TArray<TProjectMember>): Boolean;
 var
   F: TTargetObjectForm;
 begin
@@ -244,6 +291,7 @@ begin
     F.memDescription.Clear;
     F.ApplyParentContext;
     F.LoadProtectionNeedToControls;
+    F.FillEditorItems(AMembers);
     Result := F.ShowModal = mrOk;
     if Result then
       ATargetObject := F.FTargetObject;
@@ -253,7 +301,7 @@ begin
 end;
 
 class function TTargetObjectForm.ExecuteEdit(var ATargetObject: TTargetObject;
-  const AParent: TTargetObject): Boolean;
+  const AParent: TTargetObject; const AMembers: TArray<TProjectMember>): Boolean;
 var
   F: TTargetObjectForm;
 begin
@@ -267,6 +315,7 @@ begin
     F.memDescription.Text := ATargetObject.Description;
     F.ApplyParentContext;
     F.LoadProtectionNeedToControls;
+    F.FillEditorItems(AMembers);
     Result := F.ShowModal = mrOk;
     if Result then
       ATargetObject := F.FTargetObject;
@@ -293,6 +342,11 @@ begin
   FTargetObject.ProtectionNeed := ProtectionNeedFromCiaLevels(
     FTargetObject.Confidentiality, FTargetObject.Integrity, FTargetObject.Availability);
   FinalizeTargetObjectProtectionNeed(FTargetObject, FParent);
+  FTargetObject.EditorUserId := SelectedEditorId;
+  if FTargetObject.EditorUserId > 0 then
+    FTargetObject.EditorName := cboEditor.Text
+  else
+    FTargetObject.EditorName := '';
   ModalResult := mrOk;
 end;
 

@@ -38,6 +38,8 @@ type TargetObject struct {
 	Name                  string    `json:"name"`
 	Description           string    `json:"description"`
 	ModelLocked           bool      `json:"modelLocked"`
+	EditorUserID          int64     `json:"editorUserId,omitempty"`
+	EditorName            string    `json:"editorName,omitempty"`
 	CreatedAt             time.Time `json:"createdAt"`
 	UpdatedAt             time.Time `json:"updatedAt"`
 }

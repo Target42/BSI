@@ -3,7 +3,7 @@ object TargetObjectForm: TTargetObjectForm
   Top = 0
   BorderStyle = bsDialog
   Caption = 'Zielobjekt'
-  ClientHeight = 560
+  ClientHeight = 612
   ClientWidth = 440
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -149,23 +149,38 @@ object TargetObjectForm: TTargetObjectForm
     ScrollBars = ssVertical
     TabOrder = 7
   end
+  object lblEditor: TLabel
+    Left = 16
+    Top = 516
+    Width = 56
+    Height = 15
+    Caption = 'Bearbeiter'
+  end
+  object cboEditor: TComboBox
+    Left = 16
+    Top = 534
+    Width = 408
+    Height = 23
+    Style = csDropDownList
+    TabOrder = 8
+  end
   object btnOk: TButton
     Left = 248
-    Top = 520
+    Top = 572
     Width = 85
     Height = 30
     Caption = 'OK'
     Default = True
-    TabOrder = 8
+    TabOrder = 9
   end
   object btnCancel: TButton
     Left = 339
-    Top = 520
+    Top = 572
     Width = 85
     Height = 30
     Cancel = True
     Caption = 'Abbrechen'
     ModalResult = 2
-    TabOrder = 9
+    TabOrder = 10
   end
 end

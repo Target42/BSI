@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,6 +12,24 @@ import (
 	"github.com/Target42/BSI/isms-server/internal/repository"
 	"github.com/go-chi/chi/v5"
 )
+
+var errInvalidTargetEditor = errors.New("invalid target editor")
+
+func validateTargetEditor(ctx context.Context, store *repository.Store, projectID, editorID int64) error {
+	if editorID <= 0 {
+		return nil
+	}
+	members, err := store.ListProjectMembers(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, member := range members {
+		if member.UserID == editorID && domain.CanBeTargetEditor(member.Role) {
+			return nil
+		}
+	}
+	return errInvalidTargetEditor
+}
 
 type TargetObjectHandler struct {
 	store *repository.Store
@@ -31,6 +50,7 @@ type createTargetObjectRequest struct {
 	ProtectionNeedNote    string `json:"protectionNeedNote"`
 	Name                  string `json:"name"`
 	Description           string `json:"description"`
+	EditorUserID          *int64 `json:"editorUserId"`
 }
 
 type updateTargetObjectRequest struct {
@@ -45,6 +65,7 @@ type updateTargetObjectRequest struct {
 	Name                  string `json:"name"`
 	Description           string `json:"description"`
 	ModelLocked           *bool  `json:"modelLocked"`
+	EditorUserID          *int64 `json:"editorUserId"`
 }
 
 func (h *TargetObjectHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +156,17 @@ func (h *TargetObjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		item.InheritProtectionNeed = *req.InheritProtectionNeed
 	} else {
 		item.InheritProtectionNeed = req.ParentID > 0
+	}
+	if req.EditorUserID != nil {
+		if err := validateTargetEditor(r.Context(), h.store, projectID, *req.EditorUserID); err != nil {
+			if errors.Is(err, errInvalidTargetEditor) {
+				writeError(w, http.StatusBadRequest, "Bearbeiter muss ein Bearbeiter oder Besitzer des Projekts sein")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "editor check failed")
+			return
+		}
+		item.EditorUserID = *req.EditorUserID
 	}
 	var parent *domain.TargetObject
 	if req.ParentID > 0 {
@@ -262,6 +294,18 @@ func (h *TargetObjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Availability == "" {
 		item.Availability = current.Availability
+	}
+	item.EditorUserID = current.EditorUserID
+	if req.EditorUserID != nil {
+		if err := validateTargetEditor(r.Context(), h.store, projectID, *req.EditorUserID); err != nil {
+			if errors.Is(err, errInvalidTargetEditor) {
+				writeError(w, http.StatusBadRequest, "Bearbeiter muss ein Bearbeiter oder Besitzer des Projekts sein")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "editor check failed")
+			return
+		}
+		item.EditorUserID = *req.EditorUserID
 	}
 	var parent *domain.TargetObject
 	if req.ParentID > 0 {

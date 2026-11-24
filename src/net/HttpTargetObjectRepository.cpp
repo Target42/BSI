@@ -45,6 +45,7 @@ TargetObject HttpTargetObjectRepository::createTargetObject(const TargetObject &
     body.insert(QStringLiteral("protectionNeedNote"), targetObject.protectionNeedNote);
     body.insert(QStringLiteral("name"), targetObject.name);
     body.insert(QStringLiteral("description"), targetObject.description);
+    body.insert(QStringLiteral("editorUserId"), targetObject.editorUserId);
 
     int status = 0;
     const QJsonDocument doc = m_client.post(
@@ -73,6 +74,7 @@ bool HttpTargetObjectRepository::updateTargetObject(const TargetObject &targetOb
     body.insert(QStringLiteral("name"), targetObject.name);
     body.insert(QStringLiteral("description"), targetObject.description);
     body.insert(QStringLiteral("modelLocked"), targetObject.modelLocked);
+    body.insert(QStringLiteral("editorUserId"), targetObject.editorUserId);
 
     int status = 0;
     const QJsonDocument doc =

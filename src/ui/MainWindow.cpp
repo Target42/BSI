@@ -2781,8 +2781,10 @@ void MainWindow::addTargetObject()
     draft.inheritProtectionNeed = true;
     copyProtectionNeedFromParent(draft, parent);
 
+    reloadProjectMembers();
     TargetObjectDialog dialog(this);
     dialog.setTargetObject(draft, parent);
+    dialog.setEditors(m_projectMembers);
     if (dialog.exec() != QDialog::Accepted)
         return;
 
@@ -2816,8 +2818,10 @@ void MainWindow::editTargetObject()
         m_context.targetObjectRepository().loadTargetObjects(m_activeProject.id);
     const TargetObject parent = findTargetById(objects, object.parentId);
 
+    reloadProjectMembers();
     TargetObjectDialog dialog(this);
     dialog.setTargetObject(object, parent);
+    dialog.setEditors(m_projectMembers);
     if (dialog.exec() != QDialog::Accepted)
         return;
 

@@ -89,6 +89,7 @@ begin
   ABody.AddPair('description', ATarget.Description);
   if AIncludeLock then
     ABody.AddPair('modelLocked', TJSONBool.Create(ATarget.ModelLocked));
+  ABody.AddPair('editorUserId', TJSONNumber.Create(ATarget.EditorUserId));
 end;
 
 function ParseDateTimeValue(AValue: TJSONValue): TDateTime;
@@ -152,6 +153,8 @@ begin
   Result.Name := JsonStringValue(AObj, 'name');
   Result.Description := JsonStringValue(AObj, 'description');
   Result.ModelLocked := JsonBoolValue(AObj, 'modelLocked');
+  Result.EditorUserId := AObj.GetValue<Integer>('editorUserId', 0);
+  Result.EditorName := JsonStringValue(AObj, 'editorName');
   if (JsonStringValue(AObj, 'confidentiality') = '') and
      (JsonStringValue(AObj, 'integrity') = '') and
      (Result.ProtectionNeed = pnElevated) then

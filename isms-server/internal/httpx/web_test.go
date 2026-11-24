@@ -274,6 +274,18 @@ func TestFlattenTargetsKeepsTreeOrder(t *testing.T) {
 	}
 }
 
+func TestTaskPathForTargetEditor(t *testing.T) {
+	got := taskPath(domain.AssignedTask{
+		Kind:           "Zielobjekt",
+		ProjectID:      4,
+		TargetObjectID: 9,
+		RequirementID:  3,
+	})
+	if got != "/projects/4/targets/9" {
+		t.Fatalf("target task path: %s", got)
+	}
+}
+
 func TestSafeNextPath(t *testing.T) {
 	tests := []struct {
 		in, want string

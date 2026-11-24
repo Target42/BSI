@@ -973,6 +973,8 @@ var
   Summary: TReportSummary;
 begin
   Result := TargetObjectCaption(Obj);
+  if Obj.EditorName <> '' then
+    Result := Result + ' · ' + Obj.EditorName;
   if FSummariesByTarget.TryGetValue(Obj.Id, Summary) then
     Result := Result + TReportService.FormatTreeProgressSuffix(Summary);
 end;
@@ -2686,7 +2688,8 @@ begin
     O.ObjType := DefaultChildTargetType(Parent.ObjType);
   O.InheritProtectionNeed := True;
   CopyProtectionNeedFromParent(O, Parent);
-  if not TTargetObjectForm.ExecuteCreate(O, Parent) then
+  ReloadProjectMembers;
+  if not TTargetObjectForm.ExecuteCreate(O, Parent, FProjectMembers) then
     Exit;
   O := FContext.TargetObjectRepository.CreateTargetObject(O);
   if O.Id = 0 then
@@ -2721,7 +2724,8 @@ begin
   Objects := FContext.TargetObjectRepository.LoadTargetObjects(FActiveProject.Id);
   O := FActiveTarget;
   Parent := FindTargetById(Objects, O.ParentId);
-  if not TTargetObjectForm.ExecuteEdit(O, Parent) then
+  ReloadProjectMembers;
+  if not TTargetObjectForm.ExecuteEdit(O, Parent, FProjectMembers) then
     Exit;
   if not FContext.TargetObjectRepository.UpdateTargetObject(O) then
   begin

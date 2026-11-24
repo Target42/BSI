@@ -129,6 +129,7 @@ type webPage struct {
 	CanReview             bool
 	CanAssign             bool
 	Reviewers             []repository.ProjectMember
+	Editors               []repository.ProjectMember
 	ReviewLocked          bool
 	ReviewFilter          string
 	ReviewFilters         []string
@@ -180,6 +181,7 @@ type webTargetRow struct {
 	Depth          int
 	ProtectionNeed string
 	ModelLocked    bool
+	EditorName     string
 	IsRoot         bool
 	ChildTypes     []string
 	Summary        domain.ReportSummary
@@ -1706,6 +1708,9 @@ func toTaskRows(items []domain.AssignedTask) []webTaskRow {
 }
 
 func taskPath(item domain.AssignedTask) string {
+	if item.Kind == "Zielobjekt" {
+		return fmt.Sprintf("/projects/%d/targets/%d", item.ProjectID, item.TargetObjectID)
+	}
 	if item.MeasureID > 0 {
 		return fmt.Sprintf("/projects/%d/measures/%d", item.ProjectID, item.MeasureID)
 	}

@@ -23,6 +23,7 @@ private:
     bool migrateTargetObjectProtectionNeedColumn();
     bool migrateTargetObjectCiaColumns();
     bool migrateTargetObjectModelLockColumn();
+    bool migrateTargetObjectEditorColumn();
     bool migrateSchema();
     bool ensureIndexes();
     bool tableExists(const QString &table) const;

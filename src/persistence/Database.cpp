@@ -111,6 +111,8 @@ bool Database::migrateSchema()
         return false;
     if (!migrateTargetObjectModelLockColumn())
         return false;
+    if (!migrateTargetObjectEditorColumn())
+        return false;
     return true;
 }
 
@@ -258,6 +260,20 @@ bool Database::migrateTargetObjectModelLockColumn()
     return true;
 }
 
+bool Database::migrateTargetObjectEditorColumn()
+{
+    if (!tableExists(QStringLiteral("target_objects")))
+        return true;
+    if (tableHasColumn(QStringLiteral("target_objects"), QStringLiteral("editor_user_id")))
+        return true;
+    QSqlQuery query(m_db);
+    if (!query.exec(QStringLiteral("ALTER TABLE target_objects ADD COLUMN editor_user_id INTEGER"))) {
+        m_lastError = QStringLiteral("Migration (Bearbeiter am Zielobjekt): %1").arg(query.lastError().text());
+        return false;
+    }
+    return true;
+}
+
 bool Database::ensureIndexes()
 {
     QSqlQuery query(m_db);
@@ -352,6 +368,7 @@ bool Database::initializeSchema()
             "name TEXT NOT NULL,"
             "description TEXT,"
             "model_locked INTEGER NOT NULL DEFAULT 0,"
+            "editor_user_id INTEGER,"
             "FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE"
             ")"),
         QStringLiteral(

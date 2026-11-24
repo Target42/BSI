@@ -214,6 +214,8 @@ QVariant TargetObjectTreeModel::data(const QModelIndex &index, int role) const
                            .arg(targetObjectTypeToString(object.type),
                                 object.name,
                                 protectionNeedSummary(object));
+        if (!object.editorName.isEmpty())
+            text += QStringLiteral(" · %1").arg(object.editorName);
         if (object.modelLocked)
             text += QStringLiteral(" [festgezogen]");
         const ReportSummary summary = m_progressSummaries.value(object.id);

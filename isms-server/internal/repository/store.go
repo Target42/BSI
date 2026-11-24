@@ -305,16 +305,26 @@ func (s *Store) DeleteProject(ctx context.Context, projectID int64) error {
 }
 
 const targetObjectColumns = `
-	id, project_id, parent_id, type, protection_need,
-	confidentiality, integrity, availability, inherit_protection_need, protection_need_note,
-	name, description, model_locked, created_at, updated_at`
+	t.id, t.project_id, t.parent_id, t.type, t.protection_need,
+	t.confidentiality, t.integrity, t.availability, t.inherit_protection_need, t.protection_need_note,
+	t.name, t.description, t.model_locked, COALESCE(t.editor_user_id, 0), COALESCE(u.display_name, ''),
+	t.created_at, t.updated_at`
+
+const targetObjectFrom = `target_objects t LEFT JOIN users u ON u.id = t.editor_user_id`
+
+func editorUserArg(id int64) any {
+	if id <= 0 {
+		return nil
+	}
+	return id
+}
 
 func scanTargetObject(scanner interface{ Scan(dest ...any) error }) (domain.TargetObject, error) {
 	var t domain.TargetObject
 	err := scanner.Scan(
 		&t.ID, &t.ProjectID, &t.ParentID, &t.Type, &t.ProtectionNeed,
 		&t.Confidentiality, &t.Integrity, &t.Availability, &t.InheritProtectionNeed, &t.ProtectionNeedNote,
-		&t.Name, &t.Description, &t.ModelLocked, &t.CreatedAt, &t.UpdatedAt,
+		&t.Name, &t.Description, &t.ModelLocked, &t.EditorUserID, &t.EditorName, &t.CreatedAt, &t.UpdatedAt,
 	)
 	return t, err
 }
@@ -322,9 +332,9 @@ func scanTargetObject(scanner interface{ Scan(dest ...any) error }) (domain.Targ
 func (s *Store) listTargetObjectsRaw(ctx context.Context, projectID int64) ([]domain.TargetObject, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+targetObjectColumns+`
-		FROM target_objects
-		WHERE project_id = $1
-		ORDER BY parent_id, id`, projectID)
+		FROM `+targetObjectFrom+`
+		WHERE t.project_id = $1
+		ORDER BY t.parent_id, t.id`, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +390,7 @@ func (s *Store) ListTargetObjects(ctx context.Context, projectID int64) ([]domai
 func (s *Store) GetTargetObject(ctx context.Context, id int64) (domain.TargetObject, error) {
 	t, err := scanTargetObject(s.pool.QueryRow(ctx, `
 		SELECT `+targetObjectColumns+`
-		FROM target_objects WHERE id = $1`, id))
+		FROM `+targetObjectFrom+` WHERE t.id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.TargetObject{}, ErrNotFound
 	}
@@ -447,43 +457,48 @@ func (s *Store) SetModelLocked(ctx context.Context, id int64, locked bool) (doma
 }
 
 func (s *Store) CreateTargetObject(ctx context.Context, t domain.TargetObject) (domain.TargetObject, error) {
-	created, err := scanTargetObject(s.pool.QueryRow(ctx, `
+	var id int64
+	err := s.pool.QueryRow(ctx, `
 		INSERT INTO target_objects (
 			project_id, parent_id, type, protection_need,
 			confidentiality, integrity, availability, inherit_protection_need, protection_need_note,
-			name, description, model_locked)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		RETURNING `+targetObjectColumns,
+			name, description, model_locked, editor_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		RETURNING id`,
 		t.ProjectID, t.ParentID, t.Type, t.ProtectionNeed,
 		t.Confidentiality, t.Integrity, t.Availability, t.InheritProtectionNeed, t.ProtectionNeedNote,
-		t.Name, t.Description, t.ModelLocked,
-	))
-	return created, err
+		t.Name, t.Description, t.ModelLocked, editorUserArg(t.EditorUserID),
+	).Scan(&id)
+	if err != nil {
+		return domain.TargetObject{}, err
+	}
+	return s.GetTargetObject(ctx, id)
 }
 
 func (s *Store) UpdateTargetObject(ctx context.Context, t domain.TargetObject) (domain.TargetObject, error) {
-	updated, err := scanTargetObject(s.pool.QueryRow(ctx, `
+	var id int64
+	err := s.pool.QueryRow(ctx, `
 		UPDATE target_objects
 		SET parent_id = $2, type = $3, protection_need = $4,
 			confidentiality = $5, integrity = $6, availability = $7,
 			inherit_protection_need = $8, protection_need_note = $9,
-			name = $10, description = $11, model_locked = $12, updated_at = now()
+			name = $10, description = $11, model_locked = $12, editor_user_id = $13, updated_at = now()
 		WHERE id = $1
-		RETURNING `+targetObjectColumns,
+		RETURNING id`,
 		t.ID, t.ParentID, t.Type, t.ProtectionNeed,
 		t.Confidentiality, t.Integrity, t.Availability, t.InheritProtectionNeed, t.ProtectionNeedNote,
-		t.Name, t.Description, t.ModelLocked,
-	))
+		t.Name, t.Description, t.ModelLocked, editorUserArg(t.EditorUserID),
+	).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.TargetObject{}, ErrNotFound
 	}
 	if err != nil {
 		return domain.TargetObject{}, err
 	}
-	if err := s.cascadeInheritedProtectionNeed(ctx, updated.ProjectID); err != nil {
+	if err := s.cascadeInheritedProtectionNeed(ctx, t.ProjectID); err != nil {
 		return domain.TargetObject{}, err
 	}
-	return s.GetTargetObject(ctx, updated.ID)
+	return s.GetTargetObject(ctx, id)
 }
 
 func (s *Store) DeleteTargetObject(ctx context.Context, targetObjectID int64) error {

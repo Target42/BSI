@@ -42,6 +42,8 @@ type
     Name: string;
     Description: string;
     ModelLocked: Boolean;
+    EditorUserId: Integer;
+    EditorName: string;
   end;
 
   TTargetMoveDestination = record

@@ -29,6 +29,7 @@ TargetObject TargetObjectRepository::readTargetObject(const QSqlQuery &query) co
     object.name = query.value(10).toString();
     object.description = query.value(11).toString();
     object.modelLocked = query.value(12).toInt() != 0;
+    object.editorUserId = query.value(13).toInt();
     if (object.confidentiality == CiaLevel::Normal && object.integrity == CiaLevel::Normal
         && object.availability == CiaLevel::Normal
         && object.protectionNeed == ProtectionNeed::Elevated) {
@@ -55,7 +56,8 @@ QList<TargetObject> TargetObjectRepository::loadTargetObjectsRaw(int projectId) 
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
         "SELECT id, project_id, parent_id, type, protection_need, confidentiality, integrity, "
-        "availability, inherit_protection_need, protection_need_note, name, description, model_locked "
+        "availability, inherit_protection_need, protection_need_note, name, description, model_locked, "
+        "editor_user_id "
         "FROM target_objects WHERE project_id = ? ORDER BY parent_id, name"));
     query.addBindValue(projectId);
     if (!query.exec())
@@ -101,7 +103,8 @@ TargetObject TargetObjectRepository::createTargetObject(const TargetObject &targ
     query.prepare(QStringLiteral(
         "INSERT INTO target_objects (project_id, parent_id, type, protection_need, "
         "confidentiality, integrity, availability, inherit_protection_need, protection_need_note, "
-        "name, description, model_locked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "name, description, model_locked, editor_user_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(object.projectId);
     query.addBindValue(object.parentId);
     query.addBindValue(targetObjectTypeToString(object.type));
@@ -109,6 +112,7 @@ TargetObject TargetObjectRepository::createTargetObject(const TargetObject &targ
     query.addBindValue(object.name);
     query.addBindValue(object.description);
     query.addBindValue(object.modelLocked ? 1 : 0);
+    query.addBindValue(object.editorUserId);
 
     if (!query.exec()) {
         m_lastError = query.lastError().text();
@@ -127,13 +131,15 @@ bool TargetObjectRepository::updateTargetObject(const TargetObject &targetObject
     query.prepare(QStringLiteral(
         "UPDATE target_objects SET parent_id = ?, type = ?, protection_need = ?, "
         "confidentiality = ?, integrity = ?, availability = ?, inherit_protection_need = ?, "
-        "protection_need_note = ?, name = ?, description = ?, model_locked = ? WHERE id = ?"));
+        "protection_need_note = ?, name = ?, description = ?, model_locked = ?, "
+        "editor_user_id = ? WHERE id = ?"));
     query.addBindValue(object.parentId);
     query.addBindValue(targetObjectTypeToString(object.type));
     bindProtectionNeed(query, object);
     query.addBindValue(object.name);
     query.addBindValue(object.description);
     query.addBindValue(object.modelLocked ? 1 : 0);
+    query.addBindValue(object.editorUserId);
     query.addBindValue(object.id);
 
     if (!query.exec()) {

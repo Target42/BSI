@@ -1,5 +1,6 @@
 #include "TargetObjectDialog.h"
 
+#include "domain/BausteinReview.h"
 #include "domain/ProtectionNeed.h"
 #include "domain/TargetObjectType.h"
 
@@ -49,6 +50,11 @@ TargetObjectDialog::TargetObjectDialog(QWidget *parent)
     form->addRow(m_overallLabel);
     form->addRow(tr("Begründung"), m_protectionNoteEdit);
     form->addRow(tr("Beschreibung"), m_descriptionEdit);
+    m_editorBox = new QComboBox(this);
+    m_editorBox->setToolTip(tr("Gilt für alle Bausteine. Offen: jeder Bearbeiter im Projekt. "
+                               "Die Zuweisung sperrt andere Bearbeiter nicht."));
+    form->addRow(tr("Bearbeiter"), m_editorBox);
+    m_editorLabel = qobject_cast<QLabel *>(form->labelForField(m_editorBox));
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
@@ -96,6 +102,39 @@ void TargetObjectDialog::setTargetObject(const TargetObject &object, const Targe
     fillTypeBox();
     updateParentLabel();
     updateCiaEnabled();
+    fillEditorBox();
+}
+
+void TargetObjectDialog::setEditors(const QList<ProjectMember> &members)
+{
+    m_editors = members;
+    fillEditorBox();
+}
+
+void TargetObjectDialog::fillEditorBox()
+{
+    if (m_editorBox == nullptr)
+        return;
+    m_editorBox->clear();
+    m_editorBox->addItem(tr("Offen, jeder Bearbeiter"), 0);
+    bool found = m_object.editorUserId <= 0;
+    for (const ProjectMember &member : std::as_const(m_editors)) {
+        if (!canEditContentRole(member.role))
+            continue;
+        m_editorBox->addItem(member.displayName, member.userId);
+        if (member.userId == m_object.editorUserId)
+            found = true;
+    }
+    if (!found) {
+        const QString caption = m_object.editorName.isEmpty() ? tr("Zugewiesene Person") : m_object.editorName;
+        m_editorBox->addItem(caption, m_object.editorUserId);
+    }
+    const int index = m_editorBox->findData(m_object.editorUserId);
+    m_editorBox->setCurrentIndex(index >= 0 ? index : 0);
+    const bool show = m_editorBox->count() > 1;
+    m_editorBox->setVisible(show);
+    if (m_editorLabel != nullptr)
+        m_editorLabel->setVisible(show);
 }
 
 void TargetObjectDialog::fillTypeBox()
@@ -183,6 +222,8 @@ TargetObject TargetObjectDialog::targetObject() const
     object.availability = selectedCiaLevel(m_availabilityBox);
     object.protectionNeedNote = m_protectionNoteEdit->toPlainText().trimmed();
     object.description = m_descriptionEdit->toPlainText().trimmed();
+    object.editorUserId = m_editorBox->currentData().toInt();
+    object.editorName = object.editorUserId > 0 ? m_editorBox->currentText() : QString();
     finalizeTargetObjectProtectionNeed(object, m_parent);
     return object;
 }

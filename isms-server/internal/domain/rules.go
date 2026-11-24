@@ -272,6 +272,12 @@ func CanEditContent(role string) bool {
 	return role == RoleOwner || role == RoleEditor
 }
 
+// CanBeTargetEditor is the person who works every Baustein on a target object.
+// An empty assignment stays open for every editor in the project.
+func CanBeTargetEditor(role string) bool {
+	return CanEditContent(role)
+}
+
 func CanReview(role string) bool {
 	return role == RoleOwner || role == RoleReviewer
 }

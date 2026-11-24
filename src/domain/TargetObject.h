@@ -22,6 +22,8 @@ struct TargetObject {
     QString name;
     QString description;
     bool modelLocked = false;
+    int editorUserId = 0;
+    QString editorName;
 };
 
 inline void applyCiaToProtectionNeed(TargetObject &target)

@@ -115,6 +115,16 @@
           <label for="description">Beschreibung</label>
           <textarea id="description" name="description" rows="4">{{.Target.Description}}</textarea>
         </div>
+        <div class="field">
+          <label for="editorUserId">Bearbeiter</label>
+          <select id="editorUserId" name="editorUserId">
+            <option value="0" {{if not .Target.EditorUserID}}selected{{end}}>Offen, jeder Bearbeiter im Projekt</option>
+            {{range .Editors}}
+            <option value="{{.UserID}}" {{if eq .UserID $.Target.EditorUserID}}selected{{end}}>{{.DisplayName}}</option>
+            {{end}}
+          </select>
+          <p class="muted">Gilt für alle Bausteine dieses Zielobjekts. Offen lässt die Arbeit in der gemeinsamen Liste. Die Zuweisung sperrt andere Bearbeiter nicht.</p>
+        </div>
         <button class="btn" type="submit">Speichern</button>
         </section>
         </div>
@@ -129,6 +139,7 @@
       {{else}}
       <div class="card">
         <p>Typ: {{.Target.Type}}</p>
+        <p>Bearbeiter: {{if .Target.EditorName}}{{.Target.EditorName}}{{else}}offen, jeder im Projekt{{end}}</p>
         <p>Schutzbedarf: {{.Target.ProtectionNeed}}</p>
         <p>C/I/A: {{.Target.Confidentiality}} / {{.Target.Integrity}} / {{.Target.Availability}}</p>
         {{if .Target.Description}}<div class="req-text">{{.Target.Description}}</div>{{end}}

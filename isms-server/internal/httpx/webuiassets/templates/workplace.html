@@ -19,6 +19,7 @@
       </p>
       <h1>{{.Target.Name}}</h1>
       <p class="lede">{{.Target.Type}}{{if .Target.ProtectionNeed}} · {{.Target.ProtectionNeed}}{{end}}{{if .Target.ModelLocked}} · Modell festgezogen{{end}}</p>
+      <p class="muted">Bearbeiter: {{if .Target.EditorName}}{{.Target.EditorName}}{{else}}offen, jeder im Projekt{{end}}. Gilt für alle Bausteine und sperrt niemanden vom Speichern aus.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
       {{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
       {{if and .Target.ModelLocked (not .CanEditModel)}}

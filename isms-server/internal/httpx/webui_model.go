@@ -9,6 +9,7 @@ import (
 
 	"github.com/Target42/BSI/isms-server/internal/auth"
 	"github.com/Target42/BSI/isms-server/internal/domain"
+	"github.com/Target42/BSI/isms-server/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -33,6 +34,7 @@ func flattenTargets(items []domain.TargetObject, progress map[int64]domain.Repor
 			Depth:          depth,
 			ProtectionNeed: item.ProtectionNeed,
 			ModelLocked:    item.ModelLocked,
+			EditorName:     item.EditorName,
 			IsRoot:         domain.IsRootScopeTarget(item.ParentID, item.Type),
 			ChildTypes:     domain.AllowedChildTargetTypes(item.Type),
 		}
@@ -259,6 +261,17 @@ func (u *webUI) renderTargetEdit(w http.ResponseWriter, r *http.Request, user *a
 			}
 		}
 	}
+	members, err := u.store.ListProjectMembers(r.Context(), project.ID)
+	if err != nil {
+		http.Error(w, "Projektmitglieder konnten nicht geladen werden.", http.StatusInternalServerError)
+		return
+	}
+	var editors []repository.ProjectMember
+	for _, member := range members {
+		if domain.CanBeTargetEditor(member.Role) {
+			editors = append(editors, member)
+		}
+	}
 	notice := ""
 	if errMsg == "" && r.URL.Query().Get("saved") == "1" {
 		notice = "Zielobjekt gespeichert."
@@ -271,17 +284,18 @@ func (u *webUI) renderTargetEdit(w http.ResponseWriter, r *http.Request, user *a
 		}
 	}
 	u.render(w, r, "target", webPage{
-		DisplayName:  user.DisplayName,
-		CanEdit:      roleCanEdit(role),
-		CanEditModel: domain.ModelAllowsEdit(target.ModelLocked, role),
-		CanOwn:       roleCanOwn(role),
-		Project:      project,
-		Target:       target,
+		DisplayName:   user.DisplayName,
+		CanEdit:       roleCanEdit(role),
+		CanEditModel:  domain.ModelAllowsEdit(target.ModelLocked, role),
+		CanOwn:        roleCanOwn(role),
+		Project:       project,
+		Target:        target,
 		ParentOptions: parents,
-		AddTypes:     addTypes,
-		CiaLevels:    webCiaLevels,
-		Error:        errMsg,
-		Notice:       notice,
+		AddTypes:      addTypes,
+		Editors:       editors,
+		CiaLevels:     webCiaLevels,
+		Error:         errMsg,
+		Notice:        notice,
 	})
 }
 
@@ -367,6 +381,18 @@ func (u *webUI) targetEditSave(w http.ResponseWriter, r *http.Request) {
 		Name:                  name,
 		Description:           strings.TrimSpace(r.FormValue("description")),
 		ModelLocked:           current.ModelLocked,
+		EditorUserID:          current.EditorUserID,
+	}
+	if editorID, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("editorUserId")), 10, 64); err == nil {
+		if err := validateTargetEditor(r.Context(), u.store, project.ID, editorID); err != nil {
+			if errors.Is(err, errInvalidTargetEditor) {
+				u.renderTargetEdit(w, r, user, project, role, current, "Der Bearbeiter muss Besitzer oder Bearbeiter im Projekt sein.")
+				return
+			}
+			u.renderTargetEdit(w, r, user, project, role, current, "Bearbeiter konnte nicht geprüft werden.")
+			return
+		}
+		item.EditorUserID = editorID
 	}
 	var parent *domain.TargetObject
 	if parentID > 0 {

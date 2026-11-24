@@ -63,6 +63,7 @@ begin
   Result.Name := Q.FieldByName('name').AsString;
   Result.Description := Q.FieldByName('description').AsString;
   Result.ModelLocked := Q.FieldByName('model_locked').AsInteger <> 0;
+  Result.EditorUserId := Q.FieldByName('editor_user_id').AsInteger;
   if (Result.Confidentiality = clNormal) and (Result.Integrity = clNormal) and
      (Result.Availability = clNormal) and (Result.ProtectionNeed = pnElevated) then
   begin
@@ -94,7 +95,8 @@ begin
     Q.Connection := FConnection;
     Q.SQL.Text :=
       'SELECT id, project_id, parent_id, type, protection_need, confidentiality, integrity, ' +
-      'availability, inherit_protection_need, protection_need_note, name, description, model_locked ' +
+      'availability, inherit_protection_need, protection_need_note, name, description, model_locked, ' +
+      'editor_user_id ' +
       'FROM target_objects WHERE project_id = :pid ORDER BY parent_id, name';
     Q.ParamByName('pid').AsInteger := AProjectId;
     Q.Open;
@@ -158,7 +160,7 @@ begin
     Q.SQL.Text :=
       'INSERT INTO target_objects (project_id, parent_id, type, protection_need, ' +
       'confidentiality, integrity, availability, inherit_protection_need, protection_need_note, ' +
-      'name, description, model_locked) VALUES (:pid, :parent, :typ, :pn, :conf, :integ, :avail, :inherit, :pnnote, :name, :desc, :locked)';
+      'name, description, model_locked, editor_user_id) VALUES (:pid, :parent, :typ, :pn, :conf, :integ, :avail, :inherit, :pnnote, :name, :desc, :locked, :editor)';
     Q.ParamByName('pid').AsInteger := Result.ProjectId;
     Q.ParamByName('parent').AsInteger := Result.ParentId;
     Q.ParamByName('typ').AsString := TargetObjectTypeToString(Result.ObjType);
@@ -166,6 +168,7 @@ begin
     Q.ParamByName('name').AsString := Result.Name;
     Q.ParamByName('desc').AsString := Result.Description;
     Q.ParamByName('locked').AsInteger := Ord(Result.ModelLocked);
+    Q.ParamByName('editor').AsInteger := Result.EditorUserId;
     Q.ExecSQL;
     Result.Id := Integer(FConnection.ExecSQLScalar('SELECT last_insert_rowid()'));
   except
@@ -193,13 +196,14 @@ begin
       'UPDATE target_objects SET parent_id = :parent, type = :typ, protection_need = :pn, ' +
       'confidentiality = :conf, integrity = :integ, availability = :avail, ' +
       'inherit_protection_need = :inherit, protection_need_note = :pnnote, ' +
-      'name = :name, description = :desc, model_locked = :locked WHERE id = :id';
+      'name = :name, description = :desc, model_locked = :locked, editor_user_id = :editor WHERE id = :id';
     Q.ParamByName('parent').AsInteger := Target.ParentId;
     Q.ParamByName('typ').AsString := TargetObjectTypeToString(Target.ObjType);
     BindProtectionNeedParams(Q, Target);
     Q.ParamByName('name').AsString := Target.Name;
     Q.ParamByName('desc').AsString := Target.Description;
     Q.ParamByName('locked').AsInteger := Ord(Target.ModelLocked);
+    Q.ParamByName('editor').AsInteger := Target.EditorUserId;
     Q.ParamByName('id').AsInteger := Target.Id;
     Q.ExecSQL;
     PersistInheritedProtectionNeeds(Target.ProjectId);

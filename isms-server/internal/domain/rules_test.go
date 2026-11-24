@@ -217,6 +217,15 @@ func TestResolveResponsible(t *testing.T) {
 	}
 }
 
+func TestCanBeTargetEditor(t *testing.T) {
+	if !CanBeTargetEditor(RoleOwner) || !CanBeTargetEditor(RoleEditor) {
+		t.Fatal("owner and editor can be the target editor")
+	}
+	if CanBeTargetEditor(RoleReviewer) || CanBeTargetEditor(RoleViewer) {
+		t.Fatal("reviewer and viewer are not target editors")
+	}
+}
+
 func TestAssignedTo(t *testing.T) {
 	if !AssignedTo(4, "Anna", 4, "Anna ISB", "anna@example.com") {
 		t.Fatal("user id should match")

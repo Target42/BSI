@@ -15,7 +15,7 @@
     {{if .LoggedIn}}
     <main class="main">
       <h1>Meine Aufgaben</h1>
-      <p class="lede">Offene Bewertungen und Maßnahmen, die Ihnen zugewiesen sind — über alle Projekte.</p>
+      <p class="lede">Zielobjekte, offene Bewertungen und Maßnahmen, die Ihnen zugewiesen sind — über alle Projekte.</p>
       {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 
       <div class="stats">
@@ -30,7 +30,7 @@
       </div>
 
       {{if not .Tasks}}
-        <p class="muted">Keine offenen Aufgaben. Zuweisungen stehen an der Bewertung und an der Maßnahme, als Projektmitglied.</p>
+        <p class="muted">Keine offenen Aufgaben. Der Bearbeiter steht am Zielobjekt, weitere Zuweisungen an der Bewertung und an der Maßnahme.</p>
       {{else}}
         <div class="table-wrap">
           <table>
@@ -49,6 +49,7 @@
               <tr>
                 <td>
                   <a href="{{href .Path}}">{{.Title}}</a>
+                  {{if eq .Kind "Zielobjekt"}}<div class="muted">Alle Bausteine · {{.RequirementLabel}}</div>{{end}}
                   {{if gt .MeasureID 0}}{{if .RequirementLabel}}<div class="muted">{{.RequirementLabel}}</div>{{end}}{{end}}
                 </td>
                 <td>{{.Kind}}</td>

@@ -66,6 +66,8 @@ inline TargetObject targetObjectFromJson(const QJsonObject &obj)
     target.name = obj.value(QStringLiteral("name")).toString();
     target.description = obj.value(QStringLiteral("description")).toString();
     target.modelLocked = obj.value(QStringLiteral("modelLocked")).toBool();
+    target.editorUserId = obj.value(QStringLiteral("editorUserId")).toInt();
+    target.editorName = obj.value(QStringLiteral("editorName")).toString();
     return target;
 }
 
