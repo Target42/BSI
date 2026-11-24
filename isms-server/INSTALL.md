@@ -124,7 +124,7 @@ cd ~/BSI
 Den Qt-Client baut das Skript mit, sobald `qmake6` im PATH liegt. Sonst vorher:
 
 ```bash
-sudo apt install -y qt6-base-dev qt6-base-dev-tools libqt6sql6-sqlite libhunspell-dev
+sudo apt install -y build-essential qt6-base-dev qt6-base-dev-tools libqt6sql6-sqlite libhunspell-dev
 mkdir -p build && cd build
 qmake6 CONFIG+=release ../BSI.pro && make -j"$(nproc)"
 ```

@@ -157,7 +157,7 @@ if [[ "$PACK_WHAT" == "all" || "$PACK_WHAT" == "client" ]]; then
     did_any=1
   else
     echo "Client-Binary fehlt (erwartet z. B. build/ISMS)." >&2
-    echo "Unter Linux:  sudo apt install qt6-base-dev qt6-base-dev-tools libhunspell-dev" >&2
+    echo "Unter Linux:  sudo apt install build-essential qt6-base-dev qt6-base-dev-tools libqt6sql6-sqlite libhunspell-dev" >&2
     echo "              qmake6 ../BSI.pro && make    (im Ordner build/)" >&2
     echo "Oder:  ISMS_CLIENT_BIN=/pfad/zur/ISMS $0 client" >&2
     if [[ "$PACK_WHAT" == "client" ]]; then

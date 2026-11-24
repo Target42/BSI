@@ -49,3 +49,5 @@ isms-server/downloads/*
 
 # Alte npm-Web-UI (durch eingebettete Go-Templates ersetzt)
 isms-web/
+
+RunCopy.ps1
